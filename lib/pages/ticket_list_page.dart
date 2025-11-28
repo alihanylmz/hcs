@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart'; // Eklendi
+import 'package:intl/intl.dart'; // Tarih formatı için eklendi
 
 import '../main.dart';
+import '../services/general_report_service.dart'; // PDF Servisi
 import '../pages/archived_tickets_page.dart';
 import '../pages/dashboard_page.dart'; // DashboardPage importu
 import '../pages/edit_ticket_page.dart';
@@ -71,7 +73,7 @@ class _TicketListPageState extends State<TicketListPage> {
 
   final TextEditingController _searchController = TextEditingController();
   String _searchText = '';
-  String _statusFilter = 'all';
+  String _statusFilter = 'open'; // Varsayılan olarak sadece Açık işler
   String _priorityFilter = 'all';
   bool _filtersExpanded = false;
 
@@ -107,6 +109,13 @@ class _TicketListPageState extends State<TicketListPage> {
     }
   }
 
+  void _createPdfReport(List<Map<String, dynamic>> allTickets) {
+    GeneralReportService().generateAndPrintReport(
+      allTickets, 
+      _userName ?? 'Kullanıcı'
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -125,6 +134,7 @@ class _TicketListPageState extends State<TicketListPage> {
           priority,
           planned_date,
           job_code,
+          device_model,
           missing_parts, 
           customers (
             id,
@@ -570,6 +580,15 @@ class _TicketListPageState extends State<TicketListPage> {
           ],
         ),
         actions: [
+          IconButton(
+             icon: const Icon(Icons.picture_as_pdf_outlined),
+             tooltip: 'Genel Rapor Al',
+             onPressed: () async {
+               // Rapor için ham veriyi (filtrelenmemiş) çekmemiz lazım
+               final tickets = await _ticketsFuture;
+               _createPdfReport(tickets);
+             },
+          ),
           IconButton(
             icon: Icon(
               IsTakipApp.of(context)?.isDarkMode == true ? Icons.light_mode : Icons.dark_mode,

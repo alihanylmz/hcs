@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:intl/date_symbol_data_local.dart'; // <--- Eklendi
+
 import 'pages/login_page.dart';
 import 'pages/ticket_list_page.dart';
 import 'pages/dashboard_page.dart'; // Dashboard eklendi
@@ -13,6 +15,8 @@ void main() async {
 
   try {
     await dotenv.load(fileName: ".env");
+
+    await initializeDateFormatting('tr_TR', null); // <--- Eklendi
 
     await Supabase.initialize(
       url: dotenv.env['SUPABASE_URL']!,
@@ -135,8 +139,15 @@ class _AuthGateState extends State<AuthGate> {
               }
 
               final userProfile = userSnapshot.data;
-              // Admin veya Manager olsa bile her zaman TicketListPage açılacak
-              return const TicketListPage();
+
+              // Rol tabanlı yönlendirme
+              if (userProfile != null &&
+                  (userProfile.role == 'admin' ||
+                      userProfile.role == 'manager')) {
+                return const DashboardPage();
+              } else {
+                return const TicketListPage();
+              }
             },
           );
         } else {

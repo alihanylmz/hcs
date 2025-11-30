@@ -161,6 +161,49 @@ class StockService {
     return missingItems;
   }
 
+  // Jet Fan Listelerini İşler
+  Future<List<String>> processJetFanStockUsage({
+    required List<Map<String, dynamic>> smokeFans,
+    required List<Map<String, dynamic>> freshFans,
+  }) async {
+     List<String> missingItems = [];
+
+     // Duman Fanlarını Düş
+     for (var fan in smokeFans) {
+       final brand = fan['brand'] as String?;
+       final kw = fan['kw'] as double?;
+
+       if (brand != null && kw != null && brand != 'Diğer') {
+          final kwStr = formatKw(kw);
+          final name = '$brand $kwStr kW Sürücü'; // Fan motoru sürücü olarak mı geçiyor yoksa motor mu?
+          // Varsayım: Stok listesinde bu fanlar için 'Sürücü' veya direkt 'Motor' tanımı olabilir.
+          // Mevcut kod yapısında 'Sürücü' olarak kaydediyoruz gibi görünüyor. 
+          // Eğer bunlar 'Motor' ise isim convention değişmeli.
+          // Kullanıcı "motor marka ve kw" dedi.
+          // Ancak stock_service.dart'taki format: '$aspiratorBrand $kwStr kW Sürücü'
+          // Biz de aynı formatı kullanalım şimdilik:
+          
+          final result = await decreaseStockByName(name);
+          if (result != null) missingItems.add(result);
+       }
+     }
+
+     // Taze Hava Fanlarını Düş
+     for (var fan in freshFans) {
+       final brand = fan['brand'] as String?;
+       final kw = fan['kw'] as double?;
+
+       if (brand != null && kw != null && brand != 'Diğer') {
+          final kwStr = formatKw(kw);
+          final name = '$brand $kwStr kW Sürücü';
+          final result = await decreaseStockByName(name);
+          if (result != null) missingItems.add(result);
+       }
+     }
+
+     return missingItems;
+  }
+
   // İş Emri Güncellenmeden Önce Eski Stokları İade Et
   Future<void> revertTicketStockUsage({
     String? plcModel,

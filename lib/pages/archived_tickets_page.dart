@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'edit_ticket_page.dart';
 import 'ticket_detail_page.dart';
+import '../services/user_service.dart';
+import '../widgets/app_drawer.dart';
 
 class ArchivedTicketsPage extends StatefulWidget {
   const ArchivedTicketsPage({super.key});
@@ -16,11 +18,26 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
   final TextEditingController _searchController = TextEditingController();
   String _searchText = '';
   String _priorityFilter = 'all'; // all, low, normal, high
+  String? _userRole;
+  String? _userName;
+  final _userService = UserService();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
     _ticketsFuture = _fetchArchivedTickets();
+    _loadUserRole();
+  }
+
+  Future<void> _loadUserRole() async {
+    final profile = await _userService.getCurrentUserProfile();
+    if (mounted) {
+      setState(() {
+        _userRole = profile?.role;
+        _userName = profile?.fullName;
+      });
+    }
   }
 
   @override
@@ -62,6 +79,18 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
   }
 
   Future<void> _deleteTicket(String ticketId) async {
+    // Teknisyenler silme yapamaz
+    if (_userRole == 'technician' || _userRole == 'pending') {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Teknisyenler iş silemez.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -138,9 +167,59 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
     }
   }
 
+  // Türkçe karakter desteği için normalize fonksiyonu
+  // Tüm karakterleri (büyük/küçük, Türkçe/İngilizce) normalize eder
+  String _normalizeTurkish(String text) {
+    if (text.isEmpty) return '';
+    
+    // Her karakteri tek tek işle
+    StringBuffer result = StringBuffer();
+    
+    for (int i = 0; i < text.length; i++) {
+      final char = text[i];
+      final codeUnit = char.codeUnitAt(0);
+      
+      // Türkçe büyük harfleri küçük harfe çevir
+      switch (char) {
+        case 'İ':
+          result.write('i');
+          break;
+        case 'I':
+          result.write('ı');
+          break;
+        case 'Ş':
+          result.write('ş');
+          break;
+        case 'Ğ':
+          result.write('ğ');
+          break;
+        case 'Ü':
+          result.write('ü');
+          break;
+        case 'Ö':
+          result.write('ö');
+          break;
+        case 'Ç':
+          result.write('ç');
+          break;
+        default:
+          // İngilizce büyük harfler (A-Z ama I hariç)
+          if (codeUnit >= 65 && codeUnit <= 90 && codeUnit != 73) {
+            result.write(String.fromCharCode(codeUnit + 32)); // ASCII: A=65, a=97
+          } else {
+            // Diğer tüm karakterleri olduğu gibi bırak (küçük harfler, rakamlar, özel karakterler)
+            result.write(char);
+          }
+          break;
+      }
+    }
+    
+    return result.toString().trim();
+  }
+
   List<Map<String, dynamic>> _applyFilters(
       List<Map<String, dynamic>> tickets) {
-    final search = _searchText.trim().toLowerCase();
+    final search = _normalizeTurkish(_searchText.trim());
 
     return tickets.where((ticket) {
       final priority = (ticket['priority'] as String?) ?? '';
@@ -155,10 +234,11 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
         return false;
       }
 
-      // Arama metni (başlık + müşteri)
+      // Arama metni (başlık + müşteri) - Türkçe karakter desteği ile
       if (search.isNotEmpty) {
-        final combined =
-            '${title.toLowerCase()} ${customerName.toLowerCase()}';
+        final normalizedTitle = _normalizeTurkish(title);
+        final normalizedCustomerName = _normalizeTurkish(customerName);
+        final combined = '$normalizedTitle $normalizedCustomerName';
         if (!combined.contains(search)) {
           return false;
         }
@@ -171,7 +251,17 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
+      drawer: AppDrawer(
+        currentPage: AppDrawerPage.archived,
+        userName: _userName,
+        userRole: _userRole,
+      ),
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+        ),
         title: const Text('Biten İşler'),
       ),
       body: Column(
@@ -183,6 +273,10 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
               children: [
                 TextField(
                   controller: _searchController,
+                  keyboardType: TextInputType.text,
+                  textInputAction: TextInputAction.search,
+                  enableSuggestions: true,
+                  autocorrect: true,
                   decoration: const InputDecoration(
                     hintText: 'Başlık / Müşteri ara...',
                     prefixIcon: Icon(Icons.search),
@@ -316,20 +410,30 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
                                   break;
                               }
                             },
-                            itemBuilder: (context) => const [
-                              PopupMenuItem(
-                                value: 'detail',
-                                child: Text('Detayı Aç'),
-                              ),
-                              PopupMenuItem(
-                                value: 'edit',
-                                child: Text('Düzenle'),
-                              ),
-                              PopupMenuItem(
-                                value: 'delete',
-                                child: Text('Sil'),
-                              ),
-                            ],
+                            itemBuilder: (context) {
+                              final items = <PopupMenuItem<String>>[
+                                const PopupMenuItem(
+                                  value: 'detail',
+                                  child: Text('Detayı Aç'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'edit',
+                                  child: Text('Düzenle'),
+                                ),
+                              ];
+                              
+                              // Teknisyenler silme yapamaz
+                              if (_userRole != 'technician' && _userRole != 'pending') {
+                                items.add(
+                                  const PopupMenuItem(
+                                    value: 'delete',
+                                    child: Text('Sil'),
+                                  ),
+                                );
+                              }
+                              
+                              return items;
+                            },
                           ),
                           onTap: () => _openDetail(
                             ticket['id'].toString(),

@@ -3,9 +3,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart'; // Eklendi
 import 'package:flutter_svg/flutter_svg.dart'; // Eklendi
 import '../services/stock_service.dart'; // StockService eklendi
+import '../services/notification_service.dart'; // Bildirim servisi
+import '../services/user_service.dart'; // Kullanıcı servisi
 
 class NewTicketPage extends StatefulWidget {
-  const NewTicketPage({super.key});
+  const NewTicketPage({super.key, this.deviceType});
+
+  final String? deviceType;
 
   @override
   State<NewTicketPage> createState() => _NewTicketPageState();
@@ -30,6 +34,24 @@ class _NewTicketPageState extends State<NewTicketPage> {
   final _kompresor1KwController = TextEditingController();
   final _kompresor2KwController = TextEditingController();
   final _heaterKwController = TextEditingController(); // Yeni: Isıtıcı kW
+  
+  // Jet Fan / Otopark Sistemi İçin Yeni Controller'lar
+  // _zoneCountController kaldırıldı, yerine _selectedZoneCount ve _zoneFanCounts kullanılacak
+  final _jetFanCountController = TextEditingController();
+  // _bidirectionalFanCountController kaldırıldı
+  // _inverterCountController kaldırıldı
+  final _inverterBrandController = TextEditingController(); // Manuel giriş veya Dropdown olabilir
+  
+  // Jet Fan Dinamik Listeleri
+  int _selectedZoneCount = 0;
+  final List<TextEditingController> _zoneFanCountControllers = [];
+
+  int _smokeFanCount = 0;
+  List<Map<String, dynamic>> _smokeFans = []; // [{'brand': 'Danfoss', 'kw': 5.5}, ...]
+  
+  int _freshFanCount = 0;
+  List<Map<String, dynamic>> _freshFans = [];
+  
   final _customerNameController = TextEditingController();
   final _customerAddressController = TextEditingController();
   final _customerPhoneController = TextEditingController();
@@ -65,6 +87,41 @@ class _NewTicketPageState extends State<NewTicketPage> {
   String? _errorMessage;
 
   @override
+  void initState() {
+    super.initState();
+    
+    // Teknisyenler iş açamaz - kontrol et
+    _checkUserPermission();
+    
+    if (widget.deviceType == 'santral') {
+      _selectedDeviceModel = 'Klima Santrali';
+    } else if (widget.deviceType == 'jet_fan') {
+      _selectedDeviceModel = 'Jet Fan';
+    } else if (widget.deviceType == 'other') {
+      _selectedDeviceModel = 'Diğer / Arıza';
+    }
+  }
+
+  Future<void> _checkUserPermission() async {
+    final userService = UserService();
+    final profile = await userService.getCurrentUserProfile();
+    
+    if (profile != null && (profile.role == 'technician' || profile.role == 'pending')) {
+      // Teknisyen veya onay bekleyen kullanıcılar iş açamaz
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Teknisyenler yeni iş emri oluşturamaz.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
@@ -72,6 +129,14 @@ class _NewTicketPageState extends State<NewTicketPage> {
     _kompresor1KwController.dispose();
     _kompresor2KwController.dispose();
     _heaterKwController.dispose();
+    // _zoneCountController.dispose();
+    for (var c in _zoneFanCountControllers) {
+      c.dispose();
+    }
+    _jetFanCountController.dispose();
+    // _bidirectionalFanCountController.dispose();
+    // _inverterCountController.dispose();
+    _inverterBrandController.dispose();
     _customerNameController.dispose();
     _customerAddressController.dispose();
     _customerPhoneController.dispose();
@@ -132,6 +197,12 @@ class _NewTicketPageState extends State<NewTicketPage> {
     final normalized = trimmed.replaceAll(',', '.');
     return double.tryParse(normalized);
   }
+  
+  int? _parseInt(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return null;
+    return int.tryParse(trimmed);
+  }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -166,7 +237,30 @@ class _NewTicketPageState extends State<NewTicketPage> {
       final komp2Kw = _parseDouble(_kompresor2KwController.text);
       // Isıtıcı verilerini hazırla
       final heaterKw = (_heaterExists == 'Var') ? _parseDouble(_heaterKwController.text) : null;
-      final heaterStage = (_heaterExists == 'Var') ? _selectedIsiticiKademe : 'yok'; // Veritabanında 'yok' string olarak tutuluyor olabilir
+      final heaterStage = (_heaterExists == 'Var') ? _selectedIsiticiKademe : 'yok'; 
+      
+      // Jet Fan Verileri
+      final zoneCount = _selectedZoneCount;
+      // Zone detaylarını al
+      final List<Map<String, dynamic>> zoneDetails = [];
+      for (int i = 0; i < _zoneFanCountControllers.length; i++) {
+        zoneDetails.add({
+          'zone_no': i + 1,
+          'fan_count': _parseInt(_zoneFanCountControllers[i].text) ?? 0,
+        });
+      }
+
+      final jetFanCount = _parseInt(_jetFanCountController.text);
+      // bidirectCount artık kullanılmıyor
+      // inverterCount artık kullanılmıyor
+      final inverterBrand = _inverterBrandController.text.trim().isEmpty ? null : _inverterBrandController.text.trim();
+
+      // Jet Fan Detay JSON Hazırlığı
+      final Map<String, dynamic> jetfanDetails = {
+        'zone_details': zoneDetails,
+        'smoke_fans': _smokeFans,
+        'fresh_fans': _freshFans,
+      };
 
       String? pdfUrl;
 
@@ -229,6 +323,12 @@ class _NewTicketPageState extends State<NewTicketPage> {
         'nemlendirici': _nemlendirici,
         'rotor': _rotor,
         'brulor': _brulor,
+        'zone_count': zoneCount,
+        'jetfan_count': jetFanCount,
+        'bidirectional_jetfan_count': null, // Artık kullanılmıyor
+        'inverter_count': null, // Artık kullanılmıyor
+        'inverter_brand': inverterBrand,
+        'jetfan_details': jetfanDetails,
       }).select().single();
 
       final ticketId = ticketInsert['id'];
@@ -236,7 +336,10 @@ class _NewTicketPageState extends State<NewTicketPage> {
       // --- STOKTAN DÜŞME VE EKSİK KONTROLÜ ---
       try {
         final stockService = StockService();
-        final missingItems = await stockService.processTicketStockUsage(
+        final List<String> missingItems = [];
+
+        // 1. Standart Kontroller (Jet Fan dışındakiler veya ortaklar)
+        final standardMissing = await stockService.processTicketStockUsage(
           plcModel: _selectedPlcModel,
           aspiratorBrand: _selectedAspiratorBrand,
           aspiratorKw: _selectedAspiratorKw,
@@ -245,6 +348,16 @@ class _NewTicketPageState extends State<NewTicketPage> {
           hmiBrand: _selectedHmiBrand,
           hmiSize: _selectedHmiSize,
         );
+        missingItems.addAll(standardMissing);
+
+        // 2. Jet Fan Dinamik Stok Düşümü
+        if (widget.deviceType == 'jet_fan') {
+           final jetFanMissing = await stockService.processJetFanStockUsage(
+             smokeFans: _smokeFans,
+             freshFans: _freshFans,
+           );
+           missingItems.addAll(jetFanMissing);
+        }
 
         // Eğer eksik varsa ticket'a kaydet
         if (missingItems.isNotEmpty) {
@@ -255,6 +368,26 @@ class _NewTicketPageState extends State<NewTicketPage> {
         }
       } catch (stockErr) {
         debugPrint('Stok düşme hatası (Kritik değil, işlem devam ediyor): $stockErr');
+      }
+      // ---------------------------
+
+      // --- BİLDİRİM GÖNDERME ---
+      try {
+        final notificationService = NotificationService();
+        final userService = UserService();
+        final currentUser = await userService.getCurrentUserProfile();
+        final userName = currentUser?.fullName ?? 'Kullanıcı';
+        
+        await notificationService.notifyTicketCreated(
+          ticketId: ticketId.toString(),
+          ticketTitle: _titleController.text.trim(),
+          jobCode: _jobCodeController.text.trim().isEmpty 
+              ? null 
+              : _jobCodeController.text.trim(),
+          createdBy: userName,
+        );
+      } catch (notifErr) {
+        debugPrint('Bildirim gönderme hatası (Kritik değil, işlem devam ediyor): $notifErr');
       }
       // ---------------------------
 
@@ -482,12 +615,14 @@ class _NewTicketPageState extends State<NewTicketPage> {
                         ),
                       ),
                       
-                      if (isWide) const SizedBox(width: 24),
+                      if (isWide && widget.deviceType != 'other') const SizedBox(width: 24),
                       
-                      if (isWide)
+                      if (isWide && widget.deviceType != 'other')
                         Expanded(
                           flex: 2,
-                          child: Column(
+                          child: widget.deviceType == 'jet_fan'
+                          ? _buildJetFanInfoCard()
+                          : Column(
                             children: [
                               _buildTechnicalInfoCard(),
                               const SizedBox(height: 24),
@@ -501,13 +636,17 @@ class _NewTicketPageState extends State<NewTicketPage> {
                   ),
 
                   // Mobil görünüm için teknik detayları alta al
-                  if (!isWide) ...[
+                  if (!isWide && widget.deviceType != 'other') ...[
                     const SizedBox(height: 24),
-                    _buildTechnicalInfoCard(),
-                    const SizedBox(height: 24),
-                    _buildHeaterInfoCard(), // Yeni: Isıtıcı Kartı
-                    const SizedBox(height: 24),
-                    _buildHardwareFeaturesCard(),
+                    if (widget.deviceType == 'jet_fan')
+                       _buildJetFanInfoCard()
+                    else ...[
+                      _buildTechnicalInfoCard(),
+                      const SizedBox(height: 24),
+                      _buildHeaterInfoCard(), 
+                      const SizedBox(height: 24),
+                      _buildHardwareFeaturesCard(),
+                    ]
                   ],
 
                   const SizedBox(height: 40),
@@ -548,6 +687,239 @@ class _NewTicketPageState extends State<NewTicketPage> {
     );
   }
 
+  Widget _buildJetFanInfoCard() {
+    // 0-15 arası seçim listesi
+    final countOptions = List.generate(16, (index) => index);
+    
+    // 1-15 Zone Seçimi (0 olamaz, en az 1 olabilir ama opsiyonel olsun diye 0-15 koyuyoruz)
+    final zoneOptions = List.generate(16, (index) => index);
+
+    return _buildContentCard(
+      title: 'JET FAN SİSTEM BİLGİLERİ',
+      icon: Icons.wind_power,
+      children: [
+        // ÜST BÖLÜM: Genel Sayılar
+        Row(
+          children: [
+            Expanded(
+              child: _buildDropdown<int>(
+                label: 'Zone Sayısı',
+                value: _selectedZoneCount,
+                items: zoneOptions,
+                onChanged: (val) {
+                  setState(() {
+                    _selectedZoneCount = val ?? 0;
+                    // Controller listesini güncelle
+                     if (_selectedZoneCount > _zoneFanCountControllers.length) {
+                        for (int i = _zoneFanCountControllers.length; i < _selectedZoneCount; i++) {
+                          _zoneFanCountControllers.add(TextEditingController());
+                        }
+                      } else {
+                        // Fazlalıkları dispose et ve listeden çıkar
+                        for (int i = _zoneFanCountControllers.length - 1; i >= _selectedZoneCount; i--) {
+                          _zoneFanCountControllers[i].dispose();
+                          _zoneFanCountControllers.removeAt(i);
+                        }
+                      }
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildTextField(
+                controller: _jetFanCountController,
+                label: 'Toplam Jet Fan',
+                icon: Icons.numbers,
+                isNumeric: true,
+              ),
+            ),
+          ],
+        ),
+        
+        // DİNAMİK ZONE LİSTESİ
+        if (_zoneFanCountControllers.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Text('Zone Bazlı Fan Sayıları', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _textLight)),
+          const SizedBox(height: 8),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _zoneFanCountControllers.length,
+            itemBuilder: (context, index) {
+               return Padding(
+                 padding: const EdgeInsets.only(bottom: 8),
+                 child: _buildTextField(
+                    controller: _zoneFanCountControllers[index],
+                    label: '${index + 1}. Zone Jetfan Sayısı',
+                    isNumeric: true,
+                 ),
+               );
+            },
+          ),
+        ],
+
+        const SizedBox(height: 24),
+        const Divider(),
+        const SizedBox(height: 16),
+
+        // --- DUMAN TAHLİYE FANLARI ---
+        Text(
+          'Duman Tahliye Fanları',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _corporateNavy),
+        ),
+        const SizedBox(height: 8),
+        _buildDropdown<int>(
+          label: 'Duman Tahliye Fanı Sayısı',
+          value: _smokeFanCount,
+          items: countOptions,
+          onChanged: (val) {
+            setState(() {
+              _smokeFanCount = val ?? 0;
+              // Listeyi güncelle
+              if (_smokeFanCount > _smokeFans.length) {
+                for (int i = _smokeFans.length; i < _smokeFanCount; i++) {
+                  _smokeFans.add({'brand': null, 'kw': null});
+                }
+              } else {
+                _smokeFans.length = _smokeFanCount;
+              }
+            });
+          },
+        ),
+        if (_smokeFans.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _smokeFans.length,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    // Sıra No
+                    Container(
+                      width: 24,
+                      alignment: Alignment.center,
+                      child: Text('${index + 1}.', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 8),
+                    // Marka
+                    Expanded(
+                      child: _buildDropdown<String>(
+                        label: 'İnverter Markası',
+                        value: _smokeFans[index]['brand'],
+                        items: StockService.driveBrands,
+                        onChanged: (val) {
+                           setState(() => _smokeFans[index]['brand'] = val);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // kW
+                    Expanded(
+                      child: _buildDropdown<double>(
+                        label: 'Güç (kW)',
+                        value: _smokeFans[index]['kw'],
+                        items: StockService.kwValues,
+                        itemLabelBuilder: (val) => '$val kW',
+                        onChanged: (val) {
+                          setState(() => _smokeFans[index]['kw'] = val);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+
+        const SizedBox(height: 24),
+        const Divider(),
+        const SizedBox(height: 16),
+
+        // --- TAZE HAVA FANLARI ---
+        Text(
+          'Taze Hava Fanları',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _corporateNavy),
+        ),
+        const SizedBox(height: 8),
+         _buildDropdown<int>(
+          label: 'Taze Hava Fanı Sayısı',
+          value: _freshFanCount,
+          items: countOptions,
+          onChanged: (val) {
+            setState(() {
+              _freshFanCount = val ?? 0;
+              // Listeyi güncelle
+              if (_freshFanCount > _freshFans.length) {
+                for (int i = _freshFans.length; i < _freshFanCount; i++) {
+                  _freshFans.add({'brand': null, 'kw': null});
+                }
+              } else {
+                _freshFans.length = _freshFanCount;
+              }
+            });
+          },
+        ),
+        if (_freshFans.isNotEmpty) ...[
+          const SizedBox(height: 16),
+           ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _freshFans.length,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    // Sıra No
+                    Container(
+                      width: 24,
+                      alignment: Alignment.center,
+                      child: Text('${index + 1}.', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 8),
+                    // Marka
+                    Expanded(
+                      child: _buildDropdown<String>(
+                        label: 'İnverter Markası',
+                        value: _freshFans[index]['brand'],
+                        items: StockService.driveBrands,
+                        onChanged: (val) {
+                           setState(() => _freshFans[index]['brand'] = val);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // kW
+                    Expanded(
+                      child: _buildDropdown<double>(
+                        label: 'Güç (kW)',
+                        value: _freshFans[index]['kw'],
+                        items: StockService.kwValues,
+                        itemLabelBuilder: (val) => '$val kW',
+                        onChanged: (val) {
+                          setState(() => _freshFans[index]['kw'] = val);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+
+        const SizedBox(height: 24),
+        // En alttaki İnverter Sayısı alanı kaldırıldı.
+        // Eğer genel marka seçimi isteniyorsa buraya eklenebilir ama talep edilmedi.
+      ],
+    );
+  }
+
   Widget _buildTechnicalInfoCard() {
     return _buildContentCard(
       title: 'CİHAZ TEKNİK VERİLERİ',
@@ -566,6 +938,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                   'Nem Alma Santrali',
                   'Elektrostatik',
                   'Heat-Pump',
+                  'Jet Fan',
                 ],
                 onChanged: (val) => setState(() => _selectedDeviceModel = val),
                 isRequired: true,

@@ -4,9 +4,13 @@ import 'package:flutter/foundation.dart'; // kIsWeb için
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:file_picker/file_picker.dart';
+import 'notification_service.dart';
+import 'user_service.dart';
 
 class TicketService {
   final _supabase = Supabase.instance.client;
+  final _notificationService = NotificationService();
+  final _userService = UserService();
 
   // --- TICKET İŞLEMLERİ ---
 
@@ -31,7 +35,62 @@ class TicketService {
 
   Future<void> updateTicket(String ticketId, Map<String, dynamic> payload) async {
     dynamic queryId = int.tryParse(ticketId) ?? ticketId;
+    
+    // Eski ticket bilgilerini al (bildirim için)
+    final oldTicket = await getTicket(ticketId);
+    
+    // Güncelleme yap
     await _supabase.from('tickets').update(payload).eq('id', queryId);
+    
+    // Bildirim gönder (asenkron, hata olsa bile işlem devam etsin)
+    if (oldTicket != null) {
+      _sendUpdateNotifications(oldTicket, payload, ticketId).catchError((e) {
+        debugPrint('Bildirim gönderme hatası: $e');
+      });
+    }
+  }
+  
+  /// Ticket güncellemelerinde bildirim gönderir
+  Future<void> _sendUpdateNotifications(
+    Map<String, dynamic> oldTicket,
+    Map<String, dynamic> payload,
+    String ticketId,
+  ) async {
+    final ticketTitle = oldTicket['title'] as String? ?? 'İş Emri';
+    final jobCode = oldTicket['job_code'] as String?;
+    final currentUser = await _userService.getCurrentUserProfile();
+    final userName = currentUser?.fullName ?? 'Kullanıcı';
+    
+    // Durum değişikliği kontrolü
+    if (payload.containsKey('status')) {
+      final oldStatus = oldTicket['status'] as String? ?? 'open';
+      final newStatus = payload['status'] as String?;
+      if (newStatus != null && oldStatus != newStatus) {
+        await _notificationService.notifyTicketStatusChanged(
+          ticketId: ticketId,
+          ticketTitle: ticketTitle,
+          oldStatus: oldStatus,
+          newStatus: newStatus,
+          changedBy: userName,
+          jobCode: jobCode,
+        );
+      }
+    }
+    
+    // Öncelik değişikliği kontrolü
+    if (payload.containsKey('priority')) {
+      final oldPriority = oldTicket['priority'] as String? ?? 'normal';
+      final newPriority = payload['priority'] as String?;
+      if (newPriority != null && oldPriority != newPriority) {
+        await _notificationService.notifyPriorityChanged(
+          ticketId: ticketId,
+          ticketTitle: ticketTitle,
+          oldPriority: oldPriority,
+          newPriority: newPriority,
+          jobCode: jobCode,
+        );
+      }
+    }
   }
 
   // --- NOT İŞLEMLERİ ---
@@ -63,6 +122,33 @@ class TicketService {
     }
 
     await _supabase.from('ticket_notes').insert(data);
+    
+    // Bildirim gönder (asenkron, hata olsa bile işlem devam etsin)
+    _sendNoteNotification(ticketId).catchError((e) {
+      debugPrint('Bildirim gönderme hatası: $e');
+    });
+  }
+  
+  /// Not eklendiğinde bildirim gönderir
+  Future<void> _sendNoteNotification(String ticketId) async {
+    try {
+      final ticket = await getTicket(ticketId);
+      if (ticket == null) return;
+      
+      final ticketTitle = ticket['title'] as String? ?? 'İş Emri';
+      final jobCode = ticket['job_code'] as String?;
+      final currentUser = await _userService.getCurrentUserProfile();
+      final userName = currentUser?.fullName ?? 'Kullanıcı';
+      
+      await _notificationService.notifyNoteAdded(
+        ticketId: ticketId,
+        ticketTitle: ticketTitle,
+        noteAuthor: userName,
+        jobCode: jobCode,
+      );
+    } catch (e) {
+      debugPrint('Not bildirimi gönderme hatası: $e');
+    }
   }
 
   // --- RESİM YÜKLEME VE SIKIŞTIRMA ---
@@ -98,15 +184,24 @@ class TicketService {
 
       try {
         // 1. Uzantı ve İsim
-        final extension = file.extension ?? 'jpg';
-        final cleanName = file.name.replaceAll(RegExp(r'[^a-zA-Z0-9._]'), '');
-        final fileName = '${DateTime.now().millisecondsSinceEpoch}_$cleanName';
-
-        // 2. Sıkıştırma
+        String extension = file.extension ?? 'jpg';
+        String cleanName = file.name.replaceAll(RegExp(r'[^a-zA-Z0-9._]'), '');
+        
+        // Sıkıştırma öncesi bytes
         Uint8List? imageBytes = file.bytes;
-        imageBytes = await compressImage(imageBytes!);
+        
+        // 2. Sıkıştırma (Web değilse, çıktı her zaman JPG olur)
+        if (!kIsWeb && imageBytes != null) {
+          imageBytes = await compressImage(imageBytes);
+          // Sıkıştırma yapıldıysa uzantıyı zorla jpg yap
+          extension = 'jpg';
+          // Dosya ismindeki uzantıyı da jpg ile değiştir
+          cleanName = cleanName.replaceAll(RegExp(r'\.[a-zA-Z0-9]+$'), '.jpg');
+        }
 
         if (imageBytes == null) continue;
+
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}_$cleanName';
 
         // 3. Yükleme
         final filePath = '$ticketId/$fileName';

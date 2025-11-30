@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:signature/signature.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:ui' as ui;
 
 enum SignatureType { customer, technician }
 
@@ -11,6 +12,10 @@ class SignaturePage extends StatefulWidget {
   final SignatureType type;
   final String? customerName;
   final String? customerPhone;
+  final String? existingSignatureData; // Mevcut imza verisi (base64)
+  final String? existingName; // Mevcut ad
+  final String? existingSurname; // Mevcut soyad
+  final String? existingPhone; // Mevcut telefon
 
   const SignaturePage({
     super.key,
@@ -18,6 +23,10 @@ class SignaturePage extends StatefulWidget {
     required this.type,
     this.customerName,
     this.customerPhone,
+    this.existingSignatureData,
+    this.existingName,
+    this.existingSurname,
+    this.existingPhone,
   });
 
   @override
@@ -40,12 +49,29 @@ class _SignaturePageState extends State<SignaturePage> {
   void initState() {
     super.initState();
     if (widget.type == SignatureType.customer) {
-      _nameController.text = widget.customerName?.split(' ').first ?? '';
-      _phoneController.text = widget.customerPhone ?? '';
+      // Mevcut imza bilgileri varsa onları kullan, yoksa müşteri bilgilerini kullan
+      _nameController.text = widget.existingName ?? widget.customerName?.split(' ').first ?? '';
+      _surnameController.text = widget.existingSurname ?? '';
+      _phoneController.text = widget.existingPhone ?? widget.customerPhone ?? '';
     } else {
       // Teknisyen için kullanıcı bilgilerini yükle
       _loadTechnicianInfo();
+      // Mevcut imza bilgileri varsa onları kullan
+      if (widget.existingName != null) {
+        _nameController.text = widget.existingName!;
+      }
+      if (widget.existingSurname != null) {
+        _surnameController.text = widget.existingSurname!;
+      }
     }
+    // Mevcut imzayı yükle (varsa)
+    _loadExistingSignature();
+  }
+
+  Future<void> _loadExistingSignature() async {
+    // SignatureController'da fromPngBytes metodu yok
+    // Mevcut imzayı göstermek için farklı bir yaklaşım kullanacağız
+    // Kullanıcı yeni imza çizerse onu kaydedeceğiz
   }
 
   Future<void> _loadTechnicianInfo() async {
@@ -98,7 +124,10 @@ class _SignaturePageState extends State<SignaturePage> {
   }
 
   Future<void> _saveSignature() async {
-    if (_controller.isEmpty) {
+    // Mevcut imza varsa düzenleme modunda, yoksa yeni imza atılmalı
+    final isEditing = widget.existingSignatureData != null && widget.existingSignatureData!.isNotEmpty;
+    
+    if (!isEditing && _controller.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Lütfen imza atın'),
@@ -137,14 +166,22 @@ class _SignaturePageState extends State<SignaturePage> {
 
     try {
       // İmzayı PNG olarak export et
-      final Uint8List? signatureBytes = await _controller.toPngBytes();
-
-      if (signatureBytes == null) {
-        throw Exception('İmza oluşturulamadı');
+      String signatureBase64;
+      
+      if (_controller.isEmpty && isEditing) {
+        // Düzenleme modunda ve imza silinmişse, mevcut imzayı koru
+        signatureBase64 = widget.existingSignatureData!;
+      } else {
+        // Yeni imza çizilmişse veya yeni imza atılıyorsa
+        final Uint8List? signatureBytes = await _controller.toPngBytes();
+        
+        if (signatureBytes == null) {
+          throw Exception('İmza oluşturulamadı');
+        }
+        
+        // Base64'e çevir
+        signatureBase64 = base64Encode(signatureBytes);
       }
-
-      // Base64'e çevir
-      final String signatureBase64 = base64Encode(signatureBytes);
 
       // Supabase'e kaydet
       final supabase = Supabase.instance.client;
@@ -249,7 +286,11 @@ class _SignaturePageState extends State<SignaturePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.type == SignatureType.customer ? 'Müşteri İmzası' : 'Teknisyen İmzası'),
+        title: Text(
+          widget.existingSignatureData != null && widget.existingSignatureData!.isNotEmpty
+              ? (widget.type == SignatureType.customer ? 'Müşteri İmzası Düzenle' : 'Teknisyen İmzası Düzenle')
+              : (widget.type == SignatureType.customer ? 'Müşteri İmzası' : 'Teknisyen İmzası'),
+        ),
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -432,9 +473,25 @@ class _SignaturePageState extends State<SignaturePage> {
                             border: Border.all(color: Colors.grey.shade300),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Signature(
-                            controller: _controller,
-                            backgroundColor: Colors.white,
+                          child: Stack(
+                            children: [
+                              // Mevcut imzayı göster (varsa)
+                              if (widget.existingSignatureData != null && widget.existingSignatureData!.isNotEmpty)
+                                Positioned.fill(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.memory(
+                                      base64Decode(widget.existingSignatureData!),
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                              // Yeni imza çizme alanı
+                              Signature(
+                                controller: _controller,
+                                backgroundColor: Colors.transparent,
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 12),

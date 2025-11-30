@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'ticket_list_page.dart';
 import 'login_page.dart';
+import '../widgets/app_drawer.dart';
+import '../services/user_service.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -13,7 +15,11 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   final _supabase = Supabase.instance.client;
+  final _userService = UserService();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _isLoading = true;
+  String? _userName;
+  String? _userRole;
   
   // İstatistik Verileri
   int _monthlyTicketCount = 0;
@@ -24,7 +30,18 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
+    _loadUserProfile();
     _loadDashboardData();
+  }
+
+  Future<void> _loadUserProfile() async {
+    final profile = await _userService.getCurrentUserProfile();
+    if (mounted) {
+      setState(() {
+        _userName = profile?.fullName;
+        _userRole = profile?.role;
+      });
+    }
   }
 
   Future<void> _loadDashboardData() async {
@@ -124,23 +141,31 @@ class _DashboardPageState extends State<DashboardPage> {
     final isWide = MediaQuery.of(context).size.width > 900;
 
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: const Color(0xFFF1F5F9), // Açık gri arka plan
+      drawer: AppDrawer(
+        currentPage: AppDrawerPage.dashboard,
+        userName: _userName,
+        userRole: _userRole,
+      ),
       appBar: AppBar(
         title: const Text('Yönetici Paneli', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
-        leadingWidth: 40,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 10),
-          child: SvgPicture.asset('assets/images/log.svg'),
+        leadingWidth: 100,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 0),
+              child: SvgPicture.asset('assets/images/log.svg', width: 32, height: 32),
+            ),
+          ],
         ),
         backgroundColor: Colors.white,
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.red),
-            onPressed: _logout,
-            tooltip: 'Çıkış Yap',
-          ),
-        ],
       ),
       body: _isLoading 
           ? const Center(child: CircularProgressIndicator())

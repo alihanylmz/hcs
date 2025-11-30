@@ -204,59 +204,64 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildLoginForm(ThemeData theme) {
-    return Column(
-      children: [
-        TextField(
-          controller: _emailController,
-          keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.next,
-          decoration: const InputDecoration(
-            labelText: 'E-posta Adresi',
-            prefixIcon: Icon(Icons.email_outlined),
-          ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _passwordController,
-          obscureText: !_isPasswordVisible,
-          textInputAction: TextInputAction.done,
-          decoration: InputDecoration(
-            labelText: 'Şifre',
-            prefixIcon: const Icon(Icons.lock_outline),
-            suffixIcon: IconButton(
-              icon: Icon(_isPasswordVisible ? Icons.visibility_off : Icons.visibility),
-              onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+    return AutofillGroup(
+      child: Column(
+        children: [
+          TextField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.email],
+            decoration: const InputDecoration(
+              labelText: 'E-posta Adresi',
+              prefixIcon: Icon(Icons.email_outlined),
             ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Checkbox(
-              value: _rememberMe, 
-              onChanged: (val) => setState(() => _rememberMe = val ?? false),
-              activeColor: theme.colorScheme.primary,
+          const SizedBox(height: 16),
+          TextField(
+            controller: _passwordController,
+            obscureText: !_isPasswordVisible,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.password],
+            onSubmitted: (_) => _signIn(),
+            decoration: InputDecoration(
+              labelText: 'Şifre',
+              prefixIcon: const Icon(Icons.lock_outline),
+              suffixIcon: IconButton(
+                icon: Icon(_isPasswordVisible ? Icons.visibility_off : Icons.visibility),
+                onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+              ),
             ),
-            GestureDetector(
-              onTap: () => setState(() => _rememberMe = !_rememberMe),
-              child: const Text('Beni Hatırla'),
-            ),
-            const Spacer(),
-            // Şifremi unuttum eklenebilir
-          ],
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _signIn,
-            child: _isLoading 
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator()) 
-              : const Text('GİRİŞ YAP', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Checkbox(
+                value: _rememberMe, 
+                onChanged: (val) => setState(() => _rememberMe = val ?? false),
+                activeColor: theme.colorScheme.primary,
+              ),
+              GestureDetector(
+                onTap: () => setState(() => _rememberMe = !_rememberMe),
+                child: const Text('Beni Hatırla'),
+              ),
+              const Spacer(),
+              // Şifremi unuttum eklenebilir
+            ],
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _signIn,
+              child: _isLoading 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator()) 
+                : const Text('GİRİŞ YAP', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

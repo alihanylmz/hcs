@@ -38,5 +38,23 @@ class UserProfile {
   // Yardımcı metodlar
   bool get isAdmin => role == 'admin';
   bool get isManager => role == 'manager' || role == 'admin';
+
+  String get displayName => fullName ?? email ?? 'Bilinmeyen Kullanıcı';
+
+  UserProfile copyWith({
+    String? id,
+    String? email,
+    String? fullName,
+    String? role,
+    DateTime? createdAt,
+  }) {
+    return UserProfile(
+      id: id ?? this.id,
+      email: email ?? this.email,
+      fullName: fullName ?? this.fullName,
+      role: role ?? this.role,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 }
 

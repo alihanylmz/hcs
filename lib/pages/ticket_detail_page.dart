@@ -220,6 +220,10 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
           type: SignatureType.customer,
           customerName: customer['name'],
           customerPhone: customer['phone'],
+          existingSignatureData: _ticket!['signature_data'] as String?,
+          existingName: _ticket!['signature_name'] as String?,
+          existingSurname: _ticket!['signature_surname'] as String?,
+          existingPhone: _ticket!['signature_phone'] as String?,
         ),
       ),
     );
@@ -234,6 +238,9 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
         builder: (_) => SignaturePage(
           ticketId: widget.ticketId,
           type: SignatureType.technician,
+          existingSignatureData: _ticket!['technician_signature_data'] as String?,
+          existingName: _ticket!['technician_signature_name'] as String?,
+          existingSurname: _ticket!['technician_signature_surname'] as String?,
         ),
       ),
     );
@@ -259,7 +266,8 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
 
   String? _extractPdfUrl(String? description) {
     if (description == null) return null;
-    final regex = RegExp(r'Ekli PDF Dosyası: (https?://[^\s]+)');
+    // Regex: Linkin sonundaki nokta, virgül vb. noktalama işaretlerini almaz.
+    final regex = RegExp(r'Ekli PDF Dosyası: (https?://[^\s]+?)(?=[.,;:]?(\s|$))');
     final match = regex.firstMatch(description);
     return match?.group(1);
   }
@@ -340,28 +348,39 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
                 _openTechnicianSignaturePage();
               }
             },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'customer',
-                child: Row(
-                  children: [
-                    Icon(Icons.person_outline, color: AppColors.textDark),
-                    SizedBox(width: 10),
-                    Text('Müşteri İmzası'),
-                  ],
+            itemBuilder: (context) {
+              final hasCustomerSignature = _ticket?['signature_data'] != null;
+              final hasTechnicianSignature = _ticket?['technician_signature_data'] != null;
+              
+              return [
+                PopupMenuItem(
+                  value: 'customer',
+                  child: Row(
+                    children: [
+                      Icon(
+                        hasCustomerSignature ? Icons.edit : Icons.person_outline,
+                        color: AppColors.textDark,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(hasCustomerSignature ? 'Müşteri İmzası Düzenle' : 'Müşteri İmzası'),
+                    ],
+                  ),
                 ),
-              ),
-              const PopupMenuItem(
-                value: 'technician',
-                child: Row(
-                  children: [
-                    Icon(Icons.badge_outlined, color: AppColors.textDark),
-                    SizedBox(width: 10),
-                    Text('Teknisyen İmzası'),
-                  ],
+                PopupMenuItem(
+                  value: 'technician',
+                  child: Row(
+                    children: [
+                      Icon(
+                        hasTechnicianSignature ? Icons.edit : Icons.badge_outlined,
+                        color: AppColors.textDark,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(hasTechnicianSignature ? 'Teknisyen İmzası Düzenle' : 'Teknisyen İmzası'),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ];
+            },
           ),
           IconButton(
             icon: const Icon(Icons.refresh_outlined),
@@ -883,6 +902,13 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
                                                 backgroundColor: Colors.black,
                                                 leading: const CloseButton(color: Colors.white),
                                                 elevation: 0,
+                                                actions: [
+                                                  IconButton(
+                                                    icon: const Icon(Icons.open_in_browser, color: Colors.white),
+                                                    onPressed: () => _launchAttachment(url),
+                                                    tooltip: 'Tarayıcıda Aç',
+                                                  ),
+                                                ],
                                               ),
                                               body: Container( 
                                                 width: double.infinity,

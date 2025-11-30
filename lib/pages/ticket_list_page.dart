@@ -14,6 +14,9 @@ import '../pages/stock_overview_page.dart';
 import '../pages/ticket_detail_page.dart';
 import '../pages/profile_page.dart';
 import '../services/pdf_export_service.dart';
+import '../services/user_service.dart';
+import '../theme/app_colors.dart';
+import '../widgets/app_drawer.dart';
 
 class TicketListPage extends StatefulWidget {
   const TicketListPage({super.key});
@@ -161,10 +164,60 @@ class _TicketListPageState extends State<TicketListPage> {
     // AuthGate will handle navigation
   }
 
+  // Türkçe karakter desteği için normalize fonksiyonu
+  // Tüm karakterleri (büyük/küçük, Türkçe/İngilizce) normalize eder
+  String _normalizeTurkish(String text) {
+    if (text.isEmpty) return '';
+    
+    // Her karakteri tek tek işle
+    StringBuffer result = StringBuffer();
+    
+    for (int i = 0; i < text.length; i++) {
+      final char = text[i];
+      final codeUnit = char.codeUnitAt(0);
+      
+      // Türkçe büyük harfleri küçük harfe çevir
+      switch (char) {
+        case 'İ':
+          result.write('i');
+          break;
+        case 'I':
+          result.write('ı');
+          break;
+        case 'Ş':
+          result.write('ş');
+          break;
+        case 'Ğ':
+          result.write('ğ');
+          break;
+        case 'Ü':
+          result.write('ü');
+          break;
+        case 'Ö':
+          result.write('ö');
+          break;
+        case 'Ç':
+          result.write('ç');
+          break;
+        default:
+          // İngilizce büyük harfler (A-Z ama I hariç)
+          if (codeUnit >= 65 && codeUnit <= 90 && codeUnit != 73) {
+            result.write(String.fromCharCode(codeUnit + 32)); // ASCII: A=65, a=97
+          } else {
+            // Diğer tüm karakterleri olduğu gibi bırak (küçük harfler, rakamlar, özel karakterler)
+            result.write(char);
+          }
+          break;
+      }
+    }
+    
+    return result.toString().trim();
+  }
+
   List<Map<String, dynamic>> _applyFilters(
     List<Map<String, dynamic>> tickets,
   ) {
-    final search = _searchText.trim().toLowerCase();
+    final search = _normalizeTurkish(_searchText.trim());
 
     return tickets.where((ticket) {
       final status = (ticket['status'] as String?) ?? '';
@@ -184,8 +237,9 @@ class _TicketListPageState extends State<TicketListPage> {
       }
 
       if (search.isNotEmpty) {
-        final combined =
-            '${title.toLowerCase()} ${customerName.toLowerCase()}';
+        final normalizedTitle = _normalizeTurkish(title);
+        final normalizedCustomerName = _normalizeTurkish(customerName);
+        final combined = '$normalizedTitle $normalizedCustomerName';
         if (!combined.contains(search)) {
           return false;
         }
@@ -226,143 +280,41 @@ class _TicketListPageState extends State<TicketListPage> {
     }
   }
 
-  Drawer _buildDrawer(User? user, ThemeData theme) {
-    final isDark = theme.brightness == Brightness.dark;
-    final headerColor = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
-    
-    return Drawer(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      child: Column(
-        children: [
-          UserAccountsDrawerHeader(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary,
-            ),
-            accountName: const Text(
-              'İş Takip Platformu',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            accountEmail: Text(user?.email ?? 'Teknisyen'),
-            currentAccountPicture: CircleAvatar(
-              backgroundColor: theme.colorScheme.secondary,
-              child: Text(
-                (_userRole ?? 'T').substring(0, 1).toUpperCase(),
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-          // Sadece Admin ve Yöneticiler Görebilir
-          if (_userRole == 'admin' || _userRole == 'manager')
-            _drawerTile(
-              icon: Icons.dashboard_outlined, 
-              title: 'Yönetici Paneli', 
-              subtitle: 'İstatistikler ve Özet', 
-              onTap: () {
-                Navigator.pop(context); // Drawer'ı kapat
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DashboardPage()));
-              }
-            ),
-          _drawerTile(
-            icon: Icons.list_alt, 
-            title: 'İş Listesi', 
-            subtitle: 'Ana Sayfa', 
-            onTap: () {
-              Navigator.pop(context); // Zaten buradayız
-            }
-          ),
-          _drawerTile(
-            icon: Icons.inventory_2_outlined, 
-            title: 'Stok Durumu', 
-            subtitle: 'Parça listesi', 
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StockOverviewPage()));
-            }
-          ),
-          _drawerTile(
-            icon: Icons.task_alt, 
-            title: 'Biten İşler', 
-            subtitle: 'Tamamlanan İşler', 
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ArchivedTicketsPage()));
-            }
-          ),
-          const Spacer(),
-          const Divider(),
-          ListTile(
-            leading: Icon(
-               IsTakipApp.of(context)?.isDarkMode == true ? Icons.light_mode : Icons.dark_mode,
-               color: theme.iconTheme.color,
-            ),
-            title: Text(IsTakipApp.of(context)?.isDarkMode == true ? 'Aydınlık Mod' : 'Karanlık Mod'),
-            onTap: () {
-              IsTakipApp.of(context)?.toggleTheme();
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.account_circle, color: Colors.blue),
-            title: const Text('Profilim'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfilePage())).then((_) => _loadUserProfile());
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Çıkış Yap', style: TextStyle(color: Colors.red)),
-            onTap: _signOut,
-          ),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
-  }
 
-  ListTile _drawerTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
-      onTap: onTap,
-    );
-  }
 
   Widget _buildStatCard({
     required String title,
     required String value,
     required Color color,
     required IconData icon,
+    VoidCallback? onTap,
   }) {
     final theme = Theme.of(context);
-    return Container(
-        width: 130, // Genişlik artırıldı
-        padding: const EdgeInsets.all(12), // Padding azaltıldı
-        decoration: BoxDecoration(
-          color: theme.cardTheme.color,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.3)),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Icon(icon, color: color, size: 20),
-                Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.textTheme.bodyLarge?.color)),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+          width: 130, // Genişlik artırıldı
+          padding: const EdgeInsets.all(12), // Padding azaltıldı
+          decoration: BoxDecoration(
+            color: theme.cardTheme.color,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withOpacity(0.3)),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Icon(icon, color: color, size: 20),
+                  Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.textTheme.bodyLarge?.color)),
               ],
             ),
             const SizedBox(height: 4),
@@ -374,6 +326,7 @@ class _TicketListPageState extends State<TicketListPage> {
             ),
           ],
         ),
+      ),
     );
   }
 
@@ -518,36 +471,104 @@ class _TicketListPageState extends State<TicketListPage> {
                   icon: Icons.edit_outlined,
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EditTicketPage(ticketId: ticket['id'].toString()))).then((_) => _refresh()),
                 ),
-                const SizedBox(width: 8),
-                 IconButton(
-                   icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                   onPressed: () {
-                     showDialog(
-                        context: context, 
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('Sil'),
-                          content: const Text('Bu işi silmek istediğine emin misin?'),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
-                            TextButton(
-                              onPressed: () async {
-                                Navigator.pop(ctx);
-                                final supabase = Supabase.instance.client;
-                                await supabase.from('tickets').delete().eq('id', ticket['id']);
-                                if (context.mounted) _refresh();
-                              }, 
-                              child: const Text('Sil', style: TextStyle(color: Colors.red))
-                            ),
-                          ],
-                        )
-                     );
-                   },
-                 ),
+                // Teknisyenler silme yapamaz
+                if (_userRole != 'technician' && _userRole != 'pending') ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                    onPressed: () {
+                      showDialog(
+                         context: context, 
+                         builder: (ctx) => AlertDialog(
+                           title: const Text('Sil'),
+                           content: const Text('Bu işi silmek istediğine emin misin?'),
+                           actions: [
+                             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+                             TextButton(
+                               onPressed: () async {
+                                 Navigator.pop(ctx);
+                                 final supabase = Supabase.instance.client;
+                                 await supabase.from('tickets').delete().eq('id', ticket['id']);
+                                 if (context.mounted) _refresh();
+                               }, 
+                               child: const Text('Sil', style: TextStyle(color: Colors.red))
+                             ),
+                           ],
+                         )
+                      );
+                    },
+                  ),
+                ],
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  void _showDeviceSelection(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Cihaz Tipi Seçin',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.blue,
+                  child: Icon(Icons.hvac, color: Colors.white),
+                ),
+                title: const Text('Klima Santrali'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => const NewTicketPage(deviceType: 'santral')
+                  )).then((_) => _refresh());
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.orange,
+                  child: Icon(Icons.wind_power, color: Colors.white),
+                ),
+                title: const Text('Jet Fan / Otopark'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => const NewTicketPage(deviceType: 'jet_fan')
+                  )).then((_) => _refresh());
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.grey,
+                  child: Icon(Icons.build, color: Colors.white),
+                ),
+                title: const Text('Diğer / Arıza'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => const NewTicketPage(deviceType: 'other')
+                  )).then((_) => _refresh());
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -560,7 +581,12 @@ class _TicketListPageState extends State<TicketListPage> {
 
     return Scaffold(
       key: _scaffoldKey,
-      drawer: _buildDrawer(user, theme),
+      drawer: AppDrawer(
+        currentPage: AppDrawerPage.ticketList,
+        userName: _userName,
+        userRole: _userRole,
+        onProfileReload: _loadUserProfile,
+      ),
       appBar: AppBar(
         title: const Text('İŞ TAKİP KONTROL'),
         centerTitle: true,
@@ -647,28 +673,60 @@ class _TicketListPageState extends State<TicketListPage> {
                                 title: 'Açık İşler', 
                                 value: openCount.toString(), 
                                 color: Colors.blue, 
-                                icon: Icons.assignment_outlined
+                                icon: Icons.assignment_outlined,
+                                onTap: () {
+                                  setState(() {
+                                    _statusFilter = 'open';
+                                  });
+                                },
                               ),
                               const SizedBox(width: 12),
                               _buildStatCard(
                                 title: 'Pano (Stok)', 
                                 value: tickets.where((e) => e['status'] == 'panel_done_stock').length.toString(), 
                                 color: Colors.purple, 
-                                icon: Icons.inventory_2_outlined
+                                icon: Icons.inventory_2_outlined,
+                                onTap: () {
+                                  setState(() {
+                                    _statusFilter = 'panel_done_stock';
+                                  });
+                                },
                               ),
                               const SizedBox(width: 12),
                               _buildStatCard(
                                 title: 'Pano (Gön.)', 
                                 value: tickets.where((e) => e['status'] == 'panel_done_sent').length.toString(), 
                                 color: Colors.indigo, 
-                                icon: Icons.local_shipping_outlined
+                                icon: Icons.local_shipping_outlined,
+                                onTap: () {
+                                  setState(() {
+                                    _statusFilter = 'panel_done_sent';
+                                  });
+                                },
                               ),
                               const SizedBox(width: 12),
                               _buildStatCard(
                                 title: 'Serviste', 
                                 value: progressCount.toString(), 
                                 color: Colors.orange, 
-                                icon: Icons.build_circle_outlined
+                                icon: Icons.build_circle_outlined,
+                                onTap: () {
+                                  setState(() {
+                                    _statusFilter = 'in_progress';
+                                  });
+                                },
+                              ),
+                              const SizedBox(width: 12),
+                              _buildStatCard(
+                                title: 'Biten Hariç Tümü', 
+                                value: tickets.length.toString(), 
+                                color: Colors.green, 
+                                icon: Icons.list_alt_outlined,
+                                onTap: () {
+                                  setState(() {
+                                    _statusFilter = 'all';
+                                  });
+                                },
                               ),
                             ],
                           ),
@@ -678,6 +736,10 @@ class _TicketListPageState extends State<TicketListPage> {
                         // Arama ve Filtreler
                         TextField(
                           controller: _searchController,
+                          keyboardType: TextInputType.text,
+                          textInputAction: TextInputAction.search,
+                          enableSuggestions: true,
+                          autocorrect: true,
                           decoration: InputDecoration(
                             hintText: 'İş veya Müşteri Ara...',
                             prefixIcon: const Icon(Icons.search),
@@ -769,13 +831,16 @@ class _TicketListPageState extends State<TicketListPage> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: Colors.white,
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NewTicketPage())).then((_) => _refresh()),
-        label: const Text('YENİ İŞ'),
-        icon: const Icon(Icons.add),
-      ),
+      // Teknisyenler yeni iş açamaz
+      floatingActionButton: (_userRole != 'technician' && _userRole != 'pending')
+          ? FloatingActionButton.extended(
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: Colors.white,
+              onPressed: () => _showDeviceSelection(context),
+              label: const Text('YENİ İŞ'),
+              icon: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 }

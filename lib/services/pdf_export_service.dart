@@ -9,6 +9,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:file_picker/file_picker.dart';
 import '../services/stock_service.dart';
 
+import 'package:intl/intl.dart'; // <--- Eklendi
+
 class PdfExportService {
   // --- AYARLAR VE SABİTLER ---
 
@@ -33,14 +35,17 @@ class PdfExportService {
 
   static Future<pw.Font> _loadTurkishFont() async {
     try {
-      return await PdfGoogleFonts.notoSansRegular();
+      // Önce lokal asset'ten yüklemeyi dene (daha hızlı ve offline çalışır)
+      final fontData = await rootBundle.load('assets/fonts/NotoSans-Regular.ttf');
+      return pw.Font.ttf(fontData);
     } catch (e) {
-      print('Google Fonts yüklenemedi, yerel dosya deneniyor: $e');
+      print('Yerel font yüklenemedi, Google Fonts deneniyor: $e');
       try {
-        final fontData = await rootBundle.load('assets/fonts/NotoSans-Regular.ttf');
-        return pw.Font.ttf(fontData);
+        // Lokal başarısız olursa Google Fonts'tan dene
+        return await PdfGoogleFonts.notoSansRegular();
       } catch (e2) {
-        print('Yerel font da bulunamadı: $e2');
+        print('Google Fonts da yüklenemedi: $e2');
+        // En kötü ihtimalle varsayılan fonta dön
         return pw.Font.helvetica();
       }
     }
@@ -61,10 +66,8 @@ class PdfExportService {
     if (iso == null) return '-';
     final parsed = DateTime.tryParse(iso);
     if (parsed == null) return iso;
-    return '${parsed.day.toString().padLeft(2, '0')}.'
-        '${parsed.month.toString().padLeft(2, '0')}.'
-        '${parsed.year} ${parsed.hour.toString().padLeft(2, '0')}:'
-        '${parsed.minute.toString().padLeft(2, '0')}';
+    // intl paketini kullanarak formatlama
+    return DateFormat('dd.MM.yyyy HH:mm', 'tr_TR').format(parsed);
   }
 
   static String _safeText(dynamic value) {
@@ -310,22 +313,14 @@ class PdfExportService {
                   pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Bileşen', style: pw.TextStyle(font: turkishFont, fontWeight: pw.FontWeight.bold, fontSize: 9))),
                   pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Detay', style: pw.TextStyle(font: turkishFont, fontWeight: pw.FontWeight.bold, fontSize: 9))),
                 ]),
-                if (aspKw != null) pw.TableRow(children: [
-                   pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Aspiratör', style: pw.TextStyle(font: turkishFont, fontSize: 9))),
-                   pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${_safeText(aspKw)} kW', style: pw.TextStyle(font: turkishFont, fontSize: 9))),
-                ]),
-                if (vantKw != null) pw.TableRow(children: [
-                   pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Vantilatör', style: pw.TextStyle(font: turkishFont, fontSize: 9))),
-                   pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${_safeText(vantKw)} kW', style: pw.TextStyle(font: turkishFont, fontSize: 9))),
-                ]),
-                if (komp1Kw != null) pw.TableRow(children: [
-                   pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Kompresör 1', style: pw.TextStyle(font: turkishFont, fontSize: 9))),
-                   pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${_safeText(komp1Kw)} kW', style: pw.TextStyle(font: turkishFont, fontSize: 9))),
-                ]),
-                if (hmiBrand != null) pw.TableRow(children: [
-                   pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('HMI Ekran', style: pw.TextStyle(font: turkishFont, fontSize: 9))),
-                   pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${_safeText(hmiBrand)} - ${_safeText(hmiSize)} inç', style: pw.TextStyle(font: turkishFont, fontSize: 9))),
-                ]),
+                if (aspKw != null) 
+                  _buildZebraRow('Aspiratör', '${_safeText(aspKw)} kW', turkishFont, 0),
+                if (vantKw != null) 
+                  _buildZebraRow('Vantilatör', '${_safeText(vantKw)} kW', turkishFont, 1),
+                if (komp1Kw != null) 
+                  _buildZebraRow('Kompresör 1', '${_safeText(komp1Kw)} kW', turkishFont, 0),
+                if (hmiBrand != null) 
+                  _buildZebraRow('HMI Ekran', '${_safeText(hmiBrand)} - ${_safeText(hmiSize)} inç', turkishFont, 1),
               ],
             ),
           ],
@@ -370,6 +365,19 @@ class PdfExportService {
       ),
     );
     return pdf;
+  }
+
+  // Zebra Striping için yardımcı metod
+  static pw.TableRow _buildZebraRow(String label, String value, pw.Font font, int index) {
+    return pw.TableRow(
+      decoration: pw.BoxDecoration(
+        color: index % 2 == 0 ? PdfColors.white : PdfColors.grey100,
+      ),
+      children: [
+        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(label, style: pw.TextStyle(font: font, fontSize: 9))),
+        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(value, style: pw.TextStyle(font: font, fontSize: 9))),
+      ],
+    );
   }
 
   static pw.Widget _buildSignatureSection(Map<String, dynamic> ticket, pw.Font font) {
@@ -595,6 +603,655 @@ class PdfExportService {
   static Future<void> exportAnnualUsageReport() async {
     final bytes = await generateAnnualUsageReportPdfBytes();
     await viewPdf(bytes, 'Yillik_Kullanim_Raporu');
+  }
+
+  // --- 4. RAPOR: SİPARİŞ LİSTESİ (KRİTİK SEVİYENİN ALTINDAKİ STOKLAR) ---
+
+  static Future<Uint8List> generateOrderListPdfBytes() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final response = await supabase
+          .from('inventory')
+          .select()
+          .order('category', ascending: true)
+          .order('name', ascending: true);
+      
+      final List<Map<String, dynamic>> allStocks = List<Map<String, dynamic>>.from(response);
+      
+      // Kritik seviyenin altındaki veya sıfır olan stokları filtrele
+      final List<Map<String, dynamic>> orderItems = allStocks.where((stock) {
+        final qty = stock['quantity'] as int? ?? 0;
+        final critical = stock['critical_level'] as int? ?? 5;
+        return qty <= critical;
+      }).toList();
+
+      final pdf = pw.Document();
+      final font = await _loadTurkishFont();
+      final now = DateTime.now();
+      final dateStr = DateFormat('dd.MM.yyyy', 'tr_TR').format(now);
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+          theme: pw.ThemeData.withFont(base: font, bold: font),
+          header: (context) {
+            return pw.Column(
+              children: [
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'SİPARİŞ LİSTESİ',
+                          style: pw.TextStyle(
+                            font: font,
+                            fontSize: 20,
+                            fontWeight: pw.FontWeight.bold,
+                            color: _primaryColor,
+                          ),
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          'Tarih: $dateStr',
+                          style: pw.TextStyle(
+                            font: font,
+                            fontSize: 10,
+                            color: PdfColors.grey600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.red50,
+                        borderRadius: pw.BorderRadius.circular(4),
+                        border: pw.Border.all(color: PdfColors.red300),
+                      ),
+                      child: pw.Text(
+                        '${orderItems.length} Ürün',
+                        style: pw.TextStyle(
+                          font: font,
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 12,
+                          color: PdfColors.red700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 10),
+                pw.Divider(color: _primaryColor, thickness: 2),
+              ],
+            );
+          },
+          footer: (context) {
+            return pw.Column(
+              children: [
+                pw.SizedBox(height: 10),
+                pw.Divider(),
+                pw.SizedBox(height: 5),
+                pw.Center(
+                  child: pw.Text(
+                    'Bu liste kritik seviyenin altındaki stokları içermektedir.',
+                    style: pw.TextStyle(
+                      font: font,
+                      fontSize: 8,
+                      color: PdfColors.grey500,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+          build: (context) {
+            if (orderItems.isEmpty) {
+              return [
+                pw.SizedBox(height: 50),
+                pw.Center(
+                  child: pw.Column(
+                    children: [
+                      pw.Container(
+                        width: 60,
+                        height: 60,
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.green50,
+                          shape: pw.BoxShape.circle,
+                        ),
+                        child: pw.Center(
+                          child: pw.Text(
+                            '✓',
+                            style: pw.TextStyle(
+                              font: font,
+                              fontSize: 36,
+                              color: PdfColors.green700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      pw.SizedBox(height: 16),
+                      pw.Text(
+                        'Tüm stoklar yeterli seviyede!',
+                        style: pw.TextStyle(
+                          font: font,
+                          fontSize: 14,
+                          color: PdfColors.green700,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.SizedBox(height: 8),
+                      pw.Text(
+                        'Sipariş gerektiren ürün bulunmamaktadır.',
+                        style: pw.TextStyle(
+                          font: font,
+                          fontSize: 10,
+                          color: PdfColors.grey600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ];
+            }
+
+            // Kategorilere göre grupla
+            final Map<String, List<Map<String, dynamic>>> grouped = {};
+            for (var item in orderItems) {
+              final cat = item['category'] as String? ?? 'Diğer';
+              if (!grouped.containsKey(cat)) grouped[cat] = [];
+              grouped[cat]!.add(item);
+            }
+
+            return grouped.entries.map((entry) {
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.SizedBox(height: 15),
+                  // Kategori başlığı
+                  pw.Container(
+                    width: double.infinity,
+                    padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                    decoration: pw.BoxDecoration(
+                      color: _primaryColor,
+                      borderRadius: pw.BorderRadius.circular(4),
+                    ),
+                    child: pw.Text(
+                      entry.key.toUpperCase(),
+                      style: pw.TextStyle(
+                        font: font,
+                        fontSize: 12,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white,
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(height: 8),
+                  // Tablo
+                  pw.Table(
+                    border: pw.TableBorder.all(color: PdfColors.grey400, width: 1),
+                    columnWidths: {
+                      0: const pw.FlexColumnWidth(4),
+                      1: const pw.FlexColumnWidth(1.5),
+                      2: const pw.FlexColumnWidth(1.5),
+                      3: const pw.FlexColumnWidth(1.5),
+                      4: const pw.FlexColumnWidth(1.5),
+                    },
+                    children: [
+                      // Başlık satırı
+                      pw.TableRow(
+                        decoration: const pw.BoxDecoration(color: _lightBgColor),
+                        children: [
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              'Ürün Adı',
+                              style: pw.TextStyle(
+                                font: font,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              'Mevcut',
+                              style: pw.TextStyle(
+                                font: font,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              'Kritik',
+                              style: pw.TextStyle(
+                                font: font,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              'Eksik',
+                              style: pw.TextStyle(
+                                font: font,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              'Raf',
+                              style: pw.TextStyle(
+                                font: font,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Veri satırları
+                      ...entry.value.asMap().entries.map((itemEntry) {
+                        final index = itemEntry.key;
+                        final item = itemEntry.value;
+                        final qty = item['quantity'] as int? ?? 0;
+                        final critical = item['critical_level'] as int? ?? 5;
+                        final missing = critical - qty;
+                        final isZero = qty == 0;
+
+                        return pw.TableRow(
+                          decoration: pw.BoxDecoration(
+                            color: index % 2 == 0 ? PdfColors.white : PdfColors.grey50,
+                          ),
+                          children: [
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(8),
+                              child: pw.Text(
+                                _safeText(item['name']),
+                                style: pw.TextStyle(
+                                  font: font,
+                                  fontSize: 9,
+                                  fontWeight: isZero ? pw.FontWeight.bold : null,
+                                ),
+                              ),
+                            ),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(8),
+                              child: pw.Text(
+                                qty.toString(),
+                                style: pw.TextStyle(
+                                  font: font,
+                                  fontSize: 9,
+                                  color: isZero ? PdfColors.red : PdfColors.orange700,
+                                  fontWeight: isZero ? pw.FontWeight.bold : null,
+                                ),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            ),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(8),
+                              child: pw.Text(
+                                critical.toString(),
+                                style: pw.TextStyle(
+                                  font: font,
+                                  fontSize: 9,
+                                ),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            ),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(8),
+                              child: pw.Text(
+                                missing > 0 ? missing.toString() : '-',
+                                style: pw.TextStyle(
+                                  font: font,
+                                  fontSize: 9,
+                                  color: PdfColors.red700,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            ),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(8),
+                              child: pw.Text(
+                                _safeText(item['shelf_location']),
+                                style: pw.TextStyle(
+                                  font: font,
+                                  fontSize: 9,
+                                  color: PdfColors.grey600,
+                                ),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ],
+                  ),
+                ],
+              );
+            }).toList();
+          },
+        ),
+      );
+
+      return await pdf.save();
+    } catch (e) {
+      throw Exception('Sipariş listesi hatası: $e');
+    }
+  }
+
+  // Deprecated wrapper
+  static Future<void> exportOrderList() async {
+    final bytes = await generateOrderListPdfBytes();
+    await viewPdf(bytes, 'Siparis_Listesi_${DateTime.now().toIso8601String().substring(0, 10)}');
+  }
+
+  // --- 5. RAPOR: MANUEL SİPARİŞ LİSTESİ (SEÇİLEN ÜRÜNLERDEN) ---
+
+  static Future<Uint8List> generateOrderListPdfBytesFromList(List<Map<String, dynamic>> selectedStocks) async {
+    try {
+      if (selectedStocks.isEmpty) {
+        throw Exception('Seçilen ürün bulunamadı');
+      }
+
+      final pdf = pw.Document();
+      final font = await _loadTurkishFont();
+      final now = DateTime.now();
+      final dateStr = DateFormat('dd.MM.yyyy', 'tr_TR').format(now);
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+          theme: pw.ThemeData.withFont(base: font, bold: font),
+          header: (context) {
+            return pw.Column(
+              children: [
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'SİPARİŞ LİSTESİ',
+                          style: pw.TextStyle(
+                            font: font,
+                            fontSize: 20,
+                            fontWeight: pw.FontWeight.bold,
+                            color: _primaryColor,
+                          ),
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          'Tarih: $dateStr',
+                          style: pw.TextStyle(
+                            font: font,
+                            fontSize: 10,
+                            color: PdfColors.grey600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.blue50,
+                        borderRadius: pw.BorderRadius.circular(4),
+                        border: pw.Border.all(color: PdfColors.blue300),
+                      ),
+                      child: pw.Text(
+                        '${selectedStocks.length} Ürün',
+                        style: pw.TextStyle(
+                          font: font,
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 12,
+                          color: PdfColors.blue700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 10),
+                pw.Divider(color: _primaryColor, thickness: 2),
+              ],
+            );
+          },
+          footer: (context) {
+            return pw.Column(
+              children: [
+                pw.SizedBox(height: 10),
+                pw.Divider(),
+                pw.SizedBox(height: 5),
+                pw.Center(
+                  child: pw.Text(
+                    'Bu liste manuel olarak seçilen ürünleri içermektedir.',
+                    style: pw.TextStyle(
+                      font: font,
+                      fontSize: 8,
+                      color: PdfColors.grey500,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+          build: (context) {
+            // Kategorilere göre grupla
+            final Map<String, List<Map<String, dynamic>>> grouped = {};
+            for (var item in selectedStocks) {
+              final cat = item['category'] as String? ?? 'Diğer';
+              if (!grouped.containsKey(cat)) grouped[cat] = [];
+              grouped[cat]!.add(item);
+            }
+
+            return grouped.entries.map((entry) {
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.SizedBox(height: 15),
+                  // Kategori başlığı
+                  pw.Container(
+                    width: double.infinity,
+                    padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                    decoration: pw.BoxDecoration(
+                      color: _primaryColor,
+                      borderRadius: pw.BorderRadius.circular(4),
+                    ),
+                    child: pw.Text(
+                      entry.key.toUpperCase(),
+                      style: pw.TextStyle(
+                        font: font,
+                        fontSize: 12,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white,
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(height: 8),
+                  // Tablo
+                  pw.Table(
+                    border: pw.TableBorder.all(color: PdfColors.grey400, width: 1),
+                    columnWidths: {
+                      0: const pw.FlexColumnWidth(4),
+                      1: const pw.FlexColumnWidth(1.5),
+                      2: const pw.FlexColumnWidth(1.5),
+                      3: const pw.FlexColumnWidth(1.5),
+                      4: const pw.FlexColumnWidth(1.5),
+                    },
+                    children: [
+                      // Başlık satırı
+                      pw.TableRow(
+                        decoration: const pw.BoxDecoration(color: _lightBgColor),
+                        children: [
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              'Ürün Adı',
+                              style: pw.TextStyle(
+                                font: font,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              'Mevcut',
+                              style: pw.TextStyle(
+                                font: font,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              'Kritik',
+                              style: pw.TextStyle(
+                                font: font,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              'Sipariş Adedi',
+                              style: pw.TextStyle(
+                                font: font,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              'Raf',
+                              style: pw.TextStyle(
+                                font: font,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Veri satırları
+                      ...entry.value.asMap().entries.map((itemEntry) {
+                        final index = itemEntry.key;
+                        final item = itemEntry.value;
+                        final qty = item['quantity'] as int? ?? 0;
+                        final critical = item['critical_level'] as int? ?? 5;
+                        final orderQty = item['order_quantity'] as int? ?? 1;
+                        final isZero = qty == 0;
+
+                        return pw.TableRow(
+                          decoration: pw.BoxDecoration(
+                            color: index % 2 == 0 ? PdfColors.white : PdfColors.grey50,
+                          ),
+                          children: [
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(8),
+                              child: pw.Text(
+                                _safeText(item['name']),
+                                style: pw.TextStyle(
+                                  font: font,
+                                  fontSize: 9,
+                                  fontWeight: isZero ? pw.FontWeight.bold : null,
+                                ),
+                              ),
+                            ),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(8),
+                              child: pw.Text(
+                                qty.toString(),
+                                style: pw.TextStyle(
+                                  font: font,
+                                  fontSize: 9,
+                                  color: isZero ? PdfColors.red : PdfColors.orange700,
+                                  fontWeight: isZero ? pw.FontWeight.bold : null,
+                                ),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            ),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(8),
+                              child: pw.Text(
+                                critical.toString(),
+                                style: pw.TextStyle(
+                                  font: font,
+                                  fontSize: 9,
+                                ),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            ),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(8),
+                              child: pw.Text(
+                                orderQty.toString(),
+                                style: pw.TextStyle(
+                                  font: font,
+                                  fontSize: 9,
+                                  color: PdfColors.blue700,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            ),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(8),
+                              child: pw.Text(
+                                _safeText(item['shelf_location']),
+                                style: pw.TextStyle(
+                                  font: font,
+                                  fontSize: 9,
+                                  color: PdfColors.grey600,
+                                ),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ],
+                  ),
+                ],
+              );
+            }).toList();
+          },
+        ),
+      );
+
+      return await pdf.save();
+    } catch (e) {
+      throw Exception('Sipariş listesi hatası: $e');
+    }
   }
 }
 

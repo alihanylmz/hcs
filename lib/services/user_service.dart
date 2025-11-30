@@ -27,7 +27,7 @@ class UserService {
 
       return UserProfile.fromJson(response);
     } catch (e) {
-      print('Profil çekme hatası: $e');
+      print('🔴 Profil çekme hatası: $e');
       return null;
     }
   }
@@ -42,7 +42,6 @@ class UserService {
       'email': email,
       'full_name': fullName,
       'role': 'pending',
-      'created_at': DateTime.now().toIso8601String(),
     });
   }
 

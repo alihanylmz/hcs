@@ -37,10 +37,17 @@ class _EditTicketPageState extends State<EditTicketPage> {
   double? _selectedHmiSize;
   
   String? _selectedAspiratorBrand;
+  String? _selectedAspiratorModel; // Aspiratör için model
   double? _selectedAspiratorKw;
+  List<String> _availableAspiratorModels = []; // Aspiratör markasına göre modeller
   
   String? _selectedVantBrand;
+  String? _selectedVantModel; // Vantilatör için model
   double? _selectedVantKw;
+  List<String> _availableVantModels = []; // Vantilatör markasına göre modeller
+  
+  final StockService _stockService = StockService();
+  List<String> _availableDriveBrands = []; // Veritabanından yüklenen markalar
 
   String _selectedTandem = 'yok';
   String _selectedIsiticiKademe = 'yok';
@@ -69,7 +76,68 @@ class _EditTicketPageState extends State<EditTicketPage> {
   @override
   void initState() {
     super.initState();
+    _loadDriveBrands();
     _loadTicket();
+  }
+  
+  Future<void> _loadDriveBrands() async {
+    try {
+      final brands = await _stockService.getBrandsByCategory('Sürücü');
+      // Sabit listeyi de ekle
+      final allBrands = {...StockService.driveBrands, ...brands}.toList();
+      if (mounted) {
+        setState(() {
+          _availableDriveBrands = allBrands;
+        });
+      }
+    } catch (e) {
+      // Hata durumunda sabit listeyi kullan
+      if (mounted) {
+        setState(() {
+          _availableDriveBrands = StockService.driveBrands;
+        });
+      }
+    }
+  }
+  
+  Future<void> _loadModelsForBrand(String brand, bool isAspirator) async {
+    if (brand == null || brand == 'Diğer') {
+      if (mounted) {
+        setState(() {
+          if (isAspirator) {
+            _availableAspiratorModels = [];
+            _selectedAspiratorModel = null;
+          } else {
+            _availableVantModels = [];
+            _selectedVantModel = null;
+          }
+        });
+      }
+      return;
+    }
+    
+    try {
+      final models = await _stockService.getBrandModels(brand, 'Sürücü');
+      if (mounted) {
+        setState(() {
+          if (isAspirator) {
+            _availableAspiratorModels = models;
+          } else {
+            _availableVantModels = models;
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          if (isAspirator) {
+            _availableAspiratorModels = [];
+          } else {
+            _availableVantModels = [];
+          }
+        });
+      }
+    }
   }
 
   @override
@@ -142,8 +210,21 @@ class _EditTicketPageState extends State<EditTicketPage> {
           _selectedHmiSize = (ticket['hmi_size'] as num?)?.toDouble();
           _selectedAspiratorBrand = ticket['aspirator_brand'];
           _selectedAspiratorKw = (ticket['aspirator_kw'] as num?)?.toDouble();
+          // Model bilgisi veritabanında yoksa, ürün adından parse edilebilir (gelecekte eklenebilir)
+          // Şimdilik null olarak başlatıyoruz
+          _selectedAspiratorModel = null;
+          
           _selectedVantBrand = ticket['vant_brand'];
           _selectedVantKw = (ticket['vant_kw'] as num?)?.toDouble();
+          _selectedVantModel = null;
+          
+          // Markalar yüklendikten sonra modelleri yükle
+          if (_selectedAspiratorBrand != null && _selectedAspiratorBrand != 'Diğer') {
+            _loadModelsForBrand(_selectedAspiratorBrand!, true);
+          }
+          if (_selectedVantBrand != null && _selectedVantBrand != 'Diğer') {
+            _loadModelsForBrand(_selectedVantBrand!, false);
+          }
           
           _kompresor1KwController.text = ticket['kompresor_kw_1']?.toString() ?? '';
           _kompresor2KwController.text = ticket['kompresor_kw_2']?.toString() ?? '';
@@ -247,16 +328,20 @@ class _EditTicketPageState extends State<EditTicketPage> {
       final oldHmiSize = oldTicketResponse != null ? (oldTicketResponse['hmi_size'] as num?)?.toDouble() : null;
       final oldAspBrand = oldTicketResponse != null ? oldTicketResponse['aspirator_brand'] : null;
       final oldAspKw = oldTicketResponse != null ? (oldTicketResponse['aspirator_kw'] as num?)?.toDouble() : null;
+      final oldAspModel = oldTicketResponse != null ? oldTicketResponse['aspirator_model'] : null; // Gelecekte eklenecek
       final oldVantBrand = oldTicketResponse != null ? oldTicketResponse['vant_brand'] : null;
       final oldVantKw = oldTicketResponse != null ? (oldTicketResponse['vant_kw'] as num?)?.toDouble() : null;
+      final oldVantModel = oldTicketResponse != null ? oldTicketResponse['vant_model'] : null; // Gelecekte eklenecek
 
       // Yeni seçilenler
       final newPlc = _selectedPlcModel;
       final newHmiBrand = _selectedHmiBrand;
       final newHmiSize = _selectedHmiSize;
       final newAspBrand = _selectedAspiratorBrand;
+      final newAspModel = _selectedAspiratorModel;
       final newAspKw = _selectedAspiratorKw;
       final newVantBrand = _selectedVantBrand;
+      final newVantModel = _selectedVantModel;
       final newVantKw = _selectedVantKw;
 
       // PLC değişti mi?
@@ -276,26 +361,42 @@ class _EditTicketPageState extends State<EditTicketPage> {
       }
 
       // Aspiratör Sürücü değişti mi?
-      if (oldAspBrand != newAspBrand || oldAspKw != newAspKw) {
+      if (oldAspBrand != newAspBrand || oldAspKw != newAspKw || oldAspModel != newAspModel) {
          // Eski kombinasyonu iade et
          if (oldAspBrand != null && oldAspKw != null) {
-            await StockService().revertTicketStockUsage(aspiratorBrand: oldAspBrand, aspiratorKw: oldAspKw);
+            await StockService().revertTicketStockUsage(
+              aspiratorBrand: oldAspBrand, 
+              aspiratorModel: oldAspModel,
+              aspiratorKw: oldAspKw
+            );
          }
          // Yeni kombinasyonu düş
          if (newAspBrand != null && newAspKw != null) {
-            await StockService().processTicketStockUsage(aspiratorBrand: newAspBrand, aspiratorKw: newAspKw);
+            await StockService().processTicketStockUsage(
+              aspiratorBrand: newAspBrand, 
+              aspiratorModel: newAspModel,
+              aspiratorKw: newAspKw
+            );
          }
       }
 
       // Vantilatör Sürücü değişti mi?
-      if (oldVantBrand != newVantBrand || oldVantKw != newVantKw) {
+      if (oldVantBrand != newVantBrand || oldVantKw != newVantKw || oldVantModel != newVantModel) {
          // Eski kombinasyonu iade et
          if (oldVantBrand != null && oldVantKw != null) {
-            await StockService().revertTicketStockUsage(vantBrand: oldVantBrand, vantKw: oldVantKw);
+            await StockService().revertTicketStockUsage(
+              vantBrand: oldVantBrand, 
+              vantModel: oldVantModel,
+              vantKw: oldVantKw
+            );
          }
          // Yeni kombinasyonu düş
          if (newVantBrand != null && newVantKw != null) {
-            await StockService().processTicketStockUsage(vantBrand: newVantBrand, vantKw: newVantKw);
+            await StockService().processTicketStockUsage(
+              vantBrand: newVantBrand, 
+              vantModel: newVantModel,
+              vantKw: newVantKw
+            );
          }
       }
 
@@ -577,11 +678,26 @@ class _EditTicketPageState extends State<EditTicketPage> {
               child: _buildDropdown(
                 label: 'Marka',
                 value: _selectedAspiratorBrand,
-                items: StockService.driveBrands,
-                onChanged: (val) => setState(() => _selectedAspiratorBrand = val),
+                items: _availableDriveBrands.isEmpty ? StockService.driveBrands : _availableDriveBrands,
+                onChanged: (val) async {
+                  setState(() => _selectedAspiratorBrand = val);
+                  await _loadModelsForBrand(val ?? '', true);
+                },
               ),
             ),
             const SizedBox(width: 12),
+            // Model seçimi (sadece modeller varsa göster)
+            if (_selectedAspiratorBrand != null && _selectedAspiratorBrand != 'Diğer' && _availableAspiratorModels.isNotEmpty)
+              Expanded(
+                child: _buildDropdown(
+                  label: 'Model',
+                  value: _selectedAspiratorModel,
+                  items: _availableAspiratorModels,
+                  onChanged: (val) => setState(() => _selectedAspiratorModel = val),
+                ),
+              ),
+            if (_selectedAspiratorBrand != null && _selectedAspiratorBrand != 'Diğer' && _availableAspiratorModels.isNotEmpty)
+              const SizedBox(width: 12),
             Expanded(
               child: _buildDropdown<double>(
                 label: 'Güç (kW)',
@@ -602,11 +718,26 @@ class _EditTicketPageState extends State<EditTicketPage> {
               child: _buildDropdown(
                 label: 'Marka',
                 value: _selectedVantBrand,
-                items: StockService.driveBrands,
-                onChanged: (val) => setState(() => _selectedVantBrand = val),
+                items: _availableDriveBrands.isEmpty ? StockService.driveBrands : _availableDriveBrands,
+                onChanged: (val) async {
+                  setState(() => _selectedVantBrand = val);
+                  await _loadModelsForBrand(val ?? '', false);
+                },
               ),
             ),
             const SizedBox(width: 12),
+            // Model seçimi (sadece modeller varsa göster)
+            if (_selectedVantBrand != null && _selectedVantBrand != 'Diğer' && _availableVantModels.isNotEmpty)
+              Expanded(
+                child: _buildDropdown(
+                  label: 'Model',
+                  value: _selectedVantModel,
+                  items: _availableVantModels,
+                  onChanged: (val) => setState(() => _selectedVantModel = val),
+                ),
+              ),
+            if (_selectedVantBrand != null && _selectedVantBrand != 'Diğer' && _availableVantModels.isNotEmpty)
+              const SizedBox(width: 12),
             Expanded(
               child: _buildDropdown<double>(
                 label: 'Güç (kW)',

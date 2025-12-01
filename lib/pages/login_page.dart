@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 import '../services/user_service.dart';
 
 class LoginPage extends StatefulWidget {
@@ -78,6 +79,10 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       if (response.session != null) {
+        // --- OneSignal Kullanıcı Eşleştirme ---
+        OneSignal.login(response.user!.id);
+        // -------------------------------------
+
         // Rol kontrolü yap
         final userService = UserService();
         final profile = await userService.getCurrentUserProfile();

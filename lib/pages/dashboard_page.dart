@@ -50,35 +50,28 @@ class _DashboardPageState extends State<DashboardPage> {
       final startOfMonth = DateTime(now.year, now.month, 1);
       final startOfNextMonth = DateTime(now.year, now.month + 1, 1);
 
-      // 1. Bu ay açılan iş emirleri sayısı
-      final monthlyTicketsResponse = await _supabase
-          .from('tickets')
-          .select('id')
-          .gte('created_at', startOfMonth.toIso8601String())
-          .lt('created_at', startOfNextMonth.toIso8601String())
-          .count();
-      
-      // Supabase count() kullanımı versiyona göre değişebilir, 
-      // ancak select('id', CountOption.exact) daha güvenli olabilir.
-      // Burada basitçe listeyi alıp length'e bakacağız (büyük veri yoksa)
-      
+      // 1. Bu ay açılan iş emirleri sayısı (Sadece id'leri çek, performans için)
       final monthlyTicketsList = await _supabase
           .from('tickets')
           .select('id')
           .gte('created_at', startOfMonth.toIso8601String())
           .lt('created_at', startOfNextMonth.toIso8601String());
-          
+      
+      // 2. Açık iş emirleri sayısı (Sadece id'leri çek, performans için)
       final openTicketsList = await _supabase
           .from('tickets')
           .select('id')
           .eq('status', 'open');
 
-      // 2. En çok kullanılan PLC'ler (Basit bir analiz)
+      // 3. En çok kullanılan PLC'ler (Basit bir analiz)
       // Supabase'de group by desteği sınırlı olabilir, client-side yapacağız
+      // PERFORMANS: Son 1000 kayda bak, tüm veritabanını çekme!
       final plcsResponse = await _supabase
           .from('tickets')
           .select('plc_model')
-          .not('plc_model', 'is', null);
+          .not('plc_model', 'is', null)
+          .order('created_at', ascending: false)
+          .limit(1000); // Emniyet kemeri: Sadece son 1000 kayda bak
       
       final Map<String, int> plcCounts = {};
       for (var item in plcsResponse) {
@@ -93,7 +86,7 @@ class _DashboardPageState extends State<DashboardPage> {
       
       final topPlcs = sortedPlcs.take(5).map((e) => {'name': e.key, 'count': e.value}).toList();
 
-      // 3. Kritik Stok Durumu
+      // 4. Kritik Stok Durumu
       // critical_level kolonu yoksa hata verebilir, kontrol edelim.
       // Eğer critical_level null ise varsayılan 5 kabul edelim.
       final inventoryResponse = await _supabase
@@ -113,6 +106,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
       if (mounted) {
         setState(() {
+          // Listelerden sayıyı al (sadece id çekildiği için hafif)
           _monthlyTicketCount = (monthlyTicketsList as List).length;
           _openTicketCount = (openTicketsList as List).length;
           _mostUsedPlcs = topPlcs;
@@ -325,11 +319,25 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Text('Veri bulunamadı.'),
             )
           else
-            ..._mostUsedPlcs.map((e) {
+            ..._mostUsedPlcs.asMap().entries.map((entry) {
+              final index = entry.key; // Sıralama numarası (0, 1, 2...)
+              final e = entry.value;
               final count = e['count'] as int;
               // Basit bir oranlama (en yüksek değere göre)
               final max = _mostUsedPlcs.first['count'] as int;
               final ratio = count / max;
+              
+              // İlk 3'e özel renk, diğerleri gri
+              Color barColor;
+              if (index == 0) {
+                barColor = Colors.orange; // Altın 🥇
+              } else if (index == 1) {
+                barColor = Colors.grey.shade400; // Gümüş 🥈
+              } else if (index == 2) {
+                barColor = Colors.brown.shade300; // Bronz 🥉
+              } else {
+                barColor = Colors.indigoAccent.withOpacity(0.5);
+              }
               
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -350,7 +358,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         value: ratio,
                         minHeight: 8,
                         backgroundColor: Colors.grey.shade100,
-                        color: Colors.indigoAccent,
+                        color: barColor, // Dinamik renk
                       ),
                     ),
                   ],

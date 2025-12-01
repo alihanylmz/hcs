@@ -24,6 +24,8 @@ class _NewTicketPageState extends State<NewTicketPage> {
   static const Color _textLight = Color(0xFF64748B);
 
   // Listeler artık StockService'den alınıyor
+  final StockService _stockService = StockService();
+  List<String> _availableDriveBrands = []; // Veritabanından yüklenen markalar
   
   final _formKey = GlobalKey<FormState>();
 
@@ -63,10 +65,14 @@ class _NewTicketPageState extends State<NewTicketPage> {
   double? _selectedHmiSize;
   
   String? _selectedAspiratorBrand;
+  String? _selectedAspiratorModel; // Aspiratör için model
   double? _selectedAspiratorKw;
+  List<String> _availableAspiratorModels = []; // Aspiratör markasına göre modeller
   
   String? _selectedVantBrand;
+  String? _selectedVantModel; // Vantilatör için model
   double? _selectedVantKw;
+  List<String> _availableVantModels = []; // Vantilatör markasına göre modeller
 
   String _selectedTandem = 'yok';
   String _heaterExists = 'Yok'; // Yeni: Isıtıcı var mı yok mu
@@ -89,6 +95,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
   @override
   void initState() {
     super.initState();
+    _loadDriveBrands();
     
     // Teknisyenler iş açamaz - kontrol et
     _checkUserPermission();
@@ -99,6 +106,68 @@ class _NewTicketPageState extends State<NewTicketPage> {
       _selectedDeviceModel = 'Jet Fan';
     } else if (widget.deviceType == 'other') {
       _selectedDeviceModel = 'Diğer / Arıza';
+    }
+  }
+  
+  Future<void> _loadDriveBrands() async {
+    try {
+      final brands = await _stockService.getBrandsByCategory('Sürücü');
+      // Sabit listeyi de ekle
+      final allBrands = {...StockService.driveBrands, ...brands}.toList();
+      if (mounted) {
+        setState(() {
+          _availableDriveBrands = allBrands;
+        });
+      }
+    } catch (e) {
+      // Hata durumunda sabit listeyi kullan
+      if (mounted) {
+        setState(() {
+          _availableDriveBrands = StockService.driveBrands;
+        });
+      }
+    }
+  }
+  
+  Future<void> _loadModelsForBrand(String brand, bool isAspirator) async {
+    if (brand.isEmpty || brand == 'Diğer') {
+      if (mounted) {
+        setState(() {
+          if (isAspirator) {
+            _availableAspiratorModels = [];
+            _selectedAspiratorModel = null;
+          } else {
+            _availableVantModels = [];
+            _selectedVantModel = null;
+          }
+        });
+      }
+      return;
+    }
+    
+    try {
+      final models = await _stockService.getBrandModels(brand, 'Sürücü');
+      if (mounted) {
+        setState(() {
+          if (isAspirator) {
+            _availableAspiratorModels = models;
+            _selectedAspiratorModel = null; // Marka değişince modeli sıfırla
+          } else {
+            _availableVantModels = models;
+            _selectedVantModel = null; // Marka değişince modeli sıfırla
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          if (isAspirator) {
+            _availableAspiratorModels = [];
+          } else {
+            _availableVantModels = [];
+          }
+        });
+      }
     }
   }
 
@@ -342,8 +411,10 @@ class _NewTicketPageState extends State<NewTicketPage> {
         final standardMissing = await stockService.processTicketStockUsage(
           plcModel: _selectedPlcModel,
           aspiratorBrand: _selectedAspiratorBrand,
+          aspiratorModel: _selectedAspiratorModel,
           aspiratorKw: _selectedAspiratorKw,
           vantBrand: _selectedVantBrand,
+          vantModel: _selectedVantModel,
           vantKw: _selectedVantKw,
           hmiBrand: _selectedHmiBrand,
           hmiSize: _selectedHmiSize,
@@ -999,10 +1070,24 @@ class _NewTicketPageState extends State<NewTicketPage> {
               child: _buildDropdown(
                 label: 'Marka',
                 value: _selectedAspiratorBrand,
-                items: StockService.driveBrands,
-                onChanged: (val) => setState(() => _selectedAspiratorBrand = val),
+                items: _availableDriveBrands.isEmpty ? StockService.driveBrands : _availableDriveBrands,
+                onChanged: (val) async {
+                  setState(() => _selectedAspiratorBrand = val);
+                  await _loadModelsForBrand(val ?? '', true);
+                },
               ),
             ),
+            const SizedBox(width: 12),
+            // Model seçimi (sadece modeller varsa göster)
+            if (_selectedAspiratorBrand != null && _selectedAspiratorBrand != 'Diğer' && _availableAspiratorModels.isNotEmpty)
+              Expanded(
+                child: _buildDropdown(
+                  label: 'Model',
+                  value: _selectedAspiratorModel,
+                  items: _availableAspiratorModels,
+                  onChanged: (val) => setState(() => _selectedAspiratorModel = val),
+                ),
+              ),
             const SizedBox(width: 12),
             Expanded(
               child: _buildDropdown<dynamic>( // dynamic yapıldı
@@ -1030,10 +1115,24 @@ class _NewTicketPageState extends State<NewTicketPage> {
               child: _buildDropdown(
                 label: 'Marka',
                 value: _selectedVantBrand,
-                items: StockService.driveBrands,
-                onChanged: (val) => setState(() => _selectedVantBrand = val),
+                items: _availableDriveBrands.isEmpty ? StockService.driveBrands : _availableDriveBrands,
+                onChanged: (val) async {
+                  setState(() => _selectedVantBrand = val);
+                  await _loadModelsForBrand(val ?? '', false);
+                },
               ),
             ),
+            const SizedBox(width: 12),
+            // Model seçimi (sadece modeller varsa göster)
+            if (_selectedVantBrand != null && _selectedVantBrand != 'Diğer' && _availableVantModels.isNotEmpty)
+              Expanded(
+                child: _buildDropdown(
+                  label: 'Model',
+                  value: _selectedVantModel,
+                  items: _availableVantModels,
+                  onChanged: (val) => setState(() => _selectedVantModel = val),
+                ),
+              ),
             const SizedBox(width: 12),
             Expanded(
               child: _buildDropdown<dynamic>( // dynamic yapıldı

@@ -56,6 +56,23 @@ class StockService {
 
   // --- GÜNCELLENMİŞ STOK DÜŞME MANTIĞI ---
   
+  /// Stok miktarını azaltır (ürün adına göre)
+  /// 
+  /// ⚠️ RACE CONDITION UYARISI: Bu metod "read-modify-write" pattern kullanıyor.
+  /// Eğer iki kullanıcı aynı anda aynı ürünü düşürürse, stok tutarsızlığı olabilir.
+  /// 
+  /// Örnek Senaryo:
+  /// - Stok: 10
+  /// - Kullanıcı A okur: 10
+  /// - Kullanıcı B okur: 10
+  /// - Kullanıcı A yazar: 9
+  /// - Kullanıcı B yazar: 9 (Halbuki 8 olmalıydı!)
+  /// 
+  /// 💡 İYİLEŞTİRME ÖNERİSİ: Supabase'de PostgreSQL RPC fonksiyonu oluşturup
+  /// atomik UPDATE ... SET quantity = quantity - $1 WHERE ... şeklinde kullanılmalı.
+  /// Bu sayede veritabanı seviyesinde race condition önlenir.
+  /// 
+  /// Şimdilik bu kod çalışır ancak yüksek eşzamanlılık durumlarında dikkatli olunmalı.
   Future<String?> decreaseStockByName(String productName, {int amount = 1}) async {
     try {
       final response = await _supabase
@@ -118,8 +135,10 @@ class StockService {
   Future<List<String>> processTicketStockUsage({
     String? plcModel,
     String? aspiratorBrand,
+    String? aspiratorModel, // Yeni: Model parametresi
     double? aspiratorKw,
     String? vantBrand,
+    String? vantModel, // Yeni: Model parametresi
     double? vantKw,
     String? hmiBrand,
     double? hmiSize,
@@ -133,18 +152,28 @@ class StockService {
       if (result != null) missingItems.add(result);
     }
 
-    // Aspiratör Sürücü Kontrol
+    // Aspiratör Sürücü Kontrol (Model varsa: "Marka Model kW Sürücü", yoksa: "Marka kW Sürücü")
     if (aspiratorBrand != null && aspiratorKw != null && aspiratorBrand != 'Diğer') {
       final kwStr = formatKw(aspiratorKw);
-      final name = '$aspiratorBrand $kwStr kW Sürücü';
+      String name;
+      if (aspiratorModel != null && aspiratorModel.isNotEmpty) {
+        name = '$aspiratorBrand $aspiratorModel $kwStr kW Sürücü';
+      } else {
+        name = '$aspiratorBrand $kwStr kW Sürücü';
+      }
       final result = await decreaseStockByName(name);
       if (result != null) missingItems.add(result);
     }
 
-    // Vantilatör Sürücü Kontrol
+    // Vantilatör Sürücü Kontrol (Model varsa: "Marka Model kW Sürücü", yoksa: "Marka kW Sürücü")
     if (vantBrand != null && vantKw != null && vantBrand != 'Diğer') {
       final kwStr = formatKw(vantKw);
-      final name = '$vantBrand $kwStr kW Sürücü';
+      String name;
+      if (vantModel != null && vantModel.isNotEmpty) {
+        name = '$vantBrand $vantModel $kwStr kW Sürücü';
+      } else {
+        name = '$vantBrand $kwStr kW Sürücü';
+      }
       final result = await decreaseStockByName(name);
       if (result != null) missingItems.add(result);
     }
@@ -208,8 +237,10 @@ class StockService {
   Future<void> revertTicketStockUsage({
     String? plcModel,
     String? aspiratorBrand,
+    String? aspiratorModel, // Yeni: Model parametresi
     double? aspiratorKw,
     String? vantBrand,
+    String? vantModel, // Yeni: Model parametresi
     double? vantKw,
     String? hmiBrand,
     double? hmiSize,
@@ -220,17 +251,201 @@ class StockService {
 
     if (aspiratorBrand != null && aspiratorKw != null && aspiratorBrand != 'Diğer') {
       final kwStr = formatKw(aspiratorKw);
-      await increaseStockByName('$aspiratorBrand $kwStr kW Sürücü');
+      String name;
+      if (aspiratorModel != null && aspiratorModel.isNotEmpty) {
+        name = '$aspiratorBrand $aspiratorModel $kwStr kW Sürücü';
+      } else {
+        name = '$aspiratorBrand $kwStr kW Sürücü';
+      }
+      await increaseStockByName(name);
     }
 
     if (vantBrand != null && vantKw != null && vantBrand != 'Diğer') {
       final kwStr = formatKw(vantKw);
-      await increaseStockByName('$vantBrand $kwStr kW Sürücü');
+      String name;
+      if (vantModel != null && vantModel.isNotEmpty) {
+        name = '$vantBrand $vantModel $kwStr kW Sürücü';
+      } else {
+        name = '$vantBrand $kwStr kW Sürücü';
+      }
+      await increaseStockByName(name);
     }
 
     if (hmiBrand != null && hmiSize != null && hmiBrand != 'Diğer') {
       final inchStr = formatInch(hmiSize);
       await increaseStockByName('$hmiBrand $inchStr inç HMI');
+    }
+  }
+
+  // --- MARKA MODELLERİ YÖNETİMİ ---
+  
+  /// Belirli bir markanın alt modellerini getirir (kategoriye göre)
+  Future<List<String>> getBrandModels(String brandName, String category) async {
+    try {
+      final response = await _supabase
+          .from('brand_models')
+          .select('model_name')
+          .eq('brand_name', brandName)
+          .eq('category', category)
+          .order('model_name', ascending: true);
+      
+      return (response as List)
+          .map((e) => e['model_name'] as String)
+          .toList();
+    } catch (e) {
+      debugPrint('Marka modelleri çekme hatası ($brandName, $category): $e');
+      return [];
+    }
+  }
+  
+  /// Kategoriye göre markaları getirir (sadece marka kayıtları, model_name = '' olanlar)
+  Future<List<String>> getBrandsByCategory(String category) async {
+    try {
+      final response = await _supabase
+          .from('brand_models')
+          .select('brand_name')
+          .eq('category', category)
+          .eq('model_name', '') // Sadece marka kayıtlarını getir (model_name boş olanlar)
+          .order('brand_name', ascending: true);
+      
+      final brands = (response as List)
+          .map((e) => e['brand_name'] as String)
+          .toList();
+      
+      return brands;
+    } catch (e) {
+      debugPrint('Kategori markaları çekme hatası ($category): $e');
+      return [];
+    }
+  }
+  
+  /// Yeni marka ekler
+  Future<void> addBrand(String brandName, String category) async {
+    try {
+      // Marka zaten varsa ekleme
+      final existing = await _supabase
+          .from('brand_models')
+          .select('id')
+          .eq('brand_name', brandName)
+          .eq('category', category)
+          .limit(1);
+      
+      if ((existing as List).isEmpty) {
+        // İlk model olarak boş bir kayıt ekle (sadece marka için)
+        await _supabase.from('brand_models').insert({
+          'brand_name': brandName.trim(),
+          'category': category,
+          'model_name': '', // Boş model adı (sadece marka kaydı için)
+        });
+      }
+    } catch (e) {
+      debugPrint('Marka ekleme hatası: $e');
+      rethrow;
+    }
+  }
+  
+  /// Markayı siler (tüm modelleriyle birlikte)
+  Future<void> deleteBrand(String brandName, String category) async {
+    try {
+      await _supabase
+          .from('brand_models')
+          .delete()
+          .eq('brand_name', brandName)
+          .eq('category', category);
+    } catch (e) {
+      debugPrint('Marka silme hatası: $e');
+      rethrow;
+    }
+  }
+
+  /// Tüm marka-modelleri getirir (Ayar sayfası için)
+  Future<List<Map<String, dynamic>>> getAllBrandModels() async {
+    try {
+      final response = await _supabase
+          .from('brand_models')
+          .select()
+          .neq('model_name', '') // Boş model adlarını filtrele (sadece marka kayıtları)
+          .order('category', ascending: true)
+          .order('brand_name', ascending: true)
+          .order('model_name', ascending: true);
+      
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Tüm marka modelleri çekme hatası: $e');
+      return [];
+    }
+  }
+  
+  /// Tüm markaları getirir (kategoriye göre gruplanmış)
+  Future<Map<String, List<String>>> getAllBrands() async {
+    try {
+      final response = await _supabase
+          .from('brand_models')
+          .select('brand_name, category')
+          .eq('model_name', '') // Sadece marka kayıtları
+          .order('category', ascending: true)
+          .order('brand_name', ascending: true);
+      
+      final Map<String, List<String>> result = {};
+      for (var item in response as List) {
+        final category = item['category'] as String;
+        final brand = item['brand_name'] as String;
+        if (!result.containsKey(category)) {
+          result[category] = [];
+        }
+        if (!result[category]!.contains(brand)) {
+          result[category]!.add(brand);
+        }
+      }
+      
+      return result;
+    } catch (e) {
+      debugPrint('Tüm markaları çekme hatası: $e');
+      return {};
+    }
+  }
+
+  /// Yeni marka modeli ekler
+  Future<void> addBrandModel(String brandName, String modelName, String category) async {
+    try {
+      final trimmedModelName = modelName.trim();
+      
+      // Boş model adı kontrolü
+      if (trimmedModelName.isEmpty) {
+        throw Exception('Model adı boş olamaz');
+      }
+      
+      // Aynı marka+model kombinasyonu zaten varsa ekleme
+      final existing = await _supabase
+          .from('brand_models')
+          .select('id')
+          .eq('brand_name', brandName)
+          .eq('model_name', trimmedModelName)
+          .eq('category', category)
+          .limit(1);
+      
+      if ((existing as List).isNotEmpty) {
+        throw Exception('Bu model zaten mevcut');
+      }
+      
+      await _supabase.from('brand_models').insert({
+        'brand_name': brandName,
+        'model_name': trimmedModelName,
+        'category': category,
+      });
+    } catch (e) {
+      debugPrint('Marka modeli ekleme hatası: $e');
+      rethrow;
+    }
+  }
+
+  /// Marka modeli siler
+  Future<void> deleteBrandModel(int id) async {
+    try {
+      await _supabase.from('brand_models').delete().eq('id', id);
+    } catch (e) {
+      debugPrint('Marka modeli silme hatası: $e');
+      rethrow;
     }
   }
 }

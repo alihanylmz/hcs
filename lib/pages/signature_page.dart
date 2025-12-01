@@ -1,9 +1,11 @@
 import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Ekran yönü için
 import 'package:signature/signature.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:ui' as ui;
+import '../theme/app_colors.dart';
+import '../widgets/custom_header.dart'; // Header widget'ını eklemeyi unutma
 
 enum SignatureType { customer, technician }
 
@@ -12,10 +14,10 @@ class SignaturePage extends StatefulWidget {
   final SignatureType type;
   final String? customerName;
   final String? customerPhone;
-  final String? existingSignatureData; // Mevcut imza verisi (base64)
-  final String? existingName; // Mevcut ad
-  final String? existingSurname; // Mevcut soyad
-  final String? existingPhone; // Mevcut telefon
+  final String? existingSignatureData;
+  final String? existingName;
+  final String? existingSurname;
+  final String? existingPhone;
 
   const SignaturePage({
     super.key,
@@ -37,41 +39,47 @@ class _SignaturePageState extends State<SignaturePage> {
   final SignatureController _controller = SignatureController(
     penStrokeWidth: 3,
     penColor: Colors.black,
-    exportBackgroundColor: Colors.white,
+    exportBackgroundColor: Colors.transparent, // PNG şeffaf olsun
   );
 
   final _nameController = TextEditingController();
   final _surnameController = TextEditingController();
   final _phoneController = TextEditingController();
+  
   bool _isSaving = false;
+  bool _isRedrawing = false; // Mevcut imzayı silip yeniden çizme modu
 
   @override
   void initState() {
     super.initState();
+    
+    // --- KRİTİK: EKRANI DİKEY KİLİTLE ---
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+    // ------------------------------------
+
+    _initializeData();
+  }
+
+  void _initializeData() {
+    // Mevcut imza verisi varsa redraw modunu kapalı başlat (Resmi göster)
+    if (widget.existingSignatureData != null && widget.existingSignatureData!.isNotEmpty) {
+      _isRedrawing = false;
+    } else {
+      _isRedrawing = true;
+    }
+
     if (widget.type == SignatureType.customer) {
-      // Mevcut imza bilgileri varsa onları kullan, yoksa müşteri bilgilerini kullan
       _nameController.text = widget.existingName ?? widget.customerName?.split(' ').first ?? '';
       _surnameController.text = widget.existingSurname ?? '';
       _phoneController.text = widget.existingPhone ?? widget.customerPhone ?? '';
     } else {
-      // Teknisyen için kullanıcı bilgilerini yükle
       _loadTechnicianInfo();
-      // Mevcut imza bilgileri varsa onları kullan
-      if (widget.existingName != null) {
-        _nameController.text = widget.existingName!;
-      }
-      if (widget.existingSurname != null) {
-        _surnameController.text = widget.existingSurname!;
-      }
+      if (widget.existingName != null) _nameController.text = widget.existingName!;
+      if (widget.existingSurname != null) _surnameController.text = widget.existingSurname!;
     }
-    // Mevcut imzayı yükle (varsa)
-    _loadExistingSignature();
-  }
-
-  Future<void> _loadExistingSignature() async {
-    // SignatureController'da fromPngBytes metodu yok
-    // Mevcut imzayı göstermek için farklı bir yaklaşım kullanacağız
-    // Kullanıcı yeni imza çizerse onu kaydedeceğiz
   }
 
   Future<void> _loadTechnicianInfo() async {
@@ -79,7 +87,6 @@ class _SignaturePageState extends State<SignaturePage> {
     final user = supabase.auth.currentUser;
     if (user != null) {
       try {
-        // Kullanıcı profil bilgilerini çek (full_name ve phone)
         final profile = await supabase
             .from('profiles')
             .select('full_name, phone')
@@ -91,26 +98,16 @@ class _SignaturePageState extends State<SignaturePage> {
           if (fullName.isNotEmpty) {
             final nameParts = fullName.split(' ');
             if (nameParts.isNotEmpty) {
-              _nameController.text = nameParts.first;
-              if (nameParts.length > 1) {
-                _surnameController.text = nameParts.sublist(1).join(' ');
-              }
+              setState(() {
+                _nameController.text = nameParts.first;
+                if (nameParts.length > 1) {
+                  _surnameController.text = nameParts.sublist(1).join(' ');
+                }
+              });
             }
           }
         }
-      } catch (e) {
-        // Profil bulunamazsa email'den çıkarmaya çalış
-        if (mounted) {
-          final email = user.email ?? '';
-          final nameParts = email.split('@').first.split('.');
-          if (nameParts.isNotEmpty) {
-            _nameController.text = nameParts.first;
-            if (nameParts.length > 1) {
-              _surnameController.text = nameParts.sublist(1).join(' ');
-            }
-          }
-        }
-      }
+      } catch (_) {}
     }
   }
 
@@ -120,70 +117,52 @@ class _SignaturePageState extends State<SignaturePage> {
     _nameController.dispose();
     _surnameController.dispose();
     _phoneController.dispose();
+    
+    // --- ÇIKIŞTA EKRAN YÖNÜNÜ SERBEST BIRAK ---
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+    // -------------------------------------------
+    
     super.dispose();
   }
 
   Future<void> _saveSignature() async {
-    // Mevcut imza varsa düzenleme modunda, yoksa yeni imza atılmalı
-    final isEditing = widget.existingSignatureData != null && widget.existingSignatureData!.isNotEmpty;
-    
-    if (!isEditing && _controller.isEmpty) {
+    // Eğer yeniden çizim modundaysak ve boşsa uyarı ver
+    if (_isRedrawing && _controller.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lütfen imza atın'),
-          backgroundColor: Colors.red,
-        ),
+        const SnackBar(content: Text('Lütfen imza atın'), backgroundColor: Colors.red),
       );
       return;
     }
 
-    // Müşteri imzası için ad soyad zorunlu
     if (widget.type == SignatureType.customer) {
-      if (_nameController.text.trim().isEmpty) {
+      if (_nameController.text.trim().isEmpty || _surnameController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Lütfen ad girin'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      if (_surnameController.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Lütfen soyad girin'),
-            backgroundColor: Colors.red,
-          ),
+          const SnackBar(content: Text('Lütfen ad ve soyad girin'), backgroundColor: Colors.red),
         );
         return;
       }
     }
 
-    setState(() {
-      _isSaving = true;
-    });
+    setState(() => _isSaving = true);
 
     try {
-      // İmzayı PNG olarak export et
       String signatureBase64;
       
-      if (_controller.isEmpty && isEditing) {
-        // Düzenleme modunda ve imza silinmişse, mevcut imzayı koru
+      if (!_isRedrawing && widget.existingSignatureData != null) {
+        // Mevcut imza korunuyor
         signatureBase64 = widget.existingSignatureData!;
       } else {
-        // Yeni imza çizilmişse veya yeni imza atılıyorsa
+        // Yeni çizilen imza
         final Uint8List? signatureBytes = await _controller.toPngBytes();
-        
-        if (signatureBytes == null) {
-          throw Exception('İmza oluşturulamadı');
-        }
-        
-        // Base64'e çevir
+        if (signatureBytes == null) throw Exception('İmza alınamadı');
         signatureBase64 = base64Encode(signatureBytes);
       }
 
-      // Supabase'e kaydet
       final supabase = Supabase.instance.client;
       final idValue = int.tryParse(widget.ticketId) ?? widget.ticketId;
       final user = supabase.auth.currentUser;
@@ -191,347 +170,247 @@ class _SignaturePageState extends State<SignaturePage> {
       Map<String, dynamic> updateData = {};
 
       if (widget.type == SignatureType.customer) {
-        // Müşteri imzası
         updateData = {
           'signature_data': signatureBase64,
           'signature_name': _nameController.text.trim(),
           'signature_surname': _surnameController.text.trim(),
-          'signature_phone': _phoneController.text.trim().isEmpty 
-              ? null 
-              : _phoneController.text.trim(),
+          'signature_phone': _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : null,
           'signature_date': DateTime.now().toIso8601String(),
         };
       } else {
-        // Teknisyen imzası - Supabase'den kullanıcı bilgilerini al
-        String userName = _nameController.text.trim();
-        String? userSurname = _surnameController.text.trim().isNotEmpty 
-            ? _surnameController.text.trim() 
-            : null;
-        
-        if (user != null) {
-          try {
-            // Kullanıcı profil bilgilerini çek
-            final profile = await supabase
-                .from('profiles')
-                .select('full_name, phone')
-                .eq('id', user.id)
-                .maybeSingle();
-            
-            if (profile != null) {
-              final fullName = profile['full_name'] as String? ?? '';
-              if (fullName.isNotEmpty) {
-                final nameParts = fullName.split(' ');
-                if (nameParts.isNotEmpty) {
-                  userName = nameParts.first;
-                  if (nameParts.length > 1) {
-                    userSurname = nameParts.sublist(1).join(' ');
-                  }
-                }
-              }
-            }
-          } catch (e) {
-            // Profil bulunamazsa mevcut değerleri kullan
-            if (userName.isEmpty) {
-              userName = user.email?.split('@').first.split('.').first ?? 'Teknisyen';
-            }
-          }
-        }
-        
+        // Teknisyen
         updateData = {
           'technician_signature_data': signatureBase64,
-          'technician_signature_name': userName,
-          'technician_signature_surname': userSurname?.isNotEmpty == true ? userSurname : null,
+          'technician_signature_name': _nameController.text.trim(),
+          'technician_signature_surname': _surnameController.text.trim().isNotEmpty ? _surnameController.text.trim() : null,
           'technician_signature_date': DateTime.now().toIso8601String(),
           'technician_id': user?.id,
         };
       }
 
-      try {
-        final response = await supabase
-            .from('tickets')
-            .update(updateData)
-            .eq('id', idValue);
-      } on PostgrestException catch (e) {
-        // Supabase hatası - muhtemelen kolon eksik
-        throw Exception('Veritabanı hatası: ${e.message}. Gerekli kolonlar: ${updateData.keys.join(", ")}');
-      } catch (e) {
-        rethrow;
-      }
+      await supabase.from('tickets').update(updateData).eq('id', idValue);
 
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${widget.type == SignatureType.customer ? "Müşteri" : "Teknisyen"} imzası başarıyla kaydedildi!'),
-          backgroundColor: Colors.green,
-        ),
+        const SnackBar(content: Text('İmza başarıyla kaydedildi!'), backgroundColor: Colors.green),
       );
-
       Navigator.pop(context, true);
+
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isSaving = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('İmza kaydetme hatası: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.existingSignatureData != null && widget.existingSignatureData!.isNotEmpty
-              ? (widget.type == SignatureType.customer ? 'Müşteri İmzası Düzenle' : 'Teknisyen İmzası Düzenle')
-              : (widget.type == SignatureType.customer ? 'Müşteri İmzası' : 'Teknisyen İmzası'),
-        ),
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF050912), Color(0xFF0D1423)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      // AppBar yerine CustomHeader kullanımı
+      body: Column(
+        children: [
+          CustomHeader(
+            title: widget.type == SignatureType.customer ? 'Müşteri İmzası' : 'Teknisyen İmzası',
+            subtitle: 'Onay işlemi için imza gereklidir',
+            showBackArrow: true,
           ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (widget.type == SignatureType.customer)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Müşteri Bilgileri',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: _nameController,
-                            decoration: const InputDecoration(
-                              labelText: 'Ad *',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _surnameController,
-                            decoration: const InputDecoration(
-                              labelText: 'Soyad *',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _phoneController,
-                            decoration: const InputDecoration(
-                              labelText: 'Telefon Numarası',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.phone,
-                          ),
-                        ],
-                      ),
+          
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  // --- KİŞİ BİLGİLERİ KARTI ---
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: cardColor,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                      ],
                     ),
-                  ),
-                if (widget.type == SignatureType.technician)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Teknisyen Bilgileri',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          FutureBuilder<Map<String, dynamic>?>(
-                            future: () async {
-                              final supabase = Supabase.instance.client;
-                              final user = supabase.auth.currentUser;
-                              if (user == null) return null;
-                              
-                              try {
-                                final profile = await supabase
-                                    .from('profiles')
-                                    .select('full_name, phone')
-                                    .eq('id', user.id)
-                                    .maybeSingle();
-                                return profile;
-                              } catch (e) {
-                                return null;
-                              }
-                            }(),
-                            builder: (context, snapshot) {
-                              final supabase = Supabase.instance.client;
-                              final user = supabase.auth.currentUser;
-                              final email = user?.email ?? 'Bilinmiyor';
-                              
-                              String userName = 'Teknisyen';
-                              String? phone;
-                              
-                              if (snapshot.hasData && snapshot.data != null) {
-                                final fullName = snapshot.data!['full_name'] as String? ?? '';
-                                phone = snapshot.data!['phone'] as String?;
-                                if (fullName.isNotEmpty) {
-                                  userName = fullName;
-                                } else {
-                                  userName = user?.email?.split('@').first ?? 'Teknisyen';
-                                }
-                              } else {
-                                userName = user?.email?.split('@').first ?? 'Teknisyen';
-                              }
-                              
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Teknisyen: $userName',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Email: $email',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                  if (phone != null && phone.isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Telefon: $phone',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 12),
-                                  const Text(
-                                    'İmza atarak işi onaylıyorsunuz.',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontStyle: FontStyle.italic,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 20),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'İmza',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        Row(
+                          children: [
+                            Icon(widget.type == SignatureType.customer ? Icons.person : Icons.badge, color: AppColors.corporateNavy),
+                            const SizedBox(width: 10),
+                            Text(
+                              widget.type == SignatureType.customer ? 'Müşteri Bilgileri' : 'Teknisyen Bilgileri',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 30),
+                        _buildTextField(label: 'Ad', controller: _nameController),
+                        const SizedBox(height: 16),
+                        _buildTextField(label: 'Soyad', controller: _surnameController),
+                        if (widget.type == SignatureType.customer) ...[
+                          const SizedBox(height: 16),
+                          _buildTextField(label: 'Telefon', controller: _phoneController, keyboardType: TextInputType.phone),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // --- İMZA ALANI KARTI ---
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: cardColor,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.draw, color: AppColors.corporateNavy),
+                            SizedBox(width: 10),
+                            Text('İmza Paneli', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ],
                         ),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Aşağıdaki alana parmağınızla veya kalemle imza atın',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        Text(
+                          'Lütfen aşağıdaki kutuya imza atınız.',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                         ),
                         const SizedBox(height: 16),
+                        
+                        // İMZA KUTUSU
                         Container(
-                          height: 200,
+                          height: 250,
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.corporateNavy.withOpacity(0.3), width: 2),
                           ),
-                          child: Stack(
-                            children: [
-                              // Mevcut imzayı göster (varsa)
-                              if (widget.existingSignatureData != null && widget.existingSignatureData!.isNotEmpty)
-                                Positioned.fill(
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.memory(
-                                      base64Decode(widget.existingSignatureData!),
-                                      fit: BoxFit.contain,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: !_isRedrawing && widget.existingSignatureData != null
+                                ? Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      Image.memory(
+                                        base64Decode(widget.existingSignatureData!),
+                                        fit: BoxFit.contain,
+                                      ),
+                                      Positioned(
+                                        right: 8,
+                                        top: 8,
+                                        child: CircleAvatar(
+                                          backgroundColor: Colors.green,
+                                          radius: 12,
+                                          child: const Icon(Icons.check, color: Colors.white, size: 16),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : GestureDetector(
+                                    // Dokunulunca klavyeyi kapat
+                                    onPanDown: (_) => FocusScope.of(context).unfocus(),
+                                    child: Signature(
+                                      controller: _controller,
+                                      backgroundColor: Colors.white,
                                     ),
                                   ),
-                                ),
-                              // Yeni imza çizme alanı
-                              Signature(
-                                controller: _controller,
-                                backgroundColor: Colors.transparent,
-                              ),
-                            ],
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        
+                        const SizedBox(height: 16),
+                        
+                        // BUTONLAR
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            ElevatedButton.icon(
-                              onPressed: _controller.clear,
-                              icon: const Icon(Icons.clear),
-                              label: const Text('Temizle'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.grey,
+                            // Temizle / Yeniden Çiz Butonu
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  if (!_isRedrawing && widget.existingSignatureData != null) {
+                                    // Mevcut imzayı silip yeniden çizme moduna geç
+                                    setState(() => _isRedrawing = true);
+                                  } else {
+                                    // Sadece tahtayı temizle
+                                    _controller.clear();
+                                  }
+                                },
+                                icon: Icon(_isRedrawing ? Icons.delete_outline : Icons.refresh),
+                                label: Text(_isRedrawing ? 'Temizle' : 'Yeniden İmzala'),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  side: BorderSide(color: Colors.grey.shade400),
+                                  foregroundColor: Colors.grey.shade700,
+                                ),
                               ),
                             ),
-                            ElevatedButton.icon(
-                              onPressed: _isSaving ? null : _saveSignature,
-                              icon: _isSaving
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Icon(Icons.check),
-                              label: Text(_isSaving ? 'Kaydediliyor...' : 'Kaydet'),
+                            const SizedBox(width: 16),
+                            // Kaydet Butonu
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: _isSaving ? null : _saveSignature,
+                                icon: _isSaving 
+                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                  : const Icon(Icons.save),
+                                label: Text(_isSaving ? 'Kaydediliyor' : 'Kaydet'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.corporateNavy,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ],
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 40),
+                ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
-}
 
+  Widget _buildTextField({
+    required String label,
+    required TextEditingController controller,
+    TextInputType? keyboardType,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textLight)),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            filled: true,
+            fillColor: Colors.grey.shade50,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.corporateNavy)),
+          ),
+        ),
+      ],
+    );
+  }
+}

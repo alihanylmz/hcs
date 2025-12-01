@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/user_service.dart';
 import '../models/user_profile.dart';
+import '../theme/app_colors.dart';
+import '../widgets/custom_header.dart'; // Header widget'ı
 
 class UserManagementPage extends StatefulWidget {
   const UserManagementPage({super.key});
@@ -30,25 +32,45 @@ class _UserManagementPageState extends State<UserManagementPage> {
         if (a.role != 'pending' && b.role == 'pending') return 1;
         return (a.fullName ?? '').compareTo(b.fullName ?? '');
       });
-      setState(() {
-        _users = list;
-        _isLoading = false;
-      });
+      
+      if (mounted) {
+        setState(() {
+          _users = list;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _changeRole(UserProfile user) async {
-    final newRole = await showDialog<String>(
+    // Modern BottomSheet ile seçim yaptıralım
+    final newRole = await showModalBottomSheet<String>(
       context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text('${user.fullName} için Rol Seç'),
-        children: [
-          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, 'admin'), child: const Text('Admin (Tam Yetki)')),
-          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, 'manager'), child: const Text('Yönetici (Stok/Rapor)')),
-          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, 'technician'), child: const Text('Teknisyen (Sınırlı)')),
-        ],
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                'Yetki Seviyesi Seçin',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.corporateNavy),
+              ),
+            ),
+            const Divider(height: 1),
+            _buildRoleOption(ctx, 'admin', 'Sistem Yöneticisi (Tam Yetki)', Icons.admin_panel_settings, Colors.red),
+            _buildRoleOption(ctx, 'manager', 'Yönetici (Stok/Rapor)', Icons.manage_accounts, Colors.orange),
+            _buildRoleOption(ctx, 'technician', 'Saha Teknisyeni (Sınırlı)', Icons.engineering, Colors.blue),
+            _buildRoleOption(ctx, 'pending', 'Onay Bekliyor (Kısıtlı)', Icons.hourglass_empty, Colors.grey),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
 
@@ -57,36 +79,129 @@ class _UserManagementPageState extends State<UserManagementPage> {
       try {
         await _userService.updateUserRole(user.id, newRole);
         await _loadUsers();
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Yetki güncellendi')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Kullanıcı yetkisi güncellendi'), backgroundColor: Colors.green)
+          );
+        }
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hata: $e')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red)
+          );
+        }
         setState(() => _isLoading = false);
       }
     }
   }
 
+  ListTile _buildRoleOption(BuildContext context, String roleKey, String label, IconData icon, Color color) {
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: color.withOpacity(0.1),
+        child: Icon(icon, color: color, size: 20),
+      ),
+      title: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+      onTap: () => Navigator.pop(context, roleKey),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF0F172A) : AppColors.backgroundGrey;
+    final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.textDark;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Kullanıcı Yönetimi')),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : ListView.builder(
-            itemCount: _users.length,
-            itemBuilder: (context, index) {
-              final user = _users[index];
-              return ListTile(
-                leading: CircleAvatar(child: Text(user.fullName?.substring(0, 1).toUpperCase() ?? '?')),
-                title: Text(user.fullName ?? user.email ?? 'İsimsiz'),
-                subtitle: Text(user.email ?? ''),
-                trailing: Chip(
-                  label: Text(_getRoleLabel(user.role)),
-                  backgroundColor: _getRoleColor(user.role).withOpacity(0.2),
-                ),
-                onTap: () => _changeRole(user),
-              );
-            },
+      backgroundColor: bgColor,
+      // AppBar yok, CustomHeader var
+      body: Column(
+        children: [
+          const CustomHeader(
+            title: 'Kullanıcı Yönetimi',
+            subtitle: 'Personel yetkilerini düzenle',
+            showBackArrow: true,
           ),
+          
+          Expanded(
+            child: _isLoading 
+              ? const Center(child: CircularProgressIndicator(color: AppColors.corporateNavy))
+              : RefreshIndicator(
+                  onRefresh: _loadUsers,
+                  color: AppColors.corporateNavy,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _users.length,
+                    itemBuilder: (context, index) {
+                      final user = _users[index];
+                      // İsim baş harfi alma (Güvenli yöntem)
+                      final displayName = user.fullName ?? user.email ?? '?';
+                      final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.03),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          leading: CircleAvatar(
+                            backgroundColor: _getRoleColor(user.role).withOpacity(0.1),
+                            child: Text(
+                              initial,
+                              style: TextStyle(
+                                color: _getRoleColor(user.role),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            user.fullName ?? 'İsimsiz Kullanıcı',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(user.email ?? '', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                            ],
+                          ),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _getRoleColor(user.role).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: _getRoleColor(user.role).withOpacity(0.3)),
+                            ),
+                            child: Text(
+                              _getRoleLabel(user.role),
+                              style: TextStyle(
+                                color: _getRoleColor(user.role),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          onTap: () => _changeRole(user),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -105,9 +220,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
       case 'admin': return Colors.red;
       case 'manager': return Colors.orange;
       case 'technician': return Colors.blue;
-      case 'pending': return Colors.amber;
+      case 'pending': return Colors.grey;
       default: return Colors.grey;
     }
   }
 }
-

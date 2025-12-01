@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.istakip_app"
+    namespace = "com.hcs.istakip"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973"
 

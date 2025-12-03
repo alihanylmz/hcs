@@ -1,4 +1,4 @@
-package com.example.istakip_app
+package com.hcs.istakip
 
 import io.flutter.embedding.android.FlutterActivity
 

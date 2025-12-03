@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../services/user_service.dart';
+import '../services/partner_service.dart';
 import '../models/user_profile.dart';
+import '../models/partner.dart';
 import '../theme/app_colors.dart';
-import '../widgets/custom_header.dart'; // Header widget'ı
+import '../widgets/custom_header.dart';
 
 class UserManagementPage extends StatefulWidget {
   const UserManagementPage({super.key});
@@ -13,21 +15,25 @@ class UserManagementPage extends StatefulWidget {
 
 class _UserManagementPageState extends State<UserManagementPage> {
   final UserService _userService = UserService();
+  final PartnerService _partnerService = PartnerService();
+  
   List<UserProfile> _users = [];
+  List<Partner> _partners = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadUsers();
+    _loadData();
   }
 
-  Future<void> _loadUsers() async {
+  Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final list = await _userService.getAllUsers();
-      // Onay bekleyenleri en üste al
-      list.sort((a, b) {
+      final users = await _userService.getAllUsers();
+      final partners = await _partnerService.getAllPartners();
+
+      users.sort((a, b) {
         if (a.role == 'pending' && b.role != 'pending') return -1;
         if (a.role != 'pending' && b.role == 'pending') return 1;
         return (a.fullName ?? '').compareTo(b.fullName ?? '');
@@ -35,7 +41,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
       
       if (mounted) {
         setState(() {
-          _users = list;
+          _users = users;
+          _partners = partners;
           _isLoading = false;
         });
       }
@@ -44,8 +51,36 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
   }
 
+  Future<Partner?> _showPartnerSelectDialog() async {
+    if (_partners.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Önce Partner Firma eklemelisiniz!')),
+      );
+      return null;
+    }
+
+    return await showDialog<Partner>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Hangi Partner Firması?'),
+        children: _partners.map((partner) => SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, partner),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Row(
+              children: [
+                const Icon(Icons.business, color: Colors.purple, size: 20),
+                const SizedBox(width: 12),
+                Text(partner.name, style: const TextStyle(fontSize: 16)),
+              ],
+            ),
+          ),
+        )).toList(),
+      ),
+    );
+  }
+
   Future<void> _changeRole(UserProfile user) async {
-    // Modern BottomSheet ile seçim yaptıralım
     final newRole = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.white,
@@ -67,6 +102,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
             _buildRoleOption(ctx, 'admin', 'Sistem Yöneticisi (Tam Yetki)', Icons.admin_panel_settings, Colors.red),
             _buildRoleOption(ctx, 'manager', 'Yönetici (Stok/Rapor)', Icons.manage_accounts, Colors.orange),
             _buildRoleOption(ctx, 'technician', 'Saha Teknisyeni (Sınırlı)', Icons.engineering, Colors.blue),
+            _buildRoleOption(ctx, 'partner_user', 'Partner Firma Kullanıcısı', Icons.business, Colors.purple),
             _buildRoleOption(ctx, 'pending', 'Onay Bekliyor (Kısıtlı)', Icons.hourglass_empty, Colors.grey),
             const SizedBox(height: 16),
           ],
@@ -74,11 +110,23 @@ class _UserManagementPageState extends State<UserManagementPage> {
       ),
     );
 
-    if (newRole != null && newRole != user.role) {
+    if (newRole != null) {
+      // Eğer aynı rol seçildiyse ve partner değilse işlem yapma
+      if (newRole == user.role && newRole != 'partner_user') return;
+
+      int? selectedPartnerId;
+      
+      // Partner User seçildiyse, her zaman partner sor (değiştirmek isteyebilir)
+      if (newRole == 'partner_user') {
+        final partner = await _showPartnerSelectDialog();
+        if (partner == null) return; // İptal edildi
+        selectedPartnerId = partner.id;
+      }
+
       setState(() => _isLoading = true);
       try {
-        await _userService.updateUserRole(user.id, newRole);
-        await _loadUsers();
+        await _userService.updateUserRole(user.id, newRole, partnerId: selectedPartnerId);
+        await _loadData();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Kullanıcı yetkisi güncellendi'), backgroundColor: Colors.green)
@@ -115,29 +163,33 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
     return Scaffold(
       backgroundColor: bgColor,
-      // AppBar yok, CustomHeader var
       body: Column(
         children: [
           const CustomHeader(
             title: 'Kullanıcı Yönetimi',
-            subtitle: 'Personel yetkilerini düzenle',
+            subtitle: 'Personel ve Partner yetkileri',
             showBackArrow: true,
           ),
-          
           Expanded(
             child: _isLoading 
               ? const Center(child: CircularProgressIndicator(color: AppColors.corporateNavy))
               : RefreshIndicator(
-                  onRefresh: _loadUsers,
+                  onRefresh: _loadData,
                   color: AppColors.corporateNavy,
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
                     itemCount: _users.length,
                     itemBuilder: (context, index) {
                       final user = _users[index];
-                      // İsim baş harfi alma (Güvenli yöntem)
                       final displayName = user.fullName ?? user.email ?? '?';
                       final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+                      
+                      // Kullanıcının partner ismini bul
+                      String? partnerName;
+                      if (user.isPartner && user.partnerId != null) {
+                        final p = _partners.where((p) => p.id == user.partnerId).firstOrNull;
+                        partnerName = p?.name;
+                      }
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -145,11 +197,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           color: cardColor,
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.03),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
+                            BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
                           ],
                         ),
                         child: ListTile(
@@ -158,23 +206,28 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             backgroundColor: _getRoleColor(user.role).withOpacity(0.1),
                             child: Text(
                               initial,
-                              style: TextStyle(
-                                color: _getRoleColor(user.role),
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: TextStyle(color: _getRoleColor(user.role), fontWeight: FontWeight.bold),
                             ),
                           ),
                           title: Text(
                             user.fullName ?? 'İsimsiz Kullanıcı',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                            ),
+                            style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
                           ),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(user.email ?? '', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                              if (partnerName != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.business, size: 12, color: Colors.purple),
+                                      const SizedBox(width: 4),
+                                      Text(partnerName, style: const TextStyle(fontSize: 12, color: Colors.purple, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ),
                             ],
                           ),
                           trailing: Container(
@@ -186,11 +239,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             ),
                             child: Text(
                               _getRoleLabel(user.role),
-                              style: TextStyle(
-                                color: _getRoleColor(user.role),
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: TextStyle(color: _getRoleColor(user.role), fontSize: 11, fontWeight: FontWeight.bold),
                             ),
                           ),
                           onTap: () => _changeRole(user),
@@ -210,6 +259,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
       case 'admin': return 'Admin';
       case 'manager': return 'Yönetici';
       case 'technician': return 'Teknisyen';
+      case 'partner_user': return 'Partner';
       case 'pending': return 'Onay Bekliyor';
       default: return role;
     }
@@ -220,6 +270,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
       case 'admin': return Colors.red;
       case 'manager': return Colors.orange;
       case 'technician': return Colors.blue;
+      case 'partner_user': return Colors.purple;
       case 'pending': return Colors.grey;
       default: return Colors.grey;
     }

@@ -54,8 +54,12 @@ class UserService {
     return (response as List).map((e) => UserProfile.fromJson(e)).toList();
   }
 
-  Future<void> updateUserRole(String userId, String newRole) async {
-    await _client.from('profiles').update({'role': newRole}).eq('id', userId);
+  Future<void> updateUserRole(String userId, String newRole, {int? partnerId}) async {
+    final data = {
+      'role': newRole,
+      'partner_id': newRole == 'partner_user' ? partnerId : null, // Eğer partner değilse ID'yi sil
+    };
+    await _client.from('profiles').update(data).eq('id', userId);
   }
 }
 

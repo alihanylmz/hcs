@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "21168518728",
-    "project_id": "istakip-3f040",
-    "storage_bucket": "istakip-3f040.firebasestorage.app"
+    "project_number": "768632178728",
+    "project_id": "hcs-work-tracker",
+    "storage_bucket": "hcs-work-tracker.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:21168518728:android:ba9ab8aaf7cf7157b54a7d",
+        "mobilesdk_app_id": "1:768632178728:android:9737233ba8da0490610d1d",
         "android_client_info": {
-          "package_name": "com.example.istakip_app"
+          "package_name": "com.hcs.istakip"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDPPMIPghKIANYydPtnyfllSQk14jZigXM"
+          "current_key": "AIzaSyAwq_xyfGxAE600GbfumNRwsxawT17QKWM"
         }
       ],
       "services": {

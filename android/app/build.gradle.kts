@@ -21,8 +21,10 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.istakip_app"
+        // Uygulama kimliği Firebase / OneSignal ile uyumlu olmalı
+        // google-services.json içinde tanımlı package_name ile eşleşiyor:
+        // "package_name": "com.hcs.istakip"
+        applicationId = "com.hcs.istakip"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // OneSignal için minimum SDK 21 gereklidir
@@ -37,6 +39,8 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }

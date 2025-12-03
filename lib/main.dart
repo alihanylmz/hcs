@@ -10,6 +10,7 @@ import 'pages/login_page.dart';
 import 'pages/ticket_list_page.dart';
 import 'pages/dashboard_page.dart';
 import 'services/user_service.dart';
+import 'services/update_service.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
@@ -119,6 +120,15 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
+  @override
+  void initState() {
+    super.initState();
+    // Uygulama açıldığında versiyon kontrolü yap
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdateService().checkVersion(context);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<AuthState>(

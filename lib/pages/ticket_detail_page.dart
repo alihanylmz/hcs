@@ -120,6 +120,62 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
     }
   }
 
+  Future<void> _showEditNoteDialog(Map<String, dynamic> note) async {
+    final controller = TextEditingController(text: note['note'] as String? ?? '');
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Servis Notunu Düzenle'),
+          content: TextField(
+            controller: controller,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              hintText: 'Servis notunu güncelleyin',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('İptal'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final newText = controller.text.trim();
+                if (newText.isEmpty) return;
+                try {
+                  await _ticketService.updateNote(note['id'] as int, newText);
+                  if (mounted) {
+                    Navigator.of(ctx).pop();
+                    await _loadNotes();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Servis notu güncellendi'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Hata: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Kaydet'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _updateTicketLocal(Map<String, dynamic> payload) async {
     if (!mounted) return;
     setState(() {
@@ -296,6 +352,7 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isPartnerUser = _userProfile?.role == 'partner_user';
     return Scaffold(
       backgroundColor: AppColors.backgroundGrey,
       appBar: AppBar(
@@ -321,67 +378,69 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
         ),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            tooltip: 'Düzenle',
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => EditTicketPage(ticketId: widget.ticketId),
-                ),
-              );
-              _loadTicket();
-            },
-          ),
+          if (!isPartnerUser)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Düzenle',
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => EditTicketPage(ticketId: widget.ticketId),
+                  ),
+                );
+                _loadTicket();
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.print_outlined),
             tooltip: 'PDF Oluştur',
             onPressed: _loading || _ticket == null ? null : _exportToPdf,
           ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.edit_document),
-            tooltip: 'İmzalar',
-            onSelected: (value) {
-              if (value == 'customer') {
-                _openSignaturePage();
-              } else if (value == 'technician') {
-                _openTechnicianSignaturePage();
-              }
-            },
-            itemBuilder: (context) {
-              final hasCustomerSignature = _ticket?['signature_data'] != null;
-              final hasTechnicianSignature = _ticket?['technician_signature_data'] != null;
-              
-              return [
-                PopupMenuItem(
-                  value: 'customer',
-                  child: Row(
-                    children: [
-                      Icon(
-                        hasCustomerSignature ? Icons.edit : Icons.person_outline,
-                        color: AppColors.textDark,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(hasCustomerSignature ? 'Müşteri İmzası Düzenle' : 'Müşteri İmzası'),
-                    ],
+          if (!isPartnerUser)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.edit_document),
+              tooltip: 'İmzalar',
+              onSelected: (value) {
+                if (value == 'customer') {
+                  _openSignaturePage();
+                } else if (value == 'technician') {
+                  _openTechnicianSignaturePage();
+                }
+              },
+              itemBuilder: (context) {
+                final hasCustomerSignature = _ticket?['signature_data'] != null;
+                final hasTechnicianSignature = _ticket?['technician_signature_data'] != null;
+                
+                return [
+                  PopupMenuItem(
+                    value: 'customer',
+                    child: Row(
+                      children: [
+                        Icon(
+                          hasCustomerSignature ? Icons.edit : Icons.person_outline,
+                          color: AppColors.textDark,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(hasCustomerSignature ? 'Müşteri İmzası Düzenle' : 'Müşteri İmzası'),
+                      ],
+                    ),
                   ),
-                ),
-                PopupMenuItem(
-                  value: 'technician',
-                  child: Row(
-                    children: [
-                      Icon(
-                        hasTechnicianSignature ? Icons.edit : Icons.badge_outlined,
-                        color: AppColors.textDark,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(hasTechnicianSignature ? 'Teknisyen İmzası Düzenle' : 'Teknisyen İmzası'),
-                    ],
+                  PopupMenuItem(
+                    value: 'technician',
+                    child: Row(
+                      children: [
+                        Icon(
+                          hasTechnicianSignature ? Icons.edit : Icons.badge_outlined,
+                          color: AppColors.textDark,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(hasTechnicianSignature ? 'Teknisyen İmzası Düzenle' : 'Teknisyen İmzası'),
+                      ],
+                    ),
                   ),
-                ),
-              ];
-            },
-          ),
+                ];
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.refresh_outlined),
             tooltip: 'Yenile',
@@ -417,6 +476,7 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
     }
 
     final ticket = _ticket!;
+    final isPartnerUser = _userProfile?.role == 'partner_user';
     final customer = ticket['customers'] as Map<String, dynamic>? ?? {};
     final status = ticket['status'] as String? ?? 'open';
     final priority = ticket['priority'] as String? ?? 'normal';
@@ -522,70 +582,71 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
                           const SizedBox(height: 16),
                           const Divider(),
                           const SizedBox(height: 16),
-                          // Kontrol Paneli (Dropdownlar)
-                          Wrap(
-                            spacing: 16,
-                            runSpacing: 16,
-                            children: [
-                              SizedBox(
-                                width: isWide ? 200 : double.infinity,
-                                child: _buildDropdown(
-                                  label: 'İş Durumu',
-                                  value: status,
-                                  items: _statusLabels,
-                                  onChanged: (val) => _changeStatus(val!),
+                          // Kontrol Paneli (Dropdownlar) - Partner kullanıcılar sadece görüntülesin
+                          if (!isPartnerUser)
+                            Wrap(
+                              spacing: 16,
+                              runSpacing: 16,
+                              children: [
+                                SizedBox(
+                                  width: isWide ? 200 : double.infinity,
+                                  child: _buildDropdown(
+                                    label: 'İş Durumu',
+                                    value: status,
+                                    items: _statusLabels,
+                                    onChanged: (val) => _changeStatus(val!),
+                                  ),
                                 ),
-                              ),
-                              SizedBox(
-                                width: isWide ? 200 : double.infinity,
-                                child: _buildDropdown(
-                                  label: 'Öncelik Seviyesi',
-                                  value: priority,
-                                  items: _priorityLabels,
-                                  onChanged: (val) => _changePriority(val!),
+                                SizedBox(
+                                  width: isWide ? 200 : double.infinity,
+                                  child: _buildDropdown(
+                                    label: 'Öncelik Seviyesi',
+                                    value: priority,
+                                    items: _priorityLabels,
+                                    onChanged: (val) => _changePriority(val!),
+                                  ),
                                 ),
-                              ),
-                              SizedBox(
-                                width: isWide ? 220 : double.infinity,
-                                child: InkWell(
-                                  onTap: _isUpdating ? null : _pickPlannedDate,
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey.shade300),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            const Text(
-                                              'Planlanan Tarih',
-                                              style: TextStyle(fontSize: 10, color: AppColors.textLight),
-                                            ),
-                                            Text(
-                                              Formatters.date(plannedDate),
-                                              style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textDark),
-                                            ),
-                                          ],
-                                        ),
-                                        if (plannedDate != null)
-                                          InkWell(
-                                            onTap: _clearPlannedDate,
-                                            child: const Icon(Icons.close, size: 16, color: Colors.red),
-                                          )
-                                        else
-                                          const Icon(Icons.calendar_month, size: 18, color: AppColors.textLight),
-                                      ],
+                                SizedBox(
+                                  width: isWide ? 220 : double.infinity,
+                                  child: InkWell(
+                                    onTap: _isUpdating ? null : _pickPlannedDate,
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(color: Colors.grey.shade300),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                'Planlanan Tarih',
+                                                style: TextStyle(fontSize: 10, color: AppColors.textLight),
+                                              ),
+                                              Text(
+                                                Formatters.date(plannedDate),
+                                                style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textDark),
+                                              ),
+                                            ],
+                                          ),
+                                          if (plannedDate != null)
+                                            InkWell(
+                                              onTap: _clearPlannedDate,
+                                              child: const Icon(Icons.close, size: 16, color: Colors.red),
+                                            )
+                                          else
+                                            const Icon(Icons.calendar_month, size: 18, color: AppColors.textLight),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
                         ],
                       ),
                     ),
@@ -596,7 +657,8 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
               const SizedBox(height: 24),
 
               // --- ORTA BÖLÜM: MÜŞTERİ ve DETAYLAR ---
-              if (hasMissingParts) ...[
+              // Stok eksikliği uyarısı partner kullanıcılar için gösterilmez
+              if (hasMissingParts && !isPartnerUser) ...[
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 24),
@@ -643,6 +705,7 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
                             _buildInfoRow('Müşteri Adı', customer['name'] as String?, isBold: true),
                             _buildInfoRow('Telefon', customer['phone'] as String?),
                             _buildInfoRow('Adres', customer['address'] as String?, isMultiLine: true),
+                            _buildInfoRow('Partner Firma', ticket['device_brand'] as String?),
                           ],
                         ),
                         const SizedBox(height: 24),
@@ -694,7 +757,7 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
                         
                         const SizedBox(height: 24),
 
-                        // Teknisyen Notları Kartı
+                        // Servis Notları Kartı
                         _buildNotesCard(),
                       ],
                     ),
@@ -803,7 +866,7 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
                     const Icon(Icons.note_add_outlined, color: AppColors.corporateNavy, size: 20),
                     const SizedBox(width: 10),
                     const Text(
-                      'TEKNİSYEN NOTLARI',
+                      'SERVİS NOTLARI',
                       style: TextStyle(
                         color: AppColors.corporateNavy,
                         fontWeight: FontWeight.bold,
@@ -813,13 +876,14 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
                     ),
                   ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.add_circle_outline, color: AppColors.corporateNavy),
-                  onPressed: _showAddNoteDialog, // <--- Yeni Dialog Çağrısı
-                  tooltip: 'Not Ekle',
-                  constraints: const BoxConstraints(),
-                  padding: EdgeInsets.zero,
-                ),
+                if (_userProfile?.role != 'partner_user')
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline, color: AppColors.corporateNavy),
+                    onPressed: _showAddNoteDialog, // <--- Yeni Dialog Çağrısı
+                    tooltip: 'Not Ekle',
+                    constraints: const BoxConstraints(),
+                    padding: EdgeInsets.zero,
+                  ),
               ],
             ),
           ),
@@ -833,7 +897,7 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
              Padding(
               padding: const EdgeInsets.all(20.0),
               child: Text(
-                'Henüz teknisyen notu eklenmemiş.',
+                'Henüz servis notu eklenmemiş.',
                 style: TextStyle(color: Colors.grey.shade400, fontStyle: FontStyle.italic, fontSize: 13),
               ),
             )
@@ -845,6 +909,16 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
                 final date = note['created_at'] as String?;
                 final profile = note['profiles'] as Map<String, dynamic>?;
                 final userName = profile?['full_name'] as String? ?? '-';
+                final role = profile?['role'] as String?;
+                String? roleLabel;
+                if (role == 'technician') {
+                  roleLabel = 'Teknisyen';
+                } else if (role == 'manager' || role == 'admin') {
+                  roleLabel = 'Mühendis';
+                }
+                final isOwner = note['user_id'] == _userProfile?.id;
+                final isAdminOrManager = _userProfile?.isAdmin == true || _userProfile?.isManager == true;
+                final canEditNote = isOwner || isAdminOrManager;
                 
                 List<String> images = [];
                 if (note['image_urls'] != null) {
@@ -864,17 +938,43 @@ class _TicketDetailPageState extends State<TicketDetailPage> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                userName,
-                                style: const TextStyle(
-                                  fontSize: 11, 
-                                  fontWeight: FontWeight.bold, 
-                                  color: AppColors.corporateNavy
-                                ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    userName,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.corporateNavy,
+                                    ),
+                                  ),
+                                  if (roleLabel != null)
+                                    Text(
+                                      roleLabel,
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: AppColors.textLight,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                ],
                               ),
-                              Text(
-                                Formatters.date(date),
-                                style: const TextStyle(fontSize: 10, color: AppColors.textLight),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    Formatters.date(date),
+                                    style: const TextStyle(fontSize: 10, color: AppColors.textLight),
+                                  ),
+                                  if (canEditNote) ...[
+                                    const SizedBox(width: 8),
+                                    InkWell(
+                                      onTap: () => _showEditNoteDialog(note),
+                                      child: const Icon(Icons.edit_outlined, size: 18, color: AppColors.corporateNavy),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ],
                           ),

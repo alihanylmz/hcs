@@ -66,14 +66,38 @@ class TicketService {
       final oldStatus = oldTicket['status'] as String? ?? 'open';
       final newStatus = payload['status'] as String?;
       if (newStatus != null && oldStatus != newStatus) {
-        await _notificationService.notifyTicketStatusChanged(
-          ticketId: ticketId,
-          ticketTitle: ticketTitle,
-          oldStatus: oldStatus,
-          newStatus: newStatus,
-          changedBy: userName,
-          jobCode: jobCode,
-        );
+        // Eğer gizli durumdan (draft) aktif duruma geçiyorsa, "yeni iş emri" bildirimi gönder
+        final activeStatuses = ['open', 'in_progress', 'panel_done_stock', 'panel_done_sent'];
+        if (oldStatus == 'draft' && activeStatuses.contains(newStatus)) {
+          // Gizli durumdan aktif duruma geçiş: Yeni iş emri bildirimi gönder
+          await _notificationService.notifyTicketCreated(
+            ticketId: ticketId,
+            ticketTitle: ticketTitle,
+            jobCode: jobCode,
+            createdBy: userName,
+          );
+        } else {
+          // Normal durum değişikliği bildirimi
+          await _notificationService.notifyTicketStatusChanged(
+            ticketId: ticketId,
+            ticketTitle: ticketTitle,
+            oldStatus: oldStatus,
+            newStatus: newStatus,
+            changedBy: userName,
+            jobCode: jobCode,
+          );
+        }
+
+        // --- PARTNER BİLDİRİMİ ---
+        final partnerId = oldTicket['partner_id'] as int?;
+        if (partnerId != null && (newStatus == 'completed' || newStatus == 'service_required')) {
+          // Burada normalde Partner kullanıcılarını bulup onlara bildirim atarız.
+          // Şimdilik logluyoruz. Gerçek implementasyonda NotificationService'e 
+          // notifyPartnerUsers(partnerId, message) gibi bir metod eklenmeli.
+          debugPrint('Partner Bildirimi Tetiklendi! PartnerID: $partnerId, Yeni Durum: $newStatus');
+          
+          // Örnek: await _notificationService.notifyPartnerUsers(partnerId, ticketTitle, newStatus);
+        }
       }
     }
     
@@ -100,7 +124,7 @@ class TicketService {
     
     final response = await _supabase
         .from('ticket_notes')
-        .select('*, profiles(full_name)')
+        .select('*, profiles(full_name, role)')
         .eq('ticket_id', queryId)
         .order('created_at', ascending: true);
         
@@ -127,6 +151,14 @@ class TicketService {
     _sendNoteNotification(ticketId).catchError((e) {
       debugPrint('Bildirim gönderme hatası: $e');
     });
+  }
+
+  /// Not içeriğini günceller
+  Future<void> updateNote(int noteId, String note) async {
+    await _supabase
+        .from('ticket_notes')
+        .update({'note': note})
+        .eq('id', noteId);
   }
   
   /// Not eklendiğinde bildirim gönderir

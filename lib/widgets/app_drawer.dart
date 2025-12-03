@@ -8,6 +8,7 @@ import '../pages/archived_tickets_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/ticket_list_page.dart';
 import '../pages/login_page.dart';
+import '../pages/partner_management_page.dart'; // Eklendi
 import '../theme/app_colors.dart';
 
 enum AppDrawerPage {
@@ -146,7 +147,18 @@ class AppDrawer extends StatelessWidget {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              (userRole == 'admin' ? 'Yönetici' : userRole == 'manager' ? 'Yönetici' : 'Teknisyen').toUpperCase(),
+                              () {
+                                switch (userRole) {
+                                  case 'admin':
+                                  case 'manager':
+                                    return 'YÖNETİCİ';
+                                  case 'partner_user':
+                                    return 'PARTNER';
+                                  case 'technician':
+                                  default:
+                                    return 'TEKNİSYEN';
+                                }
+                              }(),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 10,
@@ -202,21 +214,22 @@ class AppDrawer extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 4),
-                _buildModernDrawerItem(
-                  icon: Icons.inventory_2_outlined,
-                  text: 'Stok Durumu',
-                  isActive: currentPage == AppDrawerPage.stock,
-                  textColor: textColor,
-                  activeColor: AppColors.corporateNavy,
-                  onTap: () {
-                    Navigator.pop(context);
-                    if (currentPage != AppDrawerPage.stock) {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => const StockOverviewPage()),
-                      );
-                    }
-                  },
-                ),
+                if (userRole != 'partner_user')
+                  _buildModernDrawerItem(
+                    icon: Icons.inventory_2_outlined,
+                    text: 'Stok Durumu',
+                    isActive: currentPage == AppDrawerPage.stock,
+                    textColor: textColor,
+                    activeColor: AppColors.corporateNavy,
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (currentPage != AppDrawerPage.stock) {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(builder: (_) => const StockOverviewPage()),
+                        );
+                      }
+                    },
+                  ),
                 const SizedBox(height: 4),
                 _buildModernDrawerItem(
                   icon: Icons.task_alt_rounded,

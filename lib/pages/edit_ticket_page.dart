@@ -67,6 +67,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
   bool _isSaving = false;
   bool _isLoading = true;
   String? _errorMessage;
+  String? _userRole; // Kullanıcı rolü (admin/manager kontrolü için)
 
   dynamic get _ticketIdQueryValue {
     final parsed = int.tryParse(widget.ticketId);
@@ -78,6 +79,28 @@ class _EditTicketPageState extends State<EditTicketPage> {
     super.initState();
     _loadDriveBrands();
     _loadTicket();
+    _loadUserRole();
+  }
+  
+  Future<void> _loadUserRole() async {
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+    if (user != null) {
+      try {
+        final profile = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+        if (mounted) {
+          setState(() {
+            _userRole = profile != null ? profile['role'] as String? : null;
+          });
+        }
+      } catch (_) {
+        // Hata durumunda null kalır
+      }
+    }
   }
   
   Future<void> _loadDriveBrands() async {
@@ -518,13 +541,16 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                             isExpanded: true,
                                             value: _status,
                                             decoration: _inputDecoration('Durum'),
-                                            items: const [
-                                              DropdownMenuItem(value: 'open', child: Text('Açık')),
-                                              DropdownMenuItem(value: 'panel_done_stock', child: Text('Panosu Yapıldı (Stok)')),
-                                              DropdownMenuItem(value: 'panel_done_sent', child: Text('Panosu Yapıldı (Gönderildi)')),
-                                              DropdownMenuItem(value: 'in_progress', child: Text('Serviste')),
-                                              DropdownMenuItem(value: 'done', child: Text('Tamamlandı')),
-                                              DropdownMenuItem(value: 'archived', child: Text('Arşivde')), // Eksik olan eklendi
+                                            items: [
+                                              // Admin ve manager'lar için draft seçeneği
+                                              if (_userRole == 'admin' || _userRole == 'manager')
+                                                const DropdownMenuItem(value: 'draft', child: Text('Taslak (Gizli)')),
+                                              const DropdownMenuItem(value: 'open', child: Text('Açık')),
+                                              const DropdownMenuItem(value: 'panel_done_stock', child: Text('Panosu Yapıldı (Stok)')),
+                                              const DropdownMenuItem(value: 'panel_done_sent', child: Text('Panosu Yapıldı (Gönderildi)')),
+                                              const DropdownMenuItem(value: 'in_progress', child: Text('Serviste')),
+                                              const DropdownMenuItem(value: 'done', child: Text('Tamamlandı')),
+                                              const DropdownMenuItem(value: 'archived', child: Text('Arşivde')),
                                             ],
                                             onChanged: (val) => setState(() => _status = val!),
                                           ),

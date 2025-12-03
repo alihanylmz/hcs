@@ -51,6 +51,7 @@ dependencies:
   flutter_dotenv: ^6.0.0
   intl: ^0.20.2
   onesignal_flutter: ^5.0.0
+  package_info_plus: ^8.0.0
 
 dev_dependencies:
   flutter_test:
@@ -63,6 +64,17 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.3
+
+flutter_native_splash:
+  color: "#0F172A"
+  image: "assets/icon/icon.png"
+  android_12:
+    image: "assets/icon/icon.png"
+    color: "#0F172A"
+  android: true
+  ios: true
+  web: false
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -104,7 +116,7 @@ flutter:
 
 # Flutter Launcher Icons yapılandırması
 flutter_launcher_icons:
-  android: "launcher_icon"
+  android: true
   ios: true
   image_path: "assets/icon/icon.png"
   min_sdk_android: 21 # Senin projen için uygun

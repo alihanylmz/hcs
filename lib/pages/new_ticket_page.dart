@@ -5,6 +5,8 @@ import 'package:flutter_svg/flutter_svg.dart'; // Eklendi
 import '../services/stock_service.dart'; // StockService eklendi
 import '../services/notification_service.dart'; // Bildirim servisi
 import '../services/user_service.dart'; // Kullanıcı servisi
+import '../services/partner_service.dart'; // Partner Service eklendi
+import '../models/partner.dart'; // Partner Model eklendi
 
 class NewTicketPage extends StatefulWidget {
   const NewTicketPage({super.key, this.deviceType});
@@ -25,8 +27,14 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
   // Listeler artık StockService'den alınıyor
   final StockService _stockService = StockService();
-  List<String> _availableDriveBrands = []; // Veritabanından yüklenen markalar
-  
+  List<String> _availableDriveBrands = []; // Veritabanından yüklenen sürücü markaları
+
+  // Partner Firmalar
+  final PartnerService _partnerService = PartnerService();
+  List<Partner> _partners = [];
+  int? _selectedPartnerId;
+  bool _canAssignPartner = false; // Sadece admin/manager atayabilir
+
   final _formKey = GlobalKey<FormState>();
 
   final _titleController = TextEditingController();
@@ -59,6 +67,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
   final _customerPhoneController = TextEditingController();
 
   String? _selectedDeviceModel;
+  String? _selectedDeviceBrand;
   String? _selectedPlcModel;
   
   String? _selectedHmiBrand;
@@ -85,6 +94,9 @@ class _NewTicketPageState extends State<NewTicketPage> {
   bool _rotor = false;
   bool _brulor = false;
 
+  // İş başlangıç durumu: taslak mı, aktif mi?
+  bool _createAsDraft = false;
+
   DateTime? _plannedDate;
   PlatformFile? _selectedPdf; // Seçilen PDF dosyası
   bool _isUploading = false;
@@ -96,9 +108,8 @@ class _NewTicketPageState extends State<NewTicketPage> {
   void initState() {
     super.initState();
     _loadDriveBrands();
-    
-    // Teknisyenler iş açamaz - kontrol et
     _checkUserPermission();
+    _loadPartners(); // Partnerleri yükle
     
     if (widget.deviceType == 'santral') {
       _selectedDeviceModel = 'Klima Santrali';
@@ -129,6 +140,26 @@ class _NewTicketPageState extends State<NewTicketPage> {
     }
   }
   
+  Future<void> _loadPartners() async {
+    try {
+      final userService = UserService();
+      final profile = await userService.getCurrentUserProfile();
+      
+      // Sadece Admin ve Yöneticiler partner atayabilir
+      if (profile != null && (profile.isAdmin || profile.isManager)) {
+        final partners = await _partnerService.getAllPartners();
+        if (mounted) {
+          setState(() {
+            _partners = partners;
+            _canAssignPartner = true;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Partner yükleme hatası: $e');
+    }
+  }
+
   Future<void> _loadModelsForBrand(String brand, bool isAspirator) async {
     if (brand.isEmpty || brand == 'Diğer') {
       if (mounted) {
@@ -175,13 +206,17 @@ class _NewTicketPageState extends State<NewTicketPage> {
     final userService = UserService();
     final profile = await userService.getCurrentUserProfile();
     
-    if (profile != null && (profile.role == 'technician' || profile.role == 'pending')) {
-      // Teknisyen veya onay bekleyen kullanıcılar iş açamaz
+    if (profile != null && (
+      profile.role == 'technician' || 
+      profile.role == 'pending' || 
+      profile.role == 'partner_user'
+    )) {
+      // Teknisyenler, partner kullanıcılar ve onay bekleyen kullanıcılar iş açamaz
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Teknisyenler yeni iş emri oluşturamaz.'),
+            content: Text('Bu kullanıcı tipi yeni iş emri oluşturamaz.'),
             backgroundColor: Colors.red,
             duration: Duration(seconds: 3),
           ),
@@ -368,12 +403,15 @@ class _NewTicketPageState extends State<NewTicketPage> {
         'description': finalDescription,
         'customer_id': customerId,
         'priority': 'normal',
-        'status': 'open',
+        // Taslak seçildiyse draft, aksi halde open
+        'status': _createAsDraft ? 'draft' : 'open',
+        'partner_id': _selectedPartnerId, // Partner ID Eklendi
         'planned_date': _plannedDate?.toIso8601String(),
         'job_code': _jobCodeController.text.trim().isEmpty
             ? null
             : _jobCodeController.text.trim(),
         'device_model': _selectedDeviceModel,
+        'device_brand': _selectedDeviceBrand,
         'plc_model': _selectedPlcModel,
         'hmi_brand': _selectedHmiBrand,
         'hmi_size': _selectedHmiSize,
@@ -443,22 +481,26 @@ class _NewTicketPageState extends State<NewTicketPage> {
       // ---------------------------
 
       // --- BİLDİRİM GÖNDERME ---
-      try {
-        final notificationService = NotificationService();
-        final userService = UserService();
-        final currentUser = await userService.getCurrentUserProfile();
-        final userName = currentUser?.fullName ?? 'Kullanıcı';
-        
-        await notificationService.notifyTicketCreated(
-          ticketId: ticketId.toString(),
-          ticketTitle: _titleController.text.trim(),
-          jobCode: _jobCodeController.text.trim().isEmpty 
-              ? null 
-              : _jobCodeController.text.trim(),
-          createdBy: userName,
-        );
-      } catch (notifErr) {
-        debugPrint('Bildirim gönderme hatası (Kritik değil, işlem devam ediyor): $notifErr');
+      // Eğer iş taslak olarak oluşturulmadıysa (aktif iş ise) bildirim gönder.
+      // Taslak işler daha sonra durum değiştiğinde (draft -> open) yeni iş emri gibi bildirilecek.
+      if (!_createAsDraft) {
+        try {
+          final notificationService = NotificationService();
+          final userService = UserService();
+          final currentUser = await userService.getCurrentUserProfile();
+          final userName = currentUser?.fullName ?? 'Kullanıcı';
+          
+          await notificationService.notifyTicketCreated(
+            ticketId: ticketId.toString(),
+            ticketTitle: _titleController.text.trim(),
+            jobCode: _jobCodeController.text.trim().isEmpty 
+                ? null 
+                : _jobCodeController.text.trim(),
+            createdBy: userName,
+          );
+        } catch (notifErr) {
+          debugPrint('Bildirim gönderme hatası (Kritik değil, işlem devam ediyor): $notifErr');
+        }
       }
       // ---------------------------
 
@@ -594,6 +636,30 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                   maxLines: 3,
                                 ),
                                 const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Switch(
+                                      value: _createAsDraft,
+                                      onChanged: (val) {
+                                        setState(() {
+                                          _createAsDraft = val;
+                                        });
+                                      },
+                                      activeColor: _corporateNavy,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Expanded(
+                                      child: Text(
+                                        'Bu işi taslak (gizli) olarak kaydet (teknisyenler görmez, sonradan açıldığında bildirim gider).',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: _textLight,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
                                 _buildDatePicker(),
                                 const SizedBox(height: 16),
                                 // PDF Seçici
@@ -652,6 +718,39 @@ class _NewTicketPageState extends State<NewTicketPage> {
                               title: 'MÜŞTERİ BİLGİLERİ',
                               icon: Icons.person_outline,
                               children: [
+                                // --- PARTNER FİRMA SEÇİMİ (Sadece Yetkililer İçin) ---
+                                if (_canAssignPartner && _partners.isNotEmpty) ...[
+                                  _buildDropdown<int?>( // int? yapıldı (boş olabilir)
+                                    label: 'Partner Firma Ataması (Opsiyonel)',
+                                    value: _selectedPartnerId,
+                                    items: [null, ..._partners.map((p) => p.id)], // Null (Boş) seçenek
+                                    itemLabelBuilder: (val) {
+                                      if (val == null) return 'Atama Yapılmayacak (Doğrudan Müşteri)';
+                                      // firstWhere orElse düzeltmesi: null dönmemeli
+                                      final p = _partners.firstWhere(
+                                        (element) => element.id == val, 
+                                        orElse: () => Partner(id: -1, name: 'Bilinmeyen')
+                                      );
+                                      return p.name;
+                                    },
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _selectedPartnerId = val;
+                                        if (val != null) {
+                                          // Partner seçildiyse cihaz markasını otomatik ayarla
+                                          final p = _partners.firstWhere((e) => e.id == val, orElse: () => Partner(id: -1, name: ''));
+                                          _selectedDeviceBrand = p.name;
+                                        } else {
+                                          _selectedDeviceBrand = null;
+                                        }
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Divider(),
+                                  const SizedBox(height: 16),
+                                ],
+
                                 Row(
                                   children: [
                                     Expanded(
@@ -1015,7 +1114,12 @@ class _NewTicketPageState extends State<NewTicketPage> {
                 isRequired: true,
               ),
             ),
-            const SizedBox(width: 12),
+            // Cihaz Markası Dropdown Kaldırıldı (Partner ismi kullanılacak)
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
             Expanded(
               child: _buildDropdown(
                 label: 'PLC Marka/Model',

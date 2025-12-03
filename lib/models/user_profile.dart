@@ -2,8 +2,9 @@ class UserProfile {
   final String id;
   final String? email;
   final String? fullName;
-  final String role; // 'admin', 'technician', 'manager'
+  final String role; // 'admin', 'technician', 'manager', 'partner_user'
   final DateTime? createdAt;
+  final int? partnerId; // Partner ID (Eğer partner kullanıcısıysa)
 
   UserProfile({
     required this.id,
@@ -11,6 +12,7 @@ class UserProfile {
     this.fullName,
     this.role = 'pending', // Varsayılan rol: onay bekliyor
     this.createdAt,
+    this.partnerId,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -22,6 +24,7 @@ class UserProfile {
       createdAt: json['created_at'] != null 
           ? DateTime.parse(json['created_at'] as String) 
           : null,
+      partnerId: json['partner_id'] as int?,
     );
   }
 
@@ -31,6 +34,7 @@ class UserProfile {
       'email': email,
       'full_name': fullName,
       'role': role,
+      'partner_id': partnerId,
       // created_at genellikle güncellenmez
     };
   }
@@ -38,6 +42,7 @@ class UserProfile {
   // Yardımcı metodlar
   bool get isAdmin => role == 'admin';
   bool get isManager => role == 'manager' || role == 'admin';
+  bool get isPartner => role == 'partner_user';
 
   String get displayName => fullName ?? email ?? 'Bilinmeyen Kullanıcı';
 
@@ -47,6 +52,7 @@ class UserProfile {
     String? fullName,
     String? role,
     DateTime? createdAt,
+    int? partnerId,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -54,6 +60,7 @@ class UserProfile {
       fullName: fullName ?? this.fullName,
       role: role ?? this.role,
       createdAt: createdAt ?? this.createdAt,
+      partnerId: partnerId ?? this.partnerId,
     );
   }
 }

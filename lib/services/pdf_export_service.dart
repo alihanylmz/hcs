@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
 import '../services/stock_service.dart';
 
 import 'package:intl/intl.dart'; // <--- Eklendi
@@ -74,6 +75,56 @@ class PdfExportService {
     if (value == null) return '-';
     if (value is String && value.trim().isEmpty) return '-';
     return value.toString();
+  }
+
+  /// Açıklama/tekst içindeki "Ekli PDF Dosyası: <url>" ifadesini gizlemek için kullanılır.
+  static String _stripAttachedPdfText(String? text) {
+    if (text == null) return '-';
+    final cleaned = text.replaceAll(
+      RegExp(r'Ekli PDF Dosyası: https?://[^\s]+'),
+      '',
+    ).trim();
+    return cleaned.isEmpty ? '-' : cleaned;
+  }
+
+  /// Ticket notlarındaki resim URL'lerini indirip PDF'te kullanılacak hale getirir.
+  static Future<List<Map<String, dynamic>>> _enrichNotesWithImages(
+    List<Map<String, dynamic>> notes,
+  ) async {
+    final List<Map<String, dynamic>> enriched = [];
+
+    for (final raw in notes) {
+      final note = Map<String, dynamic>.from(raw);
+
+      // Hem eski tekil image_url hem de yeni image_urls (liste) alanlarını destekle
+      List<String> urls = [];
+      if (note['image_urls'] != null) {
+        urls = List<String>.from(note['image_urls']);
+      } else if (note['image_url'] != null) {
+        urls.add(note['image_url'] as String);
+      }
+
+      final List<pw.ImageProvider> images = [];
+
+      for (final url in urls) {
+        try {
+          final uri = Uri.tryParse(url);
+          if (uri == null) continue;
+
+          final resp = await http.get(uri);
+          if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
+            images.add(pw.MemoryImage(resp.bodyBytes));
+          }
+        } catch (_) {
+          // Hata olursa o resmi atla, PDF üretimini bozma
+        }
+      }
+
+      note['pdf_images'] = images;
+      enriched.add(note);
+    }
+
+    return enriched;
   }
 
   // --- TASARIM WIDGET'LARI ---
@@ -151,13 +202,16 @@ class PdfExportService {
 
       final notesResponse = await supabase
           .from('ticket_notes')
-          .select('*, profiles(full_name)')
+          .select('*, profiles(full_name, role)')
           .eq('ticket_id', idValue)
           .order('created_at', ascending: true);
       
       final notes = List<Map<String, dynamic>>.from(notesResponse);
 
-      final pdf = await _generateSingleTicketPdf(ticket, notes);
+      // Notlara eklenen resimleri indir ve PDF'e uygun nesnelere dönüştür
+      final enrichedNotes = await _enrichNotesWithImages(notes);
+
+      final pdf = await _generateSingleTicketPdf(ticket, enrichedNotes);
       return await pdf.save();
     } catch (e) {
       throw Exception('PDF oluşturma hatası: $e');
@@ -300,8 +354,14 @@ class PdfExportService {
           pw.Container(
             width: double.infinity,
             padding: const pw.EdgeInsets.all(12),
-            decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey400), borderRadius: pw.BorderRadius.circular(5)),
-            child: pw.Text(_safeText(ticket['description']), style: pw.TextStyle(font: turkishFont, fontSize: 10)),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey400),
+              borderRadius: pw.BorderRadius.circular(5),
+            ),
+            child: pw.Text(
+              _stripAttachedPdfText(ticket['description'] as String?),
+              style: pw.TextStyle(font: turkishFont, fontSize: 10),
+            ),
           ),
           // Teknik Bilgiler Tablosu
           if (aspKw != null || vantKw != null || komp1Kw != null || hmiBrand != null) ...[
@@ -325,14 +385,22 @@ class PdfExportService {
             ),
           ],
 
-          // --- TEKNİSYEN NOTLARI (Sadece Metin) ---
+          // --- SERVİS NOTLARI (Sadece Metin) ---
           if (notes.isNotEmpty) ...[
-            _buildSectionHeader('Teknisyen Notları', turkishFont),
+            _buildSectionHeader('Servis Notları', turkishFont),
             pw.Column(
-              children: notes.map((note) {
+              children: notes.map<pw.Widget>((note) {
                 final date = _formatDate(note['created_at']);
-                final author = note['profiles']?['full_name'] ?? 'Teknisyen';
-                final text = _safeText(note['note']);
+                final profile = note['profiles'] as Map<String, dynamic>?;
+                final author = profile?['full_name'] ?? 'Teknisyen';
+                final role = profile?['role'] as String?;
+                String? roleLabel;
+                if (role == 'technician') {
+                  roleLabel = 'Teknisyen';
+                } else if (role == 'manager' || role == 'admin') {
+                  roleLabel = 'Mühendis';
+                }
+                final text = _stripAttachedPdfText(note['note'] as String?);
                 
                 return pw.Container(
                   width: double.infinity,
@@ -349,17 +417,118 @@ class PdfExportService {
                       pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
-                          pw.Text(author, style: pw.TextStyle(font: turkishFont, fontWeight: pw.FontWeight.bold, fontSize: 9, color: _accentColor)),
-                          pw.Text(date, style: pw.TextStyle(font: turkishFont, fontSize: 8, color: PdfColors.grey600)),
+                          pw.Text(
+                            roleLabel != null ? '$author ($roleLabel)' : author,
+                            style: pw.TextStyle(
+                              font: turkishFont,
+                              fontWeight: pw.FontWeight.bold,
+                              fontSize: 9,
+                              color: _accentColor,
+                            ),
+                          ),
+                          pw.Text(
+                            date,
+                            style: pw.TextStyle(
+                              font: turkishFont,
+                              fontSize: 8,
+                              color: PdfColors.grey600,
+                            ),
+                          ),
                         ],
                       ),
                       pw.SizedBox(height: 4),
-                      pw.Text(text, style: pw.TextStyle(font: turkishFont, fontSize: 10)),
+                      pw.Text(
+                        text,
+                        style: pw.TextStyle(font: turkishFont, fontSize: 10),
+                      ),
                     ],
                   ),
                 );
               }).toList(),
             ),
+          ],
+
+          // --- EK SAYFASI: FOTOĞRAFLAR (EK.1) ---
+          if (notes.any((n) =>
+              ((n['pdf_images'] as List<pw.ImageProvider>?)?.isNotEmpty ?? false))) ...[
+            pw.NewPage(),
+            _buildSectionHeader('EK.1 - SERVİS FOTOĞRAF EKLERİ', turkishFont),
+            pw.SizedBox(height: 2),
+            pw.Text(
+              'Tarih: ${_formatDate(DateTime.now().toIso8601String())}',
+              style: pw.TextStyle(font: turkishFont, fontSize: 8, color: PdfColors.grey600),
+            ),
+            pw.SizedBox(height: 8),
+            ...notes.map<pw.Widget>((note) {
+              final List<pw.ImageProvider> images =
+                  (note['pdf_images'] as List<pw.ImageProvider>?) ?? const [];
+              if (images.isEmpty) {
+                return pw.SizedBox();
+              }
+
+              final date = _formatDate(note['created_at']);
+              final author = note['profiles']?['full_name'] ?? 'Teknisyen';
+
+              // 4 kolondan oluşan grid: her satırda 4 fotoğraf
+              const cols = 4;
+              const double cellSize = 110; // A4 sayfa için yaklaşık kare boyutu
+
+              final List<pw.TableRow> rows = [];
+              for (var i = 0; i < images.length; i += cols) {
+                final rowChildren = <pw.Widget>[];
+                for (var c = 0; c < cols; c++) {
+                  final index = i + c;
+                  if (index < images.length) {
+                    rowChildren.add(
+                      pw.Container(
+                        width: cellSize,
+                        height: cellSize,
+                        margin: const pw.EdgeInsets.all(2),
+                        decoration: pw.BoxDecoration(
+                          borderRadius: pw.BorderRadius.circular(4),
+                          border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                        ),
+                        child: pw.ClipRect(
+                          child: pw.Image(
+                            images[index],
+                            fit: pw.BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    );
+                  } else {
+                    // Boş hücre, grid hizalaması bozulmasın
+                    rowChildren.add(pw.SizedBox(width: cellSize, height: cellSize));
+                  }
+                }
+                rows.add(
+                  pw.TableRow(
+                    children: rowChildren,
+                  ),
+                );
+              }
+
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    '$author - $date',
+                    style: pw.TextStyle(
+                      font: turkishFont,
+                      fontSize: 9,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _primaryColor,
+                    ),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Table(
+                    defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+                    children: rows,
+                  ),
+                  pw.SizedBox(height: 12),
+                ],
+              );
+            }).toList(),
           ],
         ],
       ),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Otomatik bildirim gönderme servisi
 /// OneSignal REST API kullanarak bildirim gönderir
@@ -15,6 +16,8 @@ class NotificationService {
   String? get _restApiKey {
     return dotenv.env['ONESIGNAL_REST_API_KEY'];
   }
+
+  SupabaseClient get _supabase => Supabase.instance.client;
 
   /// Tüm kullanıcılara bildirim gönderir
   /// 
@@ -60,6 +63,115 @@ class NotificationService {
     } catch (e) {
       print('❌ Bildirim gönderme hatası: $e');
       return false;
+    }
+  }
+
+  /// Supabase user_id'lerini (external_user_id) hedefleyerek bildirim gönderir
+  ///
+  /// OneSignal tarafında `OneSignal.login(user.id)` ile eşleştirilen kullanıcılar
+  /// `include_external_user_ids` ile hedeflenir.
+  Future<bool> sendNotificationToExternalUsers({
+    required List<String> externalUserIds,
+    required String title,
+    required String message,
+    Map<String, dynamic>? data,
+  }) async {
+    if (externalUserIds.isEmpty) {
+      print('⚠️ Bildirim için hedef kullanıcı bulunamadı');
+      return false;
+    }
+
+    try {
+      final apiKey = _restApiKey;
+      if (apiKey == null || apiKey.isEmpty) {
+        print('⚠️ OneSignal REST API Key bulunamadı. .env dosyasına ONESIGNAL_REST_API_KEY ekleyin.');
+        return false;
+      }
+
+      final body = {
+        "app_id": _oneSignalAppId,
+        "include_external_user_ids": externalUserIds,
+        "headings": {"en": title, "tr": title},
+        "contents": {"en": message, "tr": message},
+        "data": data ?? {},
+      };
+
+      final response = await http.post(
+        Uri.parse(_oneSignalApiUrl),
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Authorization": "Basic $apiKey",
+        },
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200) {
+        print('✅ Bildirim başarıyla gönderildi (${externalUserIds.length} kullanıcı)');
+        return true;
+      } else {
+        print('❌ Bildirim gönderme hatası: ${response.statusCode} - ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Bildirim gönderme hatası: $e');
+      return false;
+    }
+  }
+
+  /// Belirli bir iş emri için hangi kullanıcıların bildirim alacağını hesaplar.
+  ///
+  /// Kural:
+  /// - Admin ve manager rollerindeki tüm kullanıcılar daima bildirim alır.
+  /// - Partner kullanıcıları (role = 'partner_user') SADECE kendi partner_id'sine ait işlerden bildirim alır.
+  /// - Teknisyenler bildirim almaz.
+  Future<List<String>> _getTargetUserIdsForTicket(String ticketId) async {
+    try {
+      final dynamic idValue = int.tryParse(ticketId) ?? ticketId;
+
+      final ticket = await _supabase
+          .from('tickets')
+          .select('partner_id')
+          .eq('id', idValue)
+          .maybeSingle();
+
+      if (ticket == null) {
+        return [];
+      }
+
+      final int? partnerId = ticket['partner_id'] as int?;
+
+      // 1. İç kullanıcılar (admin ve manager)
+      final internalRes = await _supabase
+          .from('profiles')
+          .select('id, role')
+          .inFilter('role', ['admin', 'manager']);
+
+      final internalIds = (internalRes as List)
+          .map((e) => e['id'] as String)
+          .toList();
+
+      // 2. Partner kullanıcıları (sadece ilgili partner_id)
+      List<String> partnerIds = [];
+      if (partnerId != null) {
+        final partnerRes = await _supabase
+            .from('profiles')
+            .select('id, role, partner_id')
+            .eq('role', 'partner_user')
+            .eq('partner_id', partnerId);
+
+        partnerIds = (partnerRes as List)
+            .map((e) => e['id'] as String)
+            .toList();
+      }
+
+      final allIds = <String>{};
+      allIds.addAll(internalIds);
+      allIds.addAll(partnerIds);
+
+      return allIds.toList();
+    } catch (e) {
+      print('❌ Hedef kullanıcı listesi hesaplanırken hata: $e');
+      return [];
     }
   }
 
@@ -130,7 +242,10 @@ class NotificationService {
         ? "$createdBy tarafından yeni iş emri oluşturuldu: $jobCodeText"
         : "Yeni iş emri oluşturuldu: $jobCodeText";
 
-    return await sendNotificationToAll(
+    final userIds = await _getTargetUserIdsForTicket(ticketId);
+
+    return await sendNotificationToExternalUsers(
+      externalUserIds: userIds,
       title: title,
       message: message,
       data: {
@@ -168,7 +283,10 @@ class NotificationService {
         ? "$jobCode iş emrinin durumu '$oldStatusLabel' → '$newStatusLabel' olarak güncellendi"
         : "İş emri durumu '$oldStatusLabel' → '$newStatusLabel' olarak güncellendi";
 
-    return await sendNotificationToAll(
+    final userIds = await _getTargetUserIdsForTicket(ticketId);
+
+    return await sendNotificationToExternalUsers(
+      externalUserIds: userIds,
       title: title,
       message: message,
       data: {
@@ -194,7 +312,10 @@ class NotificationService {
         ? "$noteAuthor, $jobCode iş emrine not ekledi"
         : "$noteAuthor, iş emrine not ekledi";
 
-    return await sendNotificationToAll(
+    final userIds = await _getTargetUserIdsForTicket(ticketId);
+
+    return await sendNotificationToExternalUsers(
+      externalUserIds: userIds,
       title: title,
       message: message,
       data: {
@@ -229,7 +350,10 @@ class NotificationService {
         ? "$jobCode iş emrinin önceliği '$oldPriorityLabel' → '$newPriorityLabel' olarak güncellendi"
         : "İş emri önceliği '$oldPriorityLabel' → '$newPriorityLabel' olarak güncellendi";
 
-    return await sendNotificationToAll(
+    final userIds = await _getTargetUserIdsForTicket(ticketId);
+
+    return await sendNotificationToExternalUsers(
+      externalUserIds: userIds,
       title: title,
       message: message,
       data: {

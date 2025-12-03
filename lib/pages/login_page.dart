@@ -93,7 +93,8 @@ class _LoginPageState extends State<LoginPage> {
         }
 
         await _saveCredentials();
-        // Main.dart'taki AuthGate otomatik yönlendirecek
+        // AuthGate, onAuthStateChange stream'i üzerinden zaten tetiklenecek;
+        // burada ekstra bir yönlendirme yapmaya gerek yok.
       }
     } on AuthException catch (e) {
       setState(() {

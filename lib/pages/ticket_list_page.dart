@@ -80,6 +80,13 @@ class _TicketListPageState extends State<TicketListPage> {
   String _priorityFilter = 'all';
   bool _filtersExpanded = false;
 
+  // Tarih filtresi
+  DateTime? _startDate;
+  DateTime? _endDate;
+
+  // Sayfalama: ilk etapta 50 iş, "Daha Fazla Yükle" ile artırılacak
+  int _pageLimit = 50;
+
   String? _userName;
   String? _userRole; // Rol bilgisini tutacak değişken
 
@@ -119,6 +126,34 @@ class _TicketListPageState extends State<TicketListPage> {
     );
   }
 
+  /// PDF raporları için sayfalama olmadan tüm ticket'ları çeker.
+  Future<List<Map<String, dynamic>>> _fetchAllTicketsForReport() async {
+    final supabase = Supabase.instance.client;
+
+    final response = await supabase
+        .from('tickets')
+        .select('''
+          id,
+          title,
+          status,
+          priority,
+          planned_date,
+          job_code,
+          device_model,
+          device_brand,
+          missing_parts,
+          customers (
+            id,
+            name,
+            address
+          )
+        ''')
+        .order('created_at', ascending: false);
+
+    final List data = response as List;
+    return data.cast<Map<String, dynamic>>();
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -128,7 +163,11 @@ class _TicketListPageState extends State<TicketListPage> {
   Future<List<Map<String, dynamic>>> _fetchTickets() async {
     final supabase = Supabase.instance.client;
 
-    final response = await supabase
+    // Teknisyenler için: draft durumundaki işleri gösterme
+    // Admin ve manager'lar tüm işleri görebilir
+    final isAdminOrManager = _userRole == 'admin' || _userRole == 'manager';
+    
+    var query = supabase
           .from('tickets')
         .select('''
           id,
@@ -138,6 +177,7 @@ class _TicketListPageState extends State<TicketListPage> {
           planned_date,
           job_code,
           device_model,
+          device_brand,
           missing_parts, 
           customers (
             id,
@@ -145,8 +185,16 @@ class _TicketListPageState extends State<TicketListPage> {
             address
           )
         ''')
-        .neq('status', 'done')
-        .order('created_at', ascending: false);
+        .neq('status', 'done');
+    
+    // Teknisyenler için draft durumundaki işleri filtrele
+    if (!isAdminOrManager) {
+      query = query.neq('status', 'draft');
+    }
+    
+    final response = await query
+        .order('created_at', ascending: false)
+        .limit(_pageLimit);
 
     final List data = response as List;
     return data.cast<Map<String, dynamic>>();
@@ -222,11 +270,13 @@ class _TicketListPageState extends State<TicketListPage> {
     return tickets.where((ticket) {
       final status = (ticket['status'] as String?) ?? '';
       final priority = (ticket['priority'] as String?) ?? '';
+      final plannedDateStr = ticket['planned_date'] as String?;
 
       final customer =
           ticket['customers'] as Map<String, dynamic>? ?? <String, dynamic>{};
       final title = (ticket['title'] as String?) ?? '';
       final customerName = (customer['name'] as String?) ?? '';
+      final jobCode = (ticket['job_code'] as String?) ?? '';
 
       if (_statusFilter != 'all' && status != _statusFilter) {
         return false;
@@ -236,17 +286,127 @@ class _TicketListPageState extends State<TicketListPage> {
         return false;
       }
 
+      // Tarih filtresi (planned_date'e göre)
+      if (_startDate != null || _endDate != null) {
+        if (plannedDateStr == null || plannedDateStr.isEmpty) {
+          return false;
+        }
+        DateTime? ticketDate;
+        try {
+          ticketDate = DateTime.tryParse(plannedDateStr);
+        } catch (_) {
+          ticketDate = null;
+        }
+        if (ticketDate == null) return false;
+
+        final d = DateTime(ticketDate.year, ticketDate.month, ticketDate.day);
+        if (_startDate != null) {
+          final s = DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
+          if (d.isBefore(s)) return false;
+        }
+        if (_endDate != null) {
+          final e = DateTime(_endDate!.year, _endDate!.month, _endDate!.day);
+          if (d.isAfter(e)) return false;
+        }
+      }
+
       if (search.isNotEmpty) {
         final normalizedTitle = _normalizeTurkish(title);
         final normalizedCustomerName = _normalizeTurkish(customerName);
-        final combined = '$normalizedTitle $normalizedCustomerName';
-        if (!combined.contains(search)) {
-          return false;
+        final normalizedJobCode = _normalizeTurkish(jobCode);
+        final combined = '$normalizedTitle $normalizedCustomerName $normalizedJobCode';
+
+        // 1) Normal metin araması (başlık + müşteri + iş kodu)
+        bool matches = combined.contains(search);
+
+        // 2) Ek: Sadece rakamdan oluşan aramalarda iş kodu rakamları içinde ara
+        // Örn: H-001-23 için "23" veya "00123" gibi aramalar
+        if (!matches) {
+          final digitsInSearch = search.replaceAll(RegExp(r'\D'), '');
+          if (digitsInSearch.isNotEmpty) {
+            final jobCodeDigits = jobCode.replaceAll(RegExp(r'\D'), '');
+            if (jobCodeDigits.contains(digitsInSearch)) {
+              matches = true;
+            }
+          }
         }
+
+        if (!matches) return false;
       }
 
       return true;
     }).toList();
+  }
+
+  /*
+  Future<void> _loadDeviceBrands() async {
+    try {
+      final brands = await _deviceBrandService.getAllBrands();
+      if (mounted) {
+        setState(() {
+          _deviceBrands = brands;
+        });
+      }
+    } catch (_) {
+      // tablo yoksa sessiz geç
+    }
+  }
+  */
+
+  Future<void> _pickStartDate() async {
+    final now = DateTime.now();
+    final initial = _startDate ?? now;
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: now.subtract(const Duration(days: 365 * 5)),
+      lastDate: now.add(const Duration(days: 365 * 5)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.corporateNavy,
+              onPrimary: Colors.white,
+              onSurface: AppColors.textDark,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() => _startDate = picked);
+    }
+  }
+
+  Future<void> _pickEndDate() async {
+    final now = DateTime.now();
+    final initial = _endDate ?? _startDate ?? now;
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: now.subtract(const Duration(days: 365 * 5)),
+      lastDate: now.add(const Duration(days: 365 * 5)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.corporateNavy,
+              onPrimary: Colors.white,
+              onSurface: AppColors.textDark,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() => _endDate = picked);
+    }
   }
 
   String _statusLabel(String status) {
@@ -335,6 +495,7 @@ class _TicketListPageState extends State<TicketListPage> {
     final isDark = theme.brightness == Brightness.dark;
     
     final customer = ticket['customers'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final deviceBrand = ticket['device_brand'] as String?; // Partner adı cihaz markası alanında
     final status = ticket['status'] as String? ?? '';
     final priority = ticket['priority'] as String? ?? '';
     final plannedDate = ticket['planned_date'] as String?;
@@ -355,8 +516,11 @@ class _TicketListPageState extends State<TicketListPage> {
           ? [BoxShadow(color: theme.cardTheme.shadowColor!, blurRadius: 8, offset: const Offset(0, 2))] 
           : null,
         border: Border.all(
-          color: hasMissingParts ? Colors.red.withOpacity(0.5) : theme.dividerColor.withOpacity(0.1),
-          width: hasMissingParts ? 1.5 : 1.0,
+          // Partner kullanıcılar için kırmızı çerçeve de gösterilmesin
+          color: (hasMissingParts && _userRole != 'partner_user')
+              ? Colors.red.withOpacity(0.5)
+              : theme.dividerColor.withOpacity(0.1),
+          width: (hasMissingParts && _userRole != 'partner_user') ? 1.5 : 1.0,
         ),
       ),
       child: Column(
@@ -414,6 +578,25 @@ class _TicketListPageState extends State<TicketListPage> {
               ),
             ],
           ),
+          if (deviceBrand != null && deviceBrand.trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.handshake_outlined, size: 14, color: theme.colorScheme.primary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    deviceBrand,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (plannedDate != null) ...[
              const SizedBox(height: 4),
              Row(
@@ -429,7 +612,8 @@ class _TicketListPageState extends State<TicketListPage> {
           ],
           
           // Eksik Parça Uyarısı
-          if (hasMissingParts) ...[
+          // Partner kullanıcılar iş listesinde stok eksikliği bilgisi görmesin
+          if (hasMissingParts && _userRole != 'partner_user') ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(8),
@@ -466,13 +650,14 @@ class _TicketListPageState extends State<TicketListPage> {
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => TicketDetailPage(ticketId: ticket['id'].toString()))).then((_) => _refresh()),
                 ),
                 const SizedBox(width: 8),
-                _TicketActionButton(
-                  label: 'Düzenle',
-                  icon: Icons.edit_outlined,
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EditTicketPage(ticketId: ticket['id'].toString()))).then((_) => _refresh()),
-                ),
-                // Teknisyenler silme yapamaz
-                if (_userRole != 'technician' && _userRole != 'pending') ...[
+                if (_userRole != 'partner_user')
+                  _TicketActionButton(
+                    label: 'Düzenle',
+                    icon: Icons.edit_outlined,
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EditTicketPage(ticketId: ticket['id'].toString()))).then((_) => _refresh()),
+                  ),
+                // Teknisyenler ve partner kullanıcılar silme yapamaz
+                if (_userRole != 'technician' && _userRole != 'pending' && _userRole != 'partner_user') ...[
                   const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
@@ -606,25 +791,62 @@ class _TicketListPageState extends State<TicketListPage> {
           ],
         ),
         actions: [
-          IconButton(
-             icon: const Icon(Icons.picture_as_pdf_outlined),
-             tooltip: 'Genel Rapor Al',
-             onPressed: () async {
-               // Rapor için ham veriyi (filtrelenmemiş) çekmemiz lazım
-               final tickets = await _ticketsFuture;
-               _createPdfReport(tickets);
-             },
-          ),
-          IconButton(
-            icon: Icon(
-              IsTakipApp.of(context)?.isDarkMode == true ? Icons.light_mode : Icons.dark_mode,
-            ),
-            tooltip: 'Tema Değiştir',
-            onPressed: () => IsTakipApp.of(context)?.toggleTheme(),
-          ),
-          IconButton(
-             icon: const Icon(Icons.refresh),
-             onPressed: _refresh,
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'Seçenekler',
+            onSelected: (value) async {
+              switch (value) {
+                case 'pdf_filtered':
+                  final tickets = await _ticketsFuture;
+                  final filtered = _applyFilters(tickets);
+                  _createPdfReport(filtered);
+                  break;
+                case 'pdf_all':
+                  final allTickets = await _fetchAllTicketsForReport();
+                  _createPdfReport(allTickets);
+                  break;
+                case 'toggle_theme':
+                  IsTakipApp.of(context)?.toggleTheme();
+                  break;
+                case 'refresh':
+                  _refresh();
+                  break;
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'pdf_filtered',
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(Icons.picture_as_pdf_outlined),
+                  title: Text('Filtrelenmiş listeyi PDF al'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'pdf_all',
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(Icons.picture_as_pdf),
+                  title: Text('Tüm işleri PDF al'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'toggle_theme',
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+                  title: Text(isDark ? 'Açık tema' : 'Koyu tema'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'refresh',
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(Icons.refresh),
+                  title: Text('Yenile'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -752,9 +974,9 @@ class _TicketListPageState extends State<TicketListPage> {
                         ),
                         
                         if (_filtersExpanded) ...[
-                           const SizedBox(height: 12),
-                           Row(
-                             children: [
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
                               Expanded(
                                 child: DropdownButtonFormField<String>(
                                   isExpanded: true,
@@ -783,16 +1005,85 @@ class _TicketListPageState extends State<TicketListPage> {
                                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                   ),
                                   items: const [
-                                     DropdownMenuItem(value: 'all', child: Text('Tümü', overflow: TextOverflow.ellipsis)),
-                                     DropdownMenuItem(value: 'low', child: Text('Düşük', overflow: TextOverflow.ellipsis)),
-                                     DropdownMenuItem(value: 'normal', child: Text('Normal', overflow: TextOverflow.ellipsis)),
-                                     DropdownMenuItem(value: 'high', child: Text('Yüksek', overflow: TextOverflow.ellipsis)),
+                                    DropdownMenuItem(value: 'all', child: Text('Tümü', overflow: TextOverflow.ellipsis)),
+                                    DropdownMenuItem(value: 'low', child: Text('Düşük', overflow: TextOverflow.ellipsis)),
+                                    DropdownMenuItem(value: 'normal', child: Text('Normal', overflow: TextOverflow.ellipsis)),
+                                    DropdownMenuItem(value: 'high', child: Text('Yüksek', overflow: TextOverflow.ellipsis)),
                                   ],
                                   onChanged: (val) => setState(() => _priorityFilter = val!),
                                 ),
                               ),
-                             ],
-                           ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: InkWell(
+                                  onTap: _pickStartDate,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: InputDecorator(
+                                    decoration: const InputDecoration(
+                                      labelText: 'Başlangıç Tarihi',
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          _startDate == null
+                                              ? 'Seçilmedi'
+                                              : DateFormat('dd.MM.yyyy').format(_startDate!),
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                        const Icon(Icons.calendar_today, size: 16),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: InkWell(
+                                  onTap: _pickEndDate,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: InputDecorator(
+                                    decoration: const InputDecoration(
+                                      labelText: 'Bitiş Tarihi',
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          _endDate == null
+                                              ? 'Seçilmedi'
+                                              : DateFormat('dd.MM.yyyy').format(_endDate!),
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                        const Icon(Icons.calendar_today, size: 16),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _statusFilter = 'all';
+                                  _priorityFilter = 'all';
+                                  // _deviceBrandFilter = 'all';
+                                  _startDate = null;
+                                  _endDate = null;
+                                });
+                              },
+                              child: const Text('Filtreleri Temizle'),
+                            ),
+                          ),
                         ],
                       ],
                     ),
@@ -801,38 +1092,62 @@ class _TicketListPageState extends State<TicketListPage> {
 
                 // Liste
                 if (filtered.isEmpty)
-                   SliverFillRemaining(
-                     hasScrollBody: false,
-                     child: Center(
-                       child: Column(
-                         mainAxisAlignment: MainAxisAlignment.center,
-                         children: [
-                           Icon(Icons.search_off, size: 64, color: theme.disabledColor),
-                           const SizedBox(height: 16),
-                           Text('Kayıt bulunamadı.', style: TextStyle(color: theme.disabledColor)),
-                         ],
-                       ),
-                     ),
-                   )
-                else
-                   SliverPadding(
-                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                     sliver: SliverList(
-                       delegate: SliverChildBuilderDelegate(
-                         (context, index) => _buildTicketCard(filtered[index]),
-                         childCount: filtered.length,
-                       ),
-                     ),
-                   ),
-                   
-                const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.search_off, size: 64, color: theme.disabledColor),
+                          const SizedBox(height: 16),
+                          Text('Kayıt bulunamadı.', style: TextStyle(color: theme.disabledColor)),
+                        ],
+                      ),
+                    ),
+                  )
+                else ...[
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => _buildTicketCard(filtered[index]),
+                        childCount: filtered.length,
+                      ),
+                    ),
+                  ),
+                  if (tickets.length >= _pageLimit)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 24),
+                        child: Center(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _pageLimit += 50;
+                                _ticketsFuture = _fetchTickets();
+                              });
+                            },
+                            icon: const Icon(Icons.expand_more),
+                            label: Text('Daha Fazla Yükle ($_pageLimit+)'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.corporateNavy,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
+                ],
               ],
             ),
           );
         },
       ),
-      // Teknisyenler yeni iş açamaz
-      floatingActionButton: (_userRole != 'technician' && _userRole != 'pending')
+      // Teknisyenler, partner kullanıcılar ve onay bekleyenler yeni iş açamaz
+      floatingActionButton: (_userRole != 'technician' && _userRole != 'pending' && _userRole != 'partner_user')
           ? FloatingActionButton.extended(
               backgroundColor: theme.colorScheme.primary,
               foregroundColor: Colors.white,

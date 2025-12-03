@@ -87,7 +87,7 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: AppColors.surfaceWhite,
-      title: const Text('Teknisyen Notu Ekle', style: TextStyle(color: AppColors.corporateNavy)),
+      title: const Text('Servis Notu Ekle', style: TextStyle(color: AppColors.corporateNavy)),
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(

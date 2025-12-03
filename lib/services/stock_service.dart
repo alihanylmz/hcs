@@ -279,6 +279,35 @@ class StockService {
 
   // --- MARKA MODELLERİ YÖNETİMİ ---
   
+  /// Varsayılan markaları veritabanına yükler (eğer yoksa)
+  Future<void> initializeDefaultBrands() async {
+    await _ensureCategoryDefaults('Sürücü', driveBrands);
+    await _ensureCategoryDefaults('PLC', plcModels);
+    await _ensureCategoryDefaults('HMI', hmiBrands);
+  }
+
+  Future<void> _ensureCategoryDefaults(String category, List<String> defaults) async {
+    try {
+      final response = await _supabase
+          .from('brand_models')
+          .select('id')
+          .eq('category', category)
+          .limit(1);
+      
+      if ((response as List).isEmpty) {
+        debugPrint('$category için varsayılan markalar yükleniyor...');
+        for (var brand in defaults) {
+          if (brand == 'Diğer') continue;
+          try {
+            await addBrand(brand, category);
+          } catch (_) {} // Zaten varsa geç
+        }
+      }
+    } catch (e) {
+      debugPrint('$category varsayılanları yükleme hatası: $e');
+    }
+  }
+  
   /// Belirli bir markanın alt modellerini getirir (kategoriye göre)
   Future<List<String>> getBrandModels(String brandName, String category) async {
     try {

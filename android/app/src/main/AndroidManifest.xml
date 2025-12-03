@@ -1,8 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- İNTERNET İZNİ (Supabase ve API erişimi için zorunlu) -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Dosya okuma/yazma izinleri (PDF indirme/yükleme için gerekebilir) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+
     <application
-        android:label="istakip_app"
+        android:label="HCS İş Takip"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
+        android:usesCleartextTraffic="true"
+        android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"

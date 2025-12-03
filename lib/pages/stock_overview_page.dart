@@ -361,6 +361,21 @@ import 'brand_models_settings_page.dart';
 
     @override
     Widget build(BuildContext context) {
+      // Partner kullanıcılar stok sayfasını hiç kullanamasın
+      if (_userProfile?.role == 'partner_user') {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Stok Yönetimi'),
+          ),
+          body: const Center(
+            child: Text(
+              'Bu sayfaya erişim yetkiniz yok.',
+              style: TextStyle(fontSize: 16),
+            ),
+          ),
+        );
+      }
+
       final theme = Theme.of(context);
       final isDark = theme.brightness == Brightness.dark;
       final filteredList = _getFilteredStocks();
@@ -886,8 +901,8 @@ import 'brand_models_settings_page.dart';
       _manualNameCtrl = TextEditingController(text: item?['name']);
       _selectedUnit = item?['unit'] ?? 'adet';
       
-      // Sürücü için veritabanından markaları yükle
-      if (widget.type == 'Sürücü' && widget.editItem == null) {
+      // Veritabanından markaları yükle (Sürücü, PLC, HMI için)
+      if ((widget.type == 'Sürücü' || widget.type == 'PLC' || widget.type == 'HMI') && widget.editItem == null) {
         _loadBrands();
       }
     }
@@ -895,20 +910,23 @@ import 'brand_models_settings_page.dart';
     Future<void> _loadBrands() async {
       setState(() => _loadingBrands = true);
       try {
-        final brands = await _stockService.getBrandsByCategory('Sürücü');
-        // Sabit listeyi de ekle (geriye dönük uyumluluk için)
-        final allBrands = {...StockService.driveBrands, ...brands}.toList();
+        final brands = await _stockService.getBrandsByCategory(widget.type);
+        
         if (mounted) {
           setState(() {
-            _availableBrands = allBrands;
+            _availableBrands = brands; // Sadece veritabanından gelenleri kullan
             _loadingBrands = false;
           });
         }
       } catch (e) {
-        // Hata durumunda sabit listeyi kullan
+        // Hata durumunda boş liste veya varsayılanlar?
+        // Kullanıcı silinebilir olmasını istediği için boş liste dönmek daha mantıklı.
+        // Ama hata varsa belki de ağ hatasıdır.
         if (mounted) {
           setState(() {
-            _availableBrands = StockService.driveBrands;
+             // Hata durumunda ne yapılacağına karar verilebilir
+             // Şimdilik boş bırakalım, kullanıcı manuel ekleyebilir
+            _availableBrands = [];
             _loadingBrands = false;
           });
         }
@@ -990,23 +1008,93 @@ import 'brand_models_settings_page.dart';
                     validator: (v) => v == null ? 'Seçiniz' : null,
                   ),
                 ] else if (widget.type == 'PLC') ...[
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: 'Marka/Model'),
-                      items: StockService.plcModels.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                      onChanged: (v) {
-                        if (mounted) setState(() => _selectedBrand = v);
-                      },
-                      validator: (v) => v == null ? 'Seçiniz' : null,
-                    ),
+                    if (_loadingBrands)
+                      const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
+                    else
+                      DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(labelText: 'Marka'),
+                        items: (_availableBrands.isEmpty 
+                            ? StockService.plcModels 
+                            : _availableBrands)
+                            .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                            .toList(),
+                        onChanged: (v) async {
+                          if (mounted) {
+                            setState(() {
+                              _selectedBrand = v;
+                              _selectedModel = null;
+                              _availableModels = [];
+                            });
+                            
+                            // Marka seçildiğinde alt modelleri yükle
+                            if (v != null && v != 'Diğer') {
+                              final models = await _stockService.getBrandModels(v, 'PLC');
+                              if (mounted) {
+                                setState(() {
+                                  _availableModels = models;
+                                });
+                              }
+                            }
+                          }
+                        },
+                        validator: (v) => v == null ? 'Seçiniz' : null,
+                      ),
+                    // Alt model seçimi
+                    if (_selectedBrand != null && _selectedBrand != 'Diğer' && _availableModels.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(labelText: 'Model'),
+                        items: _availableModels.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                        onChanged: (v) {
+                          if (mounted) setState(() => _selectedModel = v);
+                        },
+                        validator: (v) => v == null ? 'Seçiniz' : null,
+                      ),
+                    ],
                   ] else if (widget.type == 'HMI') ...[
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: 'Marka'),
-                      items: StockService.hmiBrands.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                      onChanged: (v) {
-                        if (mounted) setState(() => _selectedBrand = v);
-                      },
-                      validator: (v) => v == null ? 'Seçiniz' : null,
-                    ),
+                    if (_loadingBrands)
+                      const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
+                    else
+                      DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(labelText: 'Marka'),
+                        items: (_availableBrands.isEmpty 
+                            ? StockService.hmiBrands 
+                            : _availableBrands)
+                            .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                            .toList(),
+                        onChanged: (v) async {
+                          if (mounted) {
+                            setState(() {
+                              _selectedBrand = v;
+                              _selectedModel = null;
+                              _availableModels = [];
+                            });
+                            
+                            // Marka seçildiğinde alt modelleri yükle
+                            if (v != null && v != 'Diğer') {
+                              final models = await _stockService.getBrandModels(v, 'HMI');
+                              if (mounted) {
+                                setState(() {
+                                  _availableModels = models;
+                                });
+                              }
+                            }
+                          }
+                        },
+                        validator: (v) => v == null ? 'Seçiniz' : null,
+                      ),
+                    // Alt model seçimi
+                    if (_selectedBrand != null && _selectedBrand != 'Diğer' && _availableModels.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(labelText: 'Model'),
+                        items: _availableModels.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                        onChanged: (v) {
+                          if (mounted) setState(() => _selectedModel = v);
+                        },
+                        validator: (v) => v == null ? 'Seçiniz' : null,
+                      ),
+                    ],
                     const SizedBox(height: 10),
                     DropdownButtonFormField<double>(
                       decoration: const InputDecoration(labelText: 'Ekran Boyutu (inç)'),
@@ -1109,7 +1197,11 @@ import 'brand_models_settings_page.dart';
                     }
                     return;
                   }
-                  finalName = '$_selectedBrand PLC';
+                  if (_selectedModel != null && _selectedModel!.isNotEmpty) {
+                    finalName = '$_selectedBrand $_selectedModel PLC';
+                  } else {
+                    finalName = '$_selectedBrand PLC';
+                  }
                 } else if (widget.type == 'HMI') {
                   if (_selectedHmiSize == null || _selectedBrand == null) {
                     if (mounted) {
@@ -1120,7 +1212,11 @@ import 'brand_models_settings_page.dart';
                     return;
                   }
                   final inchStr = StockService.formatInch(_selectedHmiSize!);
-                  finalName = '$_selectedBrand $inchStr inç HMI';
+                  if (_selectedModel != null && _selectedModel!.isNotEmpty) {
+                    finalName = '$_selectedBrand $_selectedModel $inchStr inç HMI';
+                  } else {
+                    finalName = '$_selectedBrand $inchStr inç HMI';
+                  }
                 } else {
                   finalName = _manualNameCtrl.text.trim();
                   if (finalName.isEmpty) {

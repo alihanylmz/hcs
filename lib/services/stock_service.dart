@@ -8,7 +8,7 @@ class StockService {
   // --- SABİT LİSTELER ---
   static const List<String> categories = ['Sürücü', 'PLC', 'HMI', 'Şalt', 'Sensör', 'Diğer'];
   
-  static const List<String> driveBrands = ['Danfoss', 'GMT', 'INVT', 'ABB', 'Schneider', 'Diğer'];
+  // static const List<String> driveBrands = ['Danfoss', 'GMT', 'INVT', 'ABB', 'Schneider', 'Diğer']; // Kaldırıldı
   static const List<String> plcModels = ['GMT', 'Siemens', 'Delta', 'Fatek', 'Diğer'];
   
   static const List<String> hmiBrands = ['ABB', 'Weintek', 'GMT', 'Diğer'];
@@ -281,7 +281,7 @@ class StockService {
   
   /// Varsayılan markaları veritabanına yükler (eğer yoksa)
   Future<void> initializeDefaultBrands() async {
-    await _ensureCategoryDefaults('Sürücü', driveBrands);
+    // await _ensureCategoryDefaults('Sürücü', driveBrands); // Kaldırıldı
     await _ensureCategoryDefaults('PLC', plcModels);
     await _ensureCategoryDefaults('HMI', hmiBrands);
   }

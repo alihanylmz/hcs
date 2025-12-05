@@ -139,6 +139,7 @@ class TicketService {
       'ticket_id': queryId,
       'note': note,
       'user_id': user?.id,
+      'note_type': 'service_note', // Servis notu
     };
 
     if (imageUrls != null && imageUrls.isNotEmpty) {
@@ -150,6 +151,30 @@ class TicketService {
     // Bildirim gönder (asenkron, hata olsa bile işlem devam etsin)
     _sendNoteNotification(ticketId).catchError((e) {
       debugPrint('Bildirim gönderme hatası: $e');
+    });
+  }
+
+  /// Partner notu ekler (sadece partner kullanıcıları için)
+  Future<void> addPartnerNote(String ticketId, String note, [List<String>? imageUrls]) async {
+    dynamic queryId = int.tryParse(ticketId) ?? ticketId;
+    final user = _supabase.auth.currentUser;
+
+    final Map<String, dynamic> data = {
+      'ticket_id': queryId,
+      'note': note,
+      'user_id': user?.id,
+      'note_type': 'partner_note', // Partner notu
+    };
+
+    if (imageUrls != null && imageUrls.isNotEmpty) {
+      data['image_urls'] = imageUrls;
+    }
+
+    await _supabase.from('ticket_notes').insert(data);
+    
+    // Partner notu eklendiğinde admin ve manager'lara bildirim gönder
+    _sendPartnerNoteNotification(ticketId).catchError((e) {
+      debugPrint('Partner notu bildirimi gönderme hatası: $e');
     });
   }
 
@@ -180,6 +205,28 @@ class TicketService {
       );
     } catch (e) {
       debugPrint('Not bildirimi gönderme hatası: $e');
+    }
+  }
+
+  /// Partner notu eklendiğinde admin ve manager'lara bildirim gönderir
+  Future<void> _sendPartnerNoteNotification(String ticketId) async {
+    try {
+      final ticket = await getTicket(ticketId);
+      if (ticket == null) return;
+      
+      final ticketTitle = ticket['title'] as String? ?? 'İş Emri';
+      final jobCode = ticket['job_code'] as String?;
+      final currentUser = await _userService.getCurrentUserProfile();
+      final userName = currentUser?.fullName ?? 'Kullanıcı';
+      
+      await _notificationService.notifyPartnerNoteAdded(
+        ticketId: ticketId,
+        ticketTitle: ticketTitle,
+        noteAuthor: userName,
+        jobCode: jobCode,
+      );
+    } catch (e) {
+      debugPrint('Partner notu bildirimi gönderme hatası: $e');
     }
   }
 

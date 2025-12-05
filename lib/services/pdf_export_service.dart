@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
 import '../services/stock_service.dart';
 
 import 'package:intl/intl.dart'; // <--- Eklendi
@@ -59,6 +60,30 @@ class PdfExportService {
       return pw.MemoryImage(bytes);
     } catch (e) {
       print('İmza decode hatası: $e');
+      return null;
+    }
+  }
+
+  /// Point logosunu yükler (sadece PNG)
+  static Future<pw.ImageProvider?> _loadPointLogo() async {
+    try {
+      final pngData = await rootBundle.load('assets/images/point.png');
+      final pngBytes = pngData.buffer.asUint8List();
+      return pw.MemoryImage(pngBytes);
+    } catch (e) {
+      print('Point logosu yüklenemedi: $e');
+      return null;
+    }
+  }
+
+  /// Vensa logosunu yükler (sadece PNG)
+  static Future<pw.ImageProvider?> _loadVensaLogo() async {
+    try {
+      final pngData = await rootBundle.load('assets/images/vensa.png');
+      final pngBytes = pngData.buffer.asUint8List();
+      return pw.MemoryImage(pngBytes);
+    } catch (e) {
+      print('Vensa logosu yüklenemedi: $e');
       return null;
     }
   }
@@ -191,6 +216,10 @@ class PdfExportService {
               name,
               address,
               phone
+            ),
+            partners (
+              id,
+              name
             )
           ''')
           .eq('id', idValue)
@@ -204,6 +233,7 @@ class PdfExportService {
           .from('ticket_notes')
           .select('*, profiles(full_name, role)')
           .eq('ticket_id', idValue)
+          .neq('note_type', 'partner_note') // Partner notlarını PDF'den hariç tut
           .order('created_at', ascending: true);
       
       final notes = List<Map<String, dynamic>>.from(notesResponse);
@@ -211,7 +241,22 @@ class PdfExportService {
       // Notlara eklenen resimleri indir ve PDF'e uygun nesnelere dönüştür
       final enrichedNotes = await _enrichNotesWithImages(notes);
 
-      final pdf = await _generateSingleTicketPdf(ticket, enrichedNotes);
+      // Partner kontrolü - Point ve Vensa için özel PDF tasarımı
+      final partner = ticket['partners'] as Map<String, dynamic>?;
+      final partnerName = partner?['name'] as String?;
+      
+      pw.Document pdf;
+      if (partnerName != null && partnerName.toLowerCase().contains('point')) {
+        // Point partner'ı için özel PDF tasarımı
+        pdf = await _generatePointTicketPdf(ticket, enrichedNotes);
+      } else if (partnerName != null && partnerName.toLowerCase().contains('vensa')) {
+        // Vensa partner'ı için özel PDF tasarımı
+        pdf = await _generateVensaTicketPdf(ticket, enrichedNotes);
+      } else {
+        // Standart PDF tasarımı
+        pdf = await _generateSingleTicketPdf(ticket, enrichedNotes);
+      }
+      
       return await pdf.save();
     } catch (e) {
       throw Exception('PDF oluşturma hatası: $e');
@@ -441,6 +486,19 @@ class PdfExportService {
                         text,
                         style: pw.TextStyle(font: turkishFont, fontSize: 10),
                       ),
+                      // Eğer notta resim varsa açıklama ekle
+                      if ((note['pdf_images'] as List<pw.ImageProvider>?)?.isNotEmpty ?? false) ...[
+                        pw.SizedBox(height: 6),
+                        pw.Text(
+                          'İlgili servise ait resimler ektedir.',
+                          style: pw.TextStyle(
+                            font: turkishFont,
+                            fontSize: 9,
+                            color: PdfColors.grey700,
+                            fontStyle: pw.FontStyle.italic,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 );
@@ -535,6 +593,822 @@ class PdfExportService {
     );
     return pdf;
   }
+
+  /// Point partner'ı için özel PDF tasarımı - Kırmızı tema
+  static Future<pw.Document> _generatePointTicketPdf(Map<String, dynamic> ticket, List<Map<String, dynamic>> notes) async {
+    final pdf = pw.Document();
+    final turkishFont = await _loadTurkishFont();
+    final pointLogo = await _loadPointLogo();
+
+    final customer = ticket['customers'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final status = ticket['status'] as String? ?? 'open';
+    final partner = ticket['partners'] as Map<String, dynamic>?;
+    final partnerName = partner?['name'] as String? ?? 'Point';
+    
+    // Point için özel renkler - Professional Corporate Red
+    const pointPrimaryColor = PdfColor.fromInt(0xFFD32F2F); // Professional Corporate Red
+    const pointAccentColor = PdfColor.fromInt(0xFF424242); // Dark Grey (replaces Teal)
+    const pointLightBgColor = PdfColors.grey100; // Keep light background for printer-friendly
+    
+    // Şirket bilgileri
+    const companyAddress = 'Dağyaka Mahallesi 2022.Cad No:18/1, KahramanKazan/ANKARA';
+    const companyPhone = '+90 (312) 394 57 69';
+    const companyFax = '+90 (312) 394 32 79';
+    const companyEmail = 'info@hytgrup.com';
+
+    // Teknik Veriler
+    final aspKw = ticket['aspirator_kw'];
+    final vantKw = ticket['vant_kw'];
+    final komp1Kw = ticket['kompresor_kw_1'];
+    // final komp2Kw = ticket['kompresor_kw_2']; // Kullanılmıyorsa warning vermesin diye kapadım
+    final hmiBrand = ticket['hmi_brand'];
+    final hmiSize = ticket['hmi_size'];
+
+    pdf.addPage(
+      pw.MultiPage(
+        // ✅ DÜZELTME: pageFormat, margin ve theme'i pageTheme içine taşıdık, çakışma yok artık
+        pageTheme: pw.PageTheme(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+          theme: pw.ThemeData.withFont(base: turkishFont, bold: turkishFont),
+          // buildBackground her sayfanın en altına çizilir
+          buildBackground: (context) {
+            if (pointLogo == null) return pw.SizedBox();
+            return pw.FullPage(
+              ignoreMargins: true,
+              child: pw.Center(
+                child: pw.Opacity(
+                  opacity: 0.08,
+                  child: pw.Image(
+                    pointLogo,
+                    width: 400,
+                    height: 400,
+                    fit: pw.BoxFit.contain,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        header: (pw.Context context) {
+          return pw.Column(
+            children: [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Row(
+                    children: [
+                      if (pointLogo != null) ...[
+                        pw.Container(
+                          width: 130,
+                          height: 130,
+                          child: pw.Image(pointLogo, fit: pw.BoxFit.contain),
+                        ),
+                        pw.SizedBox(width: 12),
+                      ],
+                      pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                        pw.Text(
+                          'Teknik Servis İş Emri ve Servis Formu',
+                          style: pw.TextStyle(
+                            font: turkishFont,
+                            fontSize: 14,
+                            fontWeight: pw.FontWeight.bold,
+                            color: pointPrimaryColor,
+                          ),
+                        ),
+                      ]),
+                    ],
+                  ),
+                  pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: pw.BoxDecoration(
+                        color: pointLightBgColor,
+                        borderRadius: pw.BorderRadius.circular(4),
+                        border: pw.Border.all(color: PdfColors.grey300),
+                      ),
+                      child: pw.Text(
+                        'İŞ NO: ${_safeText(ticket['job_code'])}',
+                        style: pw.TextStyle(
+                          font: turkishFont,
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      'Tarih: ${_formatDate(DateTime.now().toIso8601String())}',
+                      style: pw.TextStyle(
+                        font: turkishFont,
+                        fontSize: 9,
+                        color: PdfColors.grey600,
+                      ),
+                    ),
+                  ]),
+                ],
+              ),
+              pw.SizedBox(height: 10),
+              pw.Divider(color: pointPrimaryColor, thickness: 2),
+            ],
+          );
+        },
+        footer: (pw.Context context) {
+          return pw.Column(
+            children: [
+              _buildSignatureSection(ticket, turkishFont),
+              pw.SizedBox(height: 10),
+              pw.Center(
+                child: pw.Text(
+                  '$companyAddress | Tel: $companyPhone | Fax: $companyFax | $companyEmail',
+                  style: pw.TextStyle(
+                    font: turkishFont,
+                    fontSize: 7,
+                    color: PdfColors.grey600,
+                  ),
+                  textAlign: pw.TextAlign.center,
+                ),
+              ),
+              pw.SizedBox(height: 6),
+              pw.Center(
+                child: pw.Text(
+                  'Bu belge dijital olarak oluşturulmuştur.',
+                  style: pw.TextStyle(
+                    font: turkishFont,
+                    fontSize: 8,
+                    color: PdfColors.grey500,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+        build: (pw.Context context) {
+          // 🛠️ ARTIK BURADA STACK KULLANMIYORUZ, DİREKT LİSTE DÖNÜYORUZ
+          return [
+            // Müşteri ve Servis Bilgileri
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(flex: 5, child: pw.Column(children: [
+                  _buildPointSectionHeader('Müşteri Bilgileri', turkishFont, pointPrimaryColor, pointAccentColor),
+                  pw.Container(padding: const pw.EdgeInsets.all(10), decoration: pw.BoxDecoration(color: pointLightBgColor, borderRadius: pw.BorderRadius.circular(5)), child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                    _buildInfoRow('Ünvan', _safeText(customer['name']), turkishFont, isFullWidth: true),
+                    pw.SizedBox(height: 5),
+                    _buildInfoRow('Telefon', _safeText(customer['phone']), turkishFont),
+                    pw.Divider(height: 10),
+                    _buildInfoRow('Adres', _safeText(customer['address']), turkishFont, isFullWidth: true),
+                  ])),
+                ])),
+                pw.SizedBox(width: 20),
+                pw.Expanded(flex: 4, child: pw.Column(children: [
+                  _buildPointSectionHeader('Servis Detayları', turkishFont, pointPrimaryColor, pointAccentColor),
+                  pw.Container(padding: const pw.EdgeInsets.all(10), decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey300), borderRadius: pw.BorderRadius.circular(5)), child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                    _buildInfoRow('Cihaz', _safeText(ticket['device_model']), turkishFont),
+                    pw.Divider(),
+                    pw.Row(children: [
+                      pw.Expanded(child: _buildInfoRow('Tarih', _formatDate(ticket['planned_date'] as String?), turkishFont)),
+                      pw.Expanded(child: _buildInfoRow('Durum', _statusLabels[status] ?? status, turkishFont)),
+                    ]),
+                  ])),
+                ])),
+              ],
+            ),
+            
+            // İş Açıklaması
+            _buildPointSectionHeader('İş Açıklaması', turkishFont, pointPrimaryColor, pointAccentColor),
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey400),
+                borderRadius: pw.BorderRadius.circular(5),
+              ),
+              child: pw.Text(
+                _stripAttachedPdfText(ticket['description'] as String?),
+                style: pw.TextStyle(font: turkishFont, fontSize: 10),
+              ),
+            ),
+
+            // Teknik Bilgiler
+            if (aspKw != null || vantKw != null || komp1Kw != null || hmiBrand != null) ...[
+              _buildPointSectionHeader('Teknik Bilgiler', turkishFont, pointPrimaryColor, pointAccentColor),
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                children: [
+                  pw.TableRow(decoration: const pw.BoxDecoration(color: pointLightBgColor), children: [
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Bileşen', style: pw.TextStyle(font: turkishFont, fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Detay', style: pw.TextStyle(font: turkishFont, fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                  ]),
+                  if (aspKw != null) 
+                    _buildZebraRow('Aspiratör', '${_safeText(aspKw)} kW', turkishFont, 0),
+                  if (vantKw != null) 
+                    _buildZebraRow('Vantilatör', '${_safeText(vantKw)} kW', turkishFont, 1),
+                  if (komp1Kw != null) 
+                    _buildZebraRow('Kompresör 1', '${_safeText(komp1Kw)} kW', turkishFont, 0),
+                  if (hmiBrand != null) 
+                    _buildZebraRow('HMI Ekran', '${_safeText(hmiBrand)} - ${_safeText(hmiSize)} inç', turkishFont, 1),
+                ],
+              ),
+            ],
+
+            // Servis Notları
+            if (notes.isNotEmpty) ...[
+              _buildPointSectionHeader('Servis Notları', turkishFont, pointPrimaryColor, pointAccentColor),
+              pw.Column(
+                children: notes.map<pw.Widget>((note) {
+                  final date = _formatDate(note['created_at']);
+                  final profile = note['profiles'] as Map<String, dynamic>?;
+                  final author = profile?['full_name'] ?? 'Teknisyen';
+                  final role = profile?['role'] as String?;
+                  String? roleLabel;
+                  if (role == 'technician') {
+                    roleLabel = 'Teknisyen';
+                  } else if (role == 'manager' || role == 'admin') {
+                    roleLabel = 'Mühendis';
+                  }
+                  final text = _stripAttachedPdfText(note['note'] as String?);
+                  
+                  return pw.Container(
+                    width: double.infinity,
+                    margin: const pw.EdgeInsets.only(bottom: 8),
+                    padding: const pw.EdgeInsets.all(8),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.grey100,
+                      borderRadius: pw.BorderRadius.circular(4),
+                      border: pw.Border.all(color: PdfColors.grey300),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text(
+                              roleLabel != null ? '$author ($roleLabel)' : author,
+                              style: pw.TextStyle(
+                                font: turkishFont,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 9,
+                                color: pointAccentColor,
+                              ),
+                            ),
+                            pw.Text(
+                              date,
+                              style: pw.TextStyle(
+                                font: turkishFont,
+                                fontSize: 8,
+                                color: PdfColors.grey600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          text,
+                          style: pw.TextStyle(font: turkishFont, fontSize: 10),
+                        ),
+                        // Eğer notta resim varsa açıklama ekle
+                        if ((note['pdf_images'] as List<pw.ImageProvider>?)?.isNotEmpty ?? false) ...[
+                          pw.SizedBox(height: 6),
+                          pw.Text(
+                            'İlgili servise ait resimler ektedir.',
+                            style: pw.TextStyle(
+                              font: turkishFont,
+                              fontSize: 9,
+                              color: PdfColors.grey700,
+                              fontStyle: pw.FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+
+            // EK SAYFASI: FOTOĞRAFLAR (EK.1)
+            // Stack'e gerek yok, MultiPage otomatik sayfa atlatır.
+            if (notes.any((n) => ((n['pdf_images'] as List<pw.ImageProvider>?)?.isNotEmpty ?? false))) ...[
+              pw.NewPage(),
+              _buildPointSectionHeader('EK.1 - SERVİS FOTOĞRAF EKLERİ', turkishFont, pointPrimaryColor, pointAccentColor),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                'Tarih: ${_formatDate(DateTime.now().toIso8601String())}',
+                style: pw.TextStyle(font: turkishFont, fontSize: 8, color: PdfColors.grey600),
+              ),
+              pw.SizedBox(height: 8),
+              ...notes.map<pw.Widget>((note) {
+                final List<pw.ImageProvider> images =
+                    (note['pdf_images'] as List<pw.ImageProvider>?) ?? const [];
+                if (images.isEmpty) {
+                  return pw.SizedBox();
+                }
+
+                final date = _formatDate(note['created_at']);
+                final author = note['profiles']?['full_name'] ?? 'Teknisyen';
+
+                // 4 kolondan oluşan grid: her satırda 4 fotoğraf
+                const cols = 4;
+                const double cellSize = 110; // A4 sayfa için yaklaşık kare boyutu
+
+                final List<pw.TableRow> rows = [];
+                for (var i = 0; i < images.length; i += cols) {
+                  final rowChildren = <pw.Widget>[];
+                  for (var c = 0; c < cols; c++) {
+                    final index = i + c;
+                    if (index < images.length) {
+                      rowChildren.add(
+                        pw.Container(
+                          width: cellSize,
+                          height: cellSize,
+                          margin: const pw.EdgeInsets.all(2),
+                          decoration: pw.BoxDecoration(
+                            borderRadius: pw.BorderRadius.circular(4),
+                            border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                          ),
+                          child: pw.ClipRect(
+                            child: pw.Image(
+                              images[index],
+                              fit: pw.BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      );
+                    } else {
+                      rowChildren.add(pw.SizedBox(width: cellSize, height: cellSize));
+                    }
+                  }
+                  rows.add(pw.TableRow(children: rowChildren));
+                }
+
+                return pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      '$author - $date',
+                      style: pw.TextStyle(
+                        font: turkishFont,
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: pointPrimaryColor,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Table(
+                      defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+                      children: rows,
+                    ),
+                    pw.SizedBox(height: 12),
+                  ],
+                );
+              }).toList(),
+            ],
+          ];
+        },
+      ),
+    );
+    return pdf;
+  }
+
+  /// Vensa partner'ı için özel PDF tasarımı - Mavi tema
+  static Future<pw.Document> _generateVensaTicketPdf(Map<String, dynamic> ticket, List<Map<String, dynamic>> notes) async {
+    final pdf = pw.Document();
+    final turkishFont = await _loadTurkishFont();
+    final vensaLogo = await _loadVensaLogo();
+
+    final customer = ticket['customers'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final status = ticket['status'] as String? ?? 'open';
+    final partner = ticket['partners'] as Map<String, dynamic>?;
+    final partnerName = partner?['name'] as String? ?? 'Vensa';
+    
+    // Vensa için özel renkler - Professional Corporate Blue
+    const vensaPrimaryColor = PdfColor.fromInt(0xFF1976D2); // Material Blue 700
+    const vensaAccentColor = PdfColor.fromInt(0xFF1565C0); // Material Blue 800
+    const vensaLightBgColor = PdfColors.grey100; // Keep light background for printer-friendly
+    
+    // Şirket bilgileri - Vensa
+    const companyAddress = 'Pursaklar Sanayi Sitesi 1643. Cad. No: 18 Altındağ, Ankara, Türkiye';
+    const companyPhone = '+90 312 528 14 14';
+    const companyEmail = 'info@vensaart.com';
+
+    // Teknik Veriler
+    final aspKw = ticket['aspirator_kw'];
+    final vantKw = ticket['vant_kw'];
+    final komp1Kw = ticket['kompresor_kw_1'];
+    final hmiBrand = ticket['hmi_brand'];
+    final hmiSize = ticket['hmi_size'];
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageTheme: pw.PageTheme(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+          theme: pw.ThemeData.withFont(base: turkishFont, bold: turkishFont),
+          // buildBackground her sayfanın en altına çizilir
+          buildBackground: (context) {
+            if (vensaLogo == null) return pw.SizedBox();
+            return pw.FullPage(
+              ignoreMargins: true,
+              child: pw.Center(
+                child: pw.Opacity(
+                  opacity: 0.08,
+                  child: pw.Image(
+                    vensaLogo,
+                    width: 400,
+                    height: 400,
+                    fit: pw.BoxFit.contain,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        header: (pw.Context context) {
+          return pw.Column(
+            children: [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Row(
+                    children: [
+                      if (vensaLogo != null) ...[
+                        pw.Container(
+                          width: 140,
+                          height: 140,
+                          child: pw.Image(vensaLogo, fit: pw.BoxFit.contain),
+                        ),
+                        pw.SizedBox(width: 12),
+                      ],
+                      pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                        pw.Text(
+                          'Teknik Servis İş Emri ve Servis Formu',
+                          style: pw.TextStyle(
+                            font: turkishFont,
+                            fontSize: 14,
+                            fontWeight: pw.FontWeight.bold,
+                            color: vensaPrimaryColor,
+                          ),
+                        ),
+                      ]),
+                    ],
+                  ),
+                  pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: pw.BoxDecoration(
+                        color: vensaLightBgColor,
+                        borderRadius: pw.BorderRadius.circular(4),
+                        border: pw.Border.all(color: PdfColors.grey300),
+                      ),
+                      child: pw.Text(
+                        'İŞ NO: ${_safeText(ticket['job_code'])}',
+                        style: pw.TextStyle(
+                          font: turkishFont,
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      'Tarih: ${_formatDate(DateTime.now().toIso8601String())}',
+                      style: pw.TextStyle(
+                        font: turkishFont,
+                        fontSize: 9,
+                        color: PdfColors.grey600,
+                      ),
+                    ),
+                  ]),
+                ],
+              ),
+              pw.SizedBox(height: 10),
+              pw.Divider(color: vensaPrimaryColor, thickness: 2),
+            ],
+          );
+        },
+        footer: (pw.Context context) {
+          return pw.Column(
+            children: [
+              _buildSignatureSection(ticket, turkishFont),
+              pw.SizedBox(height: 10),
+              pw.Center(
+                child: pw.Column(
+                  children: [
+                    pw.Text(
+                      'Adres: $companyAddress',
+                      style: pw.TextStyle(
+                        font: turkishFont,
+                        fontSize: 7,
+                        color: PdfColors.grey600,
+                      ),
+                      textAlign: pw.TextAlign.center,
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'Telefon: $companyPhone E-Posta: $companyEmail',
+                      style: pw.TextStyle(
+                        font: turkishFont,
+                        fontSize: 7,
+                        color: PdfColors.grey600,
+                      ),
+                      textAlign: pw.TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 6),
+              pw.Center(
+                child: pw.Text(
+                  'Bu belge dijital olarak oluşturulmuştur.',
+                  style: pw.TextStyle(
+                    font: turkishFont,
+                    fontSize: 8,
+                    color: PdfColors.grey500,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+        build: (pw.Context context) {
+          return [
+            // Müşteri ve Servis Bilgileri
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(flex: 5, child: pw.Column(children: [
+                  _buildVensaSectionHeader('Müşteri Bilgileri', turkishFont, vensaPrimaryColor, vensaAccentColor),
+                  pw.Container(padding: const pw.EdgeInsets.all(10), decoration: pw.BoxDecoration(color: vensaLightBgColor, borderRadius: pw.BorderRadius.circular(5)), child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                    _buildInfoRow('Ünvan', _safeText(customer['name']), turkishFont, isFullWidth: true),
+                    pw.SizedBox(height: 5),
+                    _buildInfoRow('Telefon', _safeText(customer['phone']), turkishFont),
+                    pw.Divider(height: 10),
+                    _buildInfoRow('Adres', _safeText(customer['address']), turkishFont, isFullWidth: true),
+                  ])),
+                ])),
+                pw.SizedBox(width: 20),
+                pw.Expanded(flex: 4, child: pw.Column(children: [
+                  _buildVensaSectionHeader('Servis Detayları', turkishFont, vensaPrimaryColor, vensaAccentColor),
+                  pw.Container(padding: const pw.EdgeInsets.all(10), decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey300), borderRadius: pw.BorderRadius.circular(5)), child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                    _buildInfoRow('Cihaz', _safeText(ticket['device_model']), turkishFont),
+                    pw.Divider(),
+                    pw.Row(children: [
+                      pw.Expanded(child: _buildInfoRow('Tarih', _formatDate(ticket['planned_date'] as String?), turkishFont)),
+                      pw.Expanded(child: _buildInfoRow('Durum', _statusLabels[status] ?? status, turkishFont)),
+                    ]),
+                  ])),
+                ])),
+              ],
+            ),
+            
+            // İş Açıklaması
+            _buildVensaSectionHeader('İş Açıklaması', turkishFont, vensaPrimaryColor, vensaAccentColor),
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey400),
+                borderRadius: pw.BorderRadius.circular(5),
+              ),
+              child: pw.Text(
+                _stripAttachedPdfText(ticket['description'] as String?),
+                style: pw.TextStyle(font: turkishFont, fontSize: 10),
+              ),
+            ),
+
+            // Teknik Bilgiler
+            if (aspKw != null || vantKw != null || komp1Kw != null || hmiBrand != null) ...[
+              _buildVensaSectionHeader('Teknik Bilgiler', turkishFont, vensaPrimaryColor, vensaAccentColor),
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                children: [
+                  pw.TableRow(decoration: const pw.BoxDecoration(color: vensaLightBgColor), children: [
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Bileşen', style: pw.TextStyle(font: turkishFont, fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Detay', style: pw.TextStyle(font: turkishFont, fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                  ]),
+                  if (aspKw != null) 
+                    _buildZebraRow('Aspiratör', '${_safeText(aspKw)} kW', turkishFont, 0),
+                  if (vantKw != null) 
+                    _buildZebraRow('Vantilatör', '${_safeText(vantKw)} kW', turkishFont, 1),
+                  if (komp1Kw != null) 
+                    _buildZebraRow('Kompresör 1', '${_safeText(komp1Kw)} kW', turkishFont, 0),
+                  if (hmiBrand != null) 
+                    _buildZebraRow('HMI Ekran', '${_safeText(hmiBrand)} - ${_safeText(hmiSize)} inç', turkishFont, 1),
+                ],
+              ),
+            ],
+
+            // Servis Notları
+            if (notes.isNotEmpty) ...[
+              _buildVensaSectionHeader('Servis Notları', turkishFont, vensaPrimaryColor, vensaAccentColor),
+              pw.Column(
+                children: notes.map<pw.Widget>((note) {
+                  final date = _formatDate(note['created_at']);
+                  final profile = note['profiles'] as Map<String, dynamic>?;
+                  final author = profile?['full_name'] ?? 'Teknisyen';
+                  final role = profile?['role'] as String?;
+                  String? roleLabel;
+                  if (role == 'technician') {
+                    roleLabel = 'Teknisyen';
+                  } else if (role == 'manager' || role == 'admin') {
+                    roleLabel = 'Mühendis';
+                  }
+                  final text = _stripAttachedPdfText(note['note'] as String?);
+                  
+                  return pw.Container(
+                    width: double.infinity,
+                    margin: const pw.EdgeInsets.only(bottom: 8),
+                    padding: const pw.EdgeInsets.all(8),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.grey100,
+                      borderRadius: pw.BorderRadius.circular(4),
+                      border: pw.Border.all(color: PdfColors.grey300),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text(
+                              roleLabel != null ? '$author ($roleLabel)' : author,
+                              style: pw.TextStyle(
+                                font: turkishFont,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 9,
+                                color: vensaAccentColor,
+                              ),
+                            ),
+                            pw.Text(
+                              date,
+                              style: pw.TextStyle(
+                                font: turkishFont,
+                                fontSize: 8,
+                                color: PdfColors.grey600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          text,
+                          style: pw.TextStyle(font: turkishFont, fontSize: 10),
+                        ),
+                        // Eğer notta resim varsa açıklama ekle
+                        if ((note['pdf_images'] as List<pw.ImageProvider>?)?.isNotEmpty ?? false) ...[
+                          pw.SizedBox(height: 6),
+                          pw.Text(
+                            'İlgili servise ait resimler ektedir.',
+                            style: pw.TextStyle(
+                              font: turkishFont,
+                              fontSize: 9,
+                              color: PdfColors.grey700,
+                              fontStyle: pw.FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+
+            // EK SAYFASI: FOTOĞRAFLAR (EK.1)
+            if (notes.any((n) => ((n['pdf_images'] as List<pw.ImageProvider>?)?.isNotEmpty ?? false))) ...[
+              pw.NewPage(),
+              _buildVensaSectionHeader('EK.1 - SERVİS FOTOĞRAF EKLERİ', turkishFont, vensaPrimaryColor, vensaAccentColor),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                'Tarih: ${_formatDate(DateTime.now().toIso8601String())}',
+                style: pw.TextStyle(font: turkishFont, fontSize: 8, color: PdfColors.grey600),
+              ),
+              pw.SizedBox(height: 8),
+              ...notes.map<pw.Widget>((note) {
+                final List<pw.ImageProvider> images =
+                    (note['pdf_images'] as List<pw.ImageProvider>?) ?? const [];
+                if (images.isEmpty) {
+                  return pw.SizedBox();
+                }
+
+                final date = _formatDate(note['created_at']);
+                final author = note['profiles']?['full_name'] ?? 'Teknisyen';
+
+                // 4 kolondan oluşan grid: her satırda 4 fotoğraf
+                const cols = 4;
+                const double cellSize = 110; // A4 sayfa için yaklaşık kare boyutu
+
+                final List<pw.TableRow> rows = [];
+                for (var i = 0; i < images.length; i += cols) {
+                  final rowChildren = <pw.Widget>[];
+                  for (var c = 0; c < cols; c++) {
+                    final index = i + c;
+                    if (index < images.length) {
+                      rowChildren.add(
+                        pw.Container(
+                          width: cellSize,
+                          height: cellSize,
+                          margin: const pw.EdgeInsets.all(2),
+                          decoration: pw.BoxDecoration(
+                            borderRadius: pw.BorderRadius.circular(4),
+                            border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                          ),
+                          child: pw.ClipRect(
+                            child: pw.Image(
+                              images[index],
+                              fit: pw.BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      );
+                    } else {
+                      rowChildren.add(pw.SizedBox(width: cellSize, height: cellSize));
+                    }
+                  }
+                  rows.add(pw.TableRow(children: rowChildren));
+                }
+
+                return pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      '$author - $date',
+                      style: pw.TextStyle(
+                        font: turkishFont,
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: vensaPrimaryColor,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Table(
+                      defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+                      children: rows,
+                    ),
+                    pw.SizedBox(height: 12),
+                  ],
+                );
+              }).toList(),
+            ],
+          ];
+        },
+      ),
+    );
+    return pdf;
+  }
+
+  /// Point için özel section header (red theme)
+  static pw.Widget _buildPointSectionHeader(String title, pw.Font font, PdfColor primaryColor, PdfColor accentColor) {
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 10, top: 15),
+      padding: const pw.EdgeInsets.only(bottom: 5),
+      decoration: pw.BoxDecoration(
+        border: pw.Border(bottom: pw.BorderSide(color: accentColor, width: 2)),
+      ),
+      child: pw.Row(
+        children: [
+          pw.Text(
+            title.toUpperCase(),
+            style: pw.TextStyle(
+              font: font,
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+              color: primaryColor,
+              letterSpacing: 1.1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Vensa için özel section header (blue theme)
+  static pw.Widget _buildVensaSectionHeader(String title, pw.Font font, PdfColor primaryColor, PdfColor accentColor) {
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 10, top: 15),
+      padding: const pw.EdgeInsets.only(bottom: 5),
+      decoration: pw.BoxDecoration(
+        border: pw.Border(bottom: pw.BorderSide(color: accentColor, width: 2)),
+      ),
+      child: pw.Row(
+        children: [
+          pw.Text(
+            title.toUpperCase(),
+            style: pw.TextStyle(
+              font: font,
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+              color: primaryColor,
+              letterSpacing: 1.1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   // Zebra Striping için yardımcı metod
   static pw.TableRow _buildZebraRow(String label, String value, pw.Font font, int index) {

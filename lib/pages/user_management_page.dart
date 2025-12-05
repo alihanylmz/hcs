@@ -16,15 +16,76 @@ class UserManagementPage extends StatefulWidget {
 class _UserManagementPageState extends State<UserManagementPage> {
   final UserService _userService = UserService();
   final PartnerService _partnerService = PartnerService();
+  final TextEditingController _searchController = TextEditingController();
   
-  List<UserProfile> _users = [];
+  List<UserProfile> _allUsers = [];
+  List<UserProfile> _filteredUsers = [];
   List<Partner> _partners = [];
   bool _isLoading = true;
+  
+  // Filtreleme ve sıralama
+  String _searchQuery = '';
+  String? _selectedRoleFilter;
+  String _sortOption = 'name'; // 'name', 'email', 'role', 'date'
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text.toLowerCase();
+      _applyFilters();
+    });
+  }
+
+  void _applyFilters() {
+    List<UserProfile> filtered = List.from(_allUsers);
+
+    // Arama filtresi
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered.where((user) {
+        final name = (user.fullName ?? '').toLowerCase();
+        final email = (user.email ?? '').toLowerCase();
+        return name.contains(_searchQuery) || email.contains(_searchQuery);
+      }).toList();
+    }
+
+    // Rol filtresi
+    if (_selectedRoleFilter != null && _selectedRoleFilter!.isNotEmpty) {
+      filtered = filtered.where((user) => user.role == _selectedRoleFilter).toList();
+    }
+
+    // Sıralama
+    filtered.sort((a, b) {
+      switch (_sortOption) {
+        case 'name':
+          return (a.fullName ?? a.email ?? '').compareTo(b.fullName ?? b.email ?? '');
+        case 'email':
+          return (a.email ?? '').compareTo(b.email ?? '');
+        case 'role':
+          return a.role.compareTo(b.role);
+        case 'date':
+          final aDate = a.createdAt ?? DateTime(1970);
+          final bDate = b.createdAt ?? DateTime(1970);
+          return bDate.compareTo(aDate); // Yeni önce
+        default:
+          return 0;
+      }
+    });
+
+    setState(() {
+      _filteredUsers = filtered;
+    });
   }
 
   Future<void> _loadData() async {
@@ -32,22 +93,23 @@ class _UserManagementPageState extends State<UserManagementPage> {
     try {
       final users = await _userService.getAllUsers();
       final partners = await _partnerService.getAllPartners();
-
-      users.sort((a, b) {
-        if (a.role == 'pending' && b.role != 'pending') return -1;
-        if (a.role != 'pending' && b.role == 'pending') return 1;
-        return (a.fullName ?? '').compareTo(b.fullName ?? '');
-      });
       
       if (mounted) {
         setState(() {
-          _users = users;
+          _allUsers = users;
           _partners = partners;
           _isLoading = false;
         });
+        // Veriler yüklendikten sonra filtreleri uygula
+        _applyFilters();
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Veri yüklenirken hata: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -99,11 +161,11 @@ class _UserManagementPageState extends State<UserManagementPage> {
               ),
             ),
             const Divider(height: 1),
-            _buildRoleOption(ctx, 'admin', 'Sistem Yöneticisi (Tam Yetki)', Icons.admin_panel_settings, Colors.red),
-            _buildRoleOption(ctx, 'manager', 'Yönetici (Stok/Rapor)', Icons.manage_accounts, Colors.orange),
-            _buildRoleOption(ctx, 'technician', 'Saha Teknisyeni (Sınırlı)', Icons.engineering, Colors.blue),
-            _buildRoleOption(ctx, 'partner_user', 'Partner Firma Kullanıcısı', Icons.business, Colors.purple),
-            _buildRoleOption(ctx, 'pending', 'Onay Bekliyor (Kısıtlı)', Icons.hourglass_empty, Colors.grey),
+            _buildRoleOption(ctx, UserRole.admin, 'Sistem Yöneticisi (Tam Yetki)', Icons.admin_panel_settings, Colors.red),
+            _buildRoleOption(ctx, UserRole.manager, 'Yönetici (Stok/Rapor)', Icons.manage_accounts, Colors.orange),
+            _buildRoleOption(ctx, UserRole.technician, 'Saha Teknisyeni (Sınırlı)', Icons.engineering, Colors.blue),
+            _buildRoleOption(ctx, UserRole.partnerUser, 'Partner Firma Kullanıcısı', Icons.business, Colors.purple),
+            _buildRoleOption(ctx, UserRole.pending, 'Onay Bekliyor (Kısıtlı)', Icons.hourglass_empty, Colors.grey),
             const SizedBox(height: 16),
           ],
         ),
@@ -111,15 +173,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
     );
 
     if (newRole != null) {
-      // Eğer aynı rol seçildiyse ve partner değilse işlem yapma
-      if (newRole == user.role && newRole != 'partner_user') return;
+      if (newRole == user.role && newRole != UserRole.partnerUser) return;
 
       int? selectedPartnerId;
       
-      // Partner User seçildiyse, her zaman partner sor (değiştirmek isteyebilir)
-      if (newRole == 'partner_user') {
+      if (newRole == UserRole.partnerUser) {
         final partner = await _showPartnerSelectDialog();
-        if (partner == null) return; // İptal edildi
+        if (partner == null) return;
         selectedPartnerId = partner.id;
       }
 
@@ -137,8 +197,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red)
           );
+          setState(() => _isLoading = false);
         }
-        setState(() => _isLoading = false);
       }
     }
   }
@@ -170,84 +230,325 @@ class _UserManagementPageState extends State<UserManagementPage> {
             subtitle: 'Personel ve Partner yetkileri',
             showBackArrow: true,
           ),
+          
+          // Arama ve Filtreleme Toolbar
+          Container(
+            padding: const EdgeInsets.all(16),
+            color: cardColor,
+            child: Column(
+              children: [
+                // Arama Kutusu
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'İsim veya e-posta ile ara...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    filled: true,
+                    fillColor: isDark ? const Color(0xFF1E293B) : Colors.grey.shade50,
+                  ),
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // Filtreler ve Sıralama
+                Row(
+                  children: [
+                    // Rol Filtresi
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedRoleFilter,
+                            isExpanded: true,
+                            hint: const Row(
+                              children: [
+                                Icon(Icons.filter_list, size: 18),
+                                SizedBox(width: 8),
+                                Text('Tüm Roller'),
+                              ],
+                            ),
+                            items: [
+                              const DropdownMenuItem(value: null, child: Text('Tüm Roller')),
+                              DropdownMenuItem(value: UserRole.admin, child: Text(_getRoleLabel(UserRole.admin))),
+                              DropdownMenuItem(value: UserRole.manager, child: Text(_getRoleLabel(UserRole.manager))),
+                              DropdownMenuItem(value: UserRole.technician, child: Text(_getRoleLabel(UserRole.technician))),
+                              DropdownMenuItem(value: UserRole.partnerUser, child: Text(_getRoleLabel(UserRole.partnerUser))),
+                              DropdownMenuItem(value: UserRole.pending, child: Text(_getRoleLabel(UserRole.pending))),
+                            ],
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedRoleFilter = value;
+                                _applyFilters();
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                    
+                    const SizedBox(width: 12),
+                    
+                    // Sıralama
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _sortOption,
+                          hint: const Row(
+                            children: [
+                              Icon(Icons.sort, size: 18),
+                              SizedBox(width: 8),
+                              Text('Sırala'),
+                            ],
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'name', child: Text('İsme Göre')),
+                            DropdownMenuItem(value: 'email', child: Text('E-postaya Göre')),
+                            DropdownMenuItem(value: 'role', child: Text('Role Göre')),
+                            DropdownMenuItem(value: 'date', child: Text('Tarihe Göre')),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() {
+                                _sortOption = value;
+                                _applyFilters();
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                
+                // Sonuç Sayısı ve İstatistikler
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${_filteredUsers.length} / ${_allUsers.length} kullanıcı',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (_selectedRoleFilter != null || _searchQuery.isNotEmpty)
+                      TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _searchController.clear();
+                            _selectedRoleFilter = null;
+                            _applyFilters();
+                          });
+                        },
+                        icon: const Icon(Icons.clear_all, size: 16),
+                        label: const Text('Filtreleri Temizle'),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          
+          // Kullanıcı Listesi - DataTable benzeri yapı
           Expanded(
             child: _isLoading 
               ? const Center(child: CircularProgressIndicator(color: AppColors.corporateNavy))
-              : RefreshIndicator(
-                  onRefresh: _loadData,
-                  color: AppColors.corporateNavy,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _users.length,
-                    itemBuilder: (context, index) {
-                      final user = _users[index];
-                      final displayName = user.fullName ?? user.email ?? '?';
-                      final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
-                      
-                      // Kullanıcının partner ismini bul
-                      String? partnerName;
-                      if (user.isPartner && user.partnerId != null) {
-                        final p = _partners.where((p) => p.id == user.partnerId).firstOrNull;
-                        partnerName = p?.name;
-                      }
+              : _filteredUsers.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _searchQuery.isNotEmpty || _selectedRoleFilter != null
+                                ? Icons.search_off
+                                : Icons.people_outline,
+                            size: 64,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _searchQuery.isNotEmpty || _selectedRoleFilter != null
+                                ? 'Arama kriterlerinize uygun kullanıcı bulunamadı'
+                                : 'Henüz kullanıcı bulunmuyor',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadData,
+                      color: AppColors.corporateNavy,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _filteredUsers.length,
+                        itemBuilder: (context, index) {
+                          final user = _filteredUsers[index];
+                          final displayName = user.displayName;
+                          final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+                          
+                          String? partnerName;
+                          if (user.isPartnerUser && user.partnerId != null) {
+                            final p = _partners.where((p) => p.id == user.partnerId).firstOrNull;
+                            partnerName = p?.name;
+                          }
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: cardColor,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
-                          ],
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          leading: CircleAvatar(
-                            backgroundColor: _getRoleColor(user.role).withOpacity(0.1),
-                            child: Text(
-                              initial,
-                              style: TextStyle(color: _getRoleColor(user.role), fontWeight: FontWeight.bold),
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(
+                                color: Colors.grey.shade200,
+                                width: 1,
+                              ),
                             ),
-                          ),
-                          title: Text(
-                            user.fullName ?? 'İsimsiz Kullanıcı',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(user.email ?? '', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                              if (partnerName != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.business, size: 12, color: Colors.purple),
-                                      const SizedBox(width: 4),
-                                      Text(partnerName, style: const TextStyle(fontSize: 12, color: Colors.purple, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
+                            child: InkWell(
+                              onTap: () => _changeRole(user),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Row(
+                                  children: [
+                                    // Avatar
+                                    CircleAvatar(
+                                      radius: 24,
+                                      backgroundColor: _getRoleColor(user.role).withOpacity(0.1),
+                                      child: Text(
+                                        initial,
+                                        style: TextStyle(
+                                          color: _getRoleColor(user.role),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    
+                                    // Kullanıcı Bilgileri
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  user.fullName ?? 'İsimsiz Kullanıcı',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 15,
+                                                    color: textColor,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              // Rol Badge
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: _getRoleColor(user.role).withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(12),
+                                                  border: Border.all(
+                                                    color: _getRoleColor(user.role).withOpacity(0.3),
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  _getRoleLabel(user.role),
+                                                  style: TextStyle(
+                                                    color: _getRoleColor(user.role),
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            user.email ?? '',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (partnerName != null) ...[
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.business,
+                                                  size: 14,
+                                                  color: Colors.purple,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    partnerName,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.purple,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    
+                                    // Action Icon
+                                    Icon(
+                                      Icons.chevron_right,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                  ],
                                 ),
-                            ],
-                          ),
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: _getRoleColor(user.role).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: _getRoleColor(user.role).withOpacity(0.3)),
+                              ),
                             ),
-                            child: Text(
-                              _getRoleLabel(user.role),
-                              style: TextStyle(color: _getRoleColor(user.role), fontSize: 11, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          onTap: () => _changeRole(user),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+                          );
+                        },
+                      ),
+                    ),
           ),
         ],
       ),
@@ -256,23 +557,35 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
   String _getRoleLabel(String role) {
     switch (role) {
-      case 'admin': return 'Admin';
-      case 'manager': return 'Yönetici';
-      case 'technician': return 'Teknisyen';
-      case 'partner_user': return 'Partner';
-      case 'pending': return 'Onay Bekliyor';
-      default: return role;
+      case UserRole.admin:
+        return 'Admin';
+      case UserRole.manager:
+        return 'Yönetici';
+      case UserRole.technician:
+        return 'Teknisyen';
+      case UserRole.partnerUser:
+        return 'Partner';
+      case UserRole.pending:
+        return 'Onay Bekliyor';
+      default:
+        return role;
     }
   }
 
   Color _getRoleColor(String role) {
     switch (role) {
-      case 'admin': return Colors.red;
-      case 'manager': return Colors.orange;
-      case 'technician': return Colors.blue;
-      case 'partner_user': return Colors.purple;
-      case 'pending': return Colors.grey;
-      default: return Colors.grey;
+      case UserRole.admin:
+        return Colors.red;
+      case UserRole.manager:
+        return Colors.orange;
+      case UserRole.technician:
+        return Colors.blue;
+      case UserRole.partnerUser:
+        return Colors.purple;
+      case UserRole.pending:
+        return Colors.grey;
+      default:
+        return Colors.grey;
     }
   }
 }

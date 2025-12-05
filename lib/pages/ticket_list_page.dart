@@ -163,9 +163,8 @@ class _TicketListPageState extends State<TicketListPage> {
   Future<List<Map<String, dynamic>>> _fetchTickets() async {
     final supabase = Supabase.instance.client;
 
-    // Teknisyenler için: draft durumundaki işleri gösterme
-    // Admin ve manager'lar tüm işleri görebilir
-    final isAdminOrManager = _userRole == 'admin' || _userRole == 'manager';
+    // Teknisyenler, Admin ve Manager'lar tüm işleri görebilir (draft dahil)
+    final hasFullAccess = _userRole == 'admin' || _userRole == 'manager' || _userRole == 'technician';
     
     var query = supabase
           .from('tickets')
@@ -187,8 +186,10 @@ class _TicketListPageState extends State<TicketListPage> {
         ''')
         .neq('status', 'done');
     
-    // Teknisyenler için draft durumundaki işleri filtrele
-    if (!isAdminOrManager) {
+    // Sadece yetkisi olmayanlar (örn: pending, partner_user) draftları görmesin
+    // Aslında partner_user da draft görmemeli. 
+    // Eğer "bütün işleri görsün" dendiğinde teknisyen kastediliyorsa, burayı açıyoruz.
+    if (!hasFullAccess) {
       query = query.neq('status', 'draft');
     }
     
@@ -650,7 +651,7 @@ class _TicketListPageState extends State<TicketListPage> {
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => TicketDetailPage(ticketId: ticket['id'].toString()))).then((_) => _refresh()),
                 ),
                 const SizedBox(width: 8),
-                if (_userRole != 'partner_user')
+                if (_userRole != 'partner_user' && _userRole != 'technician')
                   _TicketActionButton(
                     label: 'Düzenle',
                     icon: Icons.edit_outlined,

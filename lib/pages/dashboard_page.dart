@@ -5,9 +5,11 @@ import 'ticket_list_page.dart';
 import 'login_page.dart';
 import 'ticket_detail_page.dart';
 import 'partner_management_page.dart';
+import 'user_management_page.dart';
 import '../widgets/app_drawer.dart';
 import '../services/user_service.dart';
 import '../services/partner_service.dart';
+import '../models/user_profile.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -21,18 +23,23 @@ class _DashboardPageState extends State<DashboardPage> {
   final _userService = UserService();
   final PartnerService _partnerService = PartnerService();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  bool _isLoading = true;
-  String? _userName;
-  String? _userRole;
   
-  // İstatistik Verileri
+  // User Profile - Loaded first
+  UserProfile? _currentUser;
+  
+  // Loading & Error States
+  bool _isLoading = true;
+  String? _errorMessage;
+  
+  // Dashboard Statistics
   int _monthlyTicketCount = 0;
   int _openTicketCount = 0;
   int _recentOpenCount = 0;
   int _recentInProgressCount = 0;
   int _recentPanelStockCount = 0;
   int _recentPanelSentCount = 0;
-  List<Map<String, dynamic>> _mostUsedPlcs = [];
+  
+  // Dashboard Data Lists
   List<Map<String, dynamic>> _lowStockItems = [];
   List<Map<String, dynamic>> _recentTickets = [];
   List<Map<String, dynamic>> _partnerOverview = [];
@@ -40,60 +47,90 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
-    _loadUserProfile();
-    _loadDashboardData();
+    _initDashboard();
   }
 
-  Future<void> _loadUserProfile() async {
-    final profile = await _userService.getCurrentUserProfile();
-    if (mounted) {
+  /// Sequential Loading: First load user profile, then dashboard data
+  Future<void> _initDashboard() async {
+    try {
+      // Step 1: Load user profile first (CRITICAL)
+      final profile = await _userService.getCurrentUserProfile();
+      
+      if (!mounted) return;
+      
+      if (profile == null) {
+        setState(() {
+          _errorMessage = 'Kullanıcı profili bulunamadı.';
+          _isLoading = false;
+        });
+        return;
+      }
+      
       setState(() {
-        _userName = profile?.fullName;
-        _userRole = profile?.role;
+        _currentUser = profile;
       });
+      
+      // Step 2: Only after user profile is loaded, fetch dashboard data
+      await _loadDashboardData();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Dashboard yüklenirken hata oluştu: ${e.toString()}';
+          _isLoading = false;
+        });
+        _showErrorSnackBar('Veri yüklenirken hata oluştu');
+      }
     }
   }
 
+  /// Load all dashboard data with optimized queries
   Future<void> _loadDashboardData() async {
+    if (_currentUser == null) return;
+    
     try {
       final now = DateTime.now();
       final startOfMonth = DateTime(now.year, now.month, 1);
       final startOfNextMonth = DateTime(now.year, now.month + 1, 1);
 
-      // 1. Bu ay açılan iş emirleri sayısı (Sadece id'leri çek, performans için)
-      final monthlyTicketsList = await _supabase
+      // 1. Monthly Tickets Count - Using count() for performance
+      final monthlyTicketsCount = await _supabase
           .from('tickets')
           .select('id')
           .gte('created_at', startOfMonth.toIso8601String())
-          .lt('created_at', startOfNextMonth.toIso8601String());
+          .lt('created_at', startOfNextMonth.toIso8601String())
+          .count(CountOption.exact);
       
-      // 2. Açık iş emirleri sayısı (Sadece id'leri çek, performans için)
-      final openTicketsList = await _supabase
+      // 2. Open Tickets Count - Using count() for performance
+      final openTicketsCount = await _supabase
           .from('tickets')
           .select('id')
-          .eq('status', 'open');
+          .eq('status', 'open')
+          .count(CountOption.exact);
 
-      // 3. Son işler ve durum dağılımı (modern dashboard için)
-      // Teknisyenler için: draft durumundaki işleri gösterme
-      final isAdminOrManager = _userRole == 'admin' || _userRole == 'manager';
+      // 3. Recent Tickets with Partner Join - Optimized single query
+      // Filters must come before order() and limit()
       var recentTicketsQuery = _supabase
           .from('tickets')
-          .select('id, title, status, priority, planned_date, job_code, device_brand');
+          .select('*, partners(name)');
       
-      if (!isAdminOrManager) {
+      // Role-based filtering: Non-admin/manager users don't see draft tickets
+      if (!_currentUser!.isAdmin && !_currentUser!.isManager) {
         recentTicketsQuery = recentTicketsQuery.neq('status', 'draft');
       }
       
       final recentTicketsResponse = await recentTicketsQuery
           .order('created_at', ascending: false)
           .limit(50);
+      final recentTicketsList = (recentTicketsResponse as List)
+          .cast<Map<String, dynamic>>();
 
+      // Count statuses from recent tickets
       int recentOpen = 0;
       int recentInProgress = 0;
       int recentPanelStock = 0;
       int recentPanelSent = 0;
 
-      for (final t in recentTicketsResponse as List) {
+      for (final t in recentTicketsList) {
         final status = t['status'] as String? ?? 'open';
         switch (status) {
           case 'open':
@@ -111,33 +148,40 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // 4. Partner bazlı özet (aktif iş sayıları + açık iş listesi)
+      // 4. Partner Overview with optimized query
       final partnersResponse = await _partnerService.getAllPartners();
+      
       var partnerTicketsQuery = _supabase
           .from('tickets')
           .select('id, partner_id, status, job_code, title')
           .not('partner_id', 'is', null)
           .neq('status', 'done');
       
-      // Teknisyenler için draft durumundaki işleri filtrele
-      if (!isAdminOrManager) {
+      // Role-based filtering
+      if (!_currentUser!.isAdmin && !_currentUser!.isManager) {
         partnerTicketsQuery = partnerTicketsQuery.neq('status', 'draft');
       }
       
       final partnerTicketsResponse = await partnerTicketsQuery;
+      final partnerTicketsList = (partnerTicketsResponse as List)
+          .cast<Map<String, dynamic>>();
 
       final Map<int, Map<String, int>> partnerCounts = {};
       final Map<int, List<Map<String, dynamic>>> partnerOpenJobs = {};
-      for (final t in partnerTicketsResponse as List) {
+      
+      for (final t in partnerTicketsList) {
         final pid = t['partner_id'] as int?;
         final status = t['status'] as String? ?? 'open';
         if (pid == null) continue;
+        
         partnerCounts.putIfAbsent(pid, () => {
           'total': 0,
           'open': 0,
           'in_progress': 0,
         });
+        
         partnerCounts[pid]!['total'] = (partnerCounts[pid]!['total'] ?? 0) + 1;
+        
         if (status == 'open') {
           partnerCounts[pid]!['open'] = (partnerCounts[pid]!['open'] ?? 0) + 1;
           partnerOpenJobs.putIfAbsent(pid, () => []);
@@ -156,7 +200,8 @@ class _DashboardPageState extends State<DashboardPage> {
       final List<Map<String, dynamic>> partnerOverview = [];
       for (final p in partnersResponse) {
         final counts = partnerCounts[p.id];
-        if (counts == null) continue; // Aktif işi yoksa gösterme
+        if (counts == null) continue; // Skip partners with no active jobs
+        
         partnerOverview.add({
           'id': p.id,
           'name': p.name,
@@ -168,18 +213,19 @@ class _DashboardPageState extends State<DashboardPage> {
       }
       partnerOverview.sort((a, b) => (b['total'] as int).compareTo(a['total'] as int));
 
-      // 5. Kritik Stok Durumu
-      // critical_level kolonu yoksa hata verebilir, kontrol edelim.
-      // Eğer critical_level null ise varsayılan 5 kabul edelim.
+      // 5. Low Stock Items
       final inventoryResponse = await _supabase
           .from('inventory')
           .select()
-          .order('quantity', ascending: true);
+          .order('quantity', ascending: true)
+          .limit(50);
           
       final List<Map<String, dynamic>> lowStock = [];
-      for (var item in inventoryResponse) {
+      final inventoryList = (inventoryResponse as List).cast<Map<String, dynamic>>();
+      
+      for (var item in inventoryList) {
         final qty = item['quantity'] as int? ?? 0;
-        final critical = item['critical_level'] as int? ?? 5; // Varsayılan kritik seviye
+        final critical = item['critical_level'] as int? ?? 5;
         
         if (qty <= critical) {
           lowStock.add(item);
@@ -188,32 +234,69 @@ class _DashboardPageState extends State<DashboardPage> {
 
       if (mounted) {
         setState(() {
-          // Listelerden sayıyı al (sadece id çekildiği için hafif)
-          _monthlyTicketCount = (monthlyTicketsList as List).length;
-          _openTicketCount = (openTicketsList as List).length;
+          // Extract counts from Supabase count responses
+          _monthlyTicketCount = monthlyTicketsCount.count ?? 0;
+          _openTicketCount = openTicketsCount.count ?? 0;
           _recentOpenCount = recentOpen;
           _recentInProgressCount = recentInProgress;
           _recentPanelStockCount = recentPanelStock;
           _recentPanelSentCount = recentPanelSent;
-          _recentTickets = (recentTicketsResponse as List)
-              .cast<Map<String, dynamic>>()
-              .take(8)
-              .toList();
+          _recentTickets = recentTicketsList.take(8).toList();
           _partnerOverview = partnerOverview.take(6).toList();
-          _lowStockItems = lowStock.take(10).toList(); // İlk 10 kritik ürün
+          _lowStockItems = lowStock.take(10).toList();
           _isLoading = false;
+          _errorMessage = null;
         });
       }
     } catch (e) {
       debugPrint('Dashboard veri hatası: $e');
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Veri yüklenirken hata oluştu: ${e.toString()}';
+        });
+        _showErrorSnackBar('Veri yüklenirken hata oluştu');
+      }
+    }
+  }
+
+  /// Refresh dashboard data (for RefreshIndicator)
+  Future<void> _refreshDashboard() async {
+    await _loadDashboardData();
+  }
+
+  /// Show error snackbar
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  /// Get dynamic appbar title based on user role
+  String _getAppBarTitle() {
+    if (_currentUser == null) return 'Yükleniyor...';
+    
+    if (_currentUser!.isAdmin) {
+      return 'Yönetici Paneli';
+    } else if (_currentUser!.isManager) {
+      return 'Yönetici Paneli';
+    } else if (_currentUser!.isTechnician) {
+      return 'Teknisyen Paneli';
+    } else {
+      return 'Saha Yönetimi';
     }
   }
 
   Future<void> _logout() async {
     await _supabase.auth.signOut();
     if (mounted) {
-       Navigator.of(context).pushAndRemoveUntil(
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const LoginPage()),
         (route) => false,
       );
@@ -226,14 +309,20 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: const Color(0xFFF1F5F9), // Açık gri arka plan
+      backgroundColor: const Color(0xFFF1F5F9),
       drawer: AppDrawer(
         currentPage: AppDrawerPage.dashboard,
-        userName: _userName,
-        userRole: _userRole,
+        userName: _currentUser?.displayName,
+        userRole: _currentUser?.role,
       ),
       appBar: AppBar(
-        title: const Text('Yönetici Paneli', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
+        title: Text(
+          _getAppBarTitle(),
+          style: const TextStyle(
+            color: Color(0xFF0F172A),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         leadingWidth: 100,
         leading: Row(
           mainAxisSize: MainAxisSize.min,
@@ -244,111 +333,154 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             Padding(
               padding: const EdgeInsets.only(left: 0),
-              child: SvgPicture.asset('assets/images/log.svg', width: 32, height: 32),
+              child: SvgPicture.asset(
+                'assets/images/log.svg',
+                width: 32,
+                height: 32,
+              ),
             ),
           ],
         ),
         backgroundColor: Colors.white,
         elevation: 0,
-      ),
-      body: _isLoading 
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Üst Bilgi Kartları
-                  _buildSummarySection(isWide),
-                  
-                  const SizedBox(height: 24),
-
-                  // Durum Özeti + Son İşler
-                  if (isWide)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 3, child: _buildStatusOverviewCard()),
-                        const SizedBox(width: 24),
-                        Expanded(flex: 4, child: _buildRecentTicketsCard()),
-                      ],
-                    )
-                  else
-                    Column(
-                      children: [
-                        _buildStatusOverviewCard(),
-                        const SizedBox(height: 24),
-                        _buildRecentTicketsCard(),
-                      ],
-                    ),
-
-                  const SizedBox(height: 24),
-                  
-                  // Partner Özeti + Stok Uyarı
-                  if (isWide)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 3, child: _buildPartnerOverviewCard()),
-                        const SizedBox(width: 24),
-                        Expanded(flex: 4, child: _buildLowStockCard()),
-                      ],
-                    )
-                  else
-                    Column(
-                      children: [
-                        _buildPartnerOverviewCard(),
-                        const SizedBox(height: 24),
-                        _buildLowStockCard(),
-                      ],
-                    ),
-
-                  const SizedBox(height: 24),
-
-                  // Yönetim kısayolları (sadece admin/manager)
-                  if (_userRole == 'admin' || _userRole == 'manager') ...[
-                    Text(
-                      'Yönetim Kısayolları',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const PartnerManagementPage()),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: const Color(0xFF0F172A),
-                            elevation: 1,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(color: Colors.grey.shade300),
-                            ),
-                          ),
-                          icon: const Icon(Icons.business_rounded),
-                          label: const Text(
-                            'Partner Firmalar',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
+        actions: [
+          // Management menu (only for admin/manager)
+          if (_currentUser != null &&
+              (_currentUser!.isAdmin || _currentUser!.isManager))
+            PopupMenuButton<String>(
+              icon: const Icon(
+                Icons.more_vert,
+                color: Color(0xFF0F172A),
               ),
+              onSelected: (value) {
+                switch (value) {
+                  case 'users':
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const UserManagementPage(),
+                      ),
+                    );
+                    break;
+                  case 'partners':
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const PartnerManagementPage(),
+                      ),
+                    );
+                    break;
+                }
+              },
+              itemBuilder: (BuildContext context) => [
+                const PopupMenuItem<String>(
+                  value: 'users',
+                  child: Row(
+                    children: [
+                      Icon(Icons.people_outline, color: Color(0xFF0F172A)),
+                      SizedBox(width: 12),
+                      Text('Kullanıcı Yönetimi'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'partners',
+                  child: Row(
+                    children: [
+                      Icon(Icons.business_rounded, color: Color(0xFF0F172A)),
+                      SizedBox(width: 12),
+                      Text('Partner Firmalar'),
+                    ],
+                  ),
+                ),
+              ],
             ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _initDashboard,
+                        child: const Text('Yeniden Dene'),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _refreshDashboard,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Summary Cards
+                        _buildSummarySection(isWide),
+                        
+                        const SizedBox(height: 24),
+
+                        // Status Overview + Recent Tickets
+                        if (isWide)
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(flex: 3, child: _buildStatusOverviewCard()),
+                              const SizedBox(width: 24),
+                              Expanded(flex: 4, child: _buildRecentTicketsCard()),
+                            ],
+                          )
+                        else
+                          Column(
+                            children: [
+                              _buildStatusOverviewCard(),
+                              const SizedBox(height: 24),
+                              _buildRecentTicketsCard(),
+                            ],
+                          ),
+
+                        const SizedBox(height: 24),
+                        
+                        // Partner Overview + Low Stock
+                        if (isWide)
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(flex: 3, child: _buildPartnerOverviewCard()),
+                              const SizedBox(width: 24),
+                              Expanded(flex: 4, child: _buildLowStockCard()),
+                            ],
+                          )
+                        else
+                          Column(
+                            children: [
+                              _buildPartnerOverviewCard(),
+                              const SizedBox(height: 24),
+                              _buildLowStockCard(),
+                            ],
+                          ),
+
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
+                ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const TicketListPage()));
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const TicketListPage()),
+          );
         },
         label: const Text('İş Emirleri Listesi'),
         icon: const Icon(Icons.list_alt),
@@ -363,7 +495,7 @@ class _DashboardPageState extends State<DashboardPage> {
       crossAxisSpacing: 16,
       mainAxisSpacing: 16,
       shrinkWrap: true,
-      childAspectRatio: 1.0, // Taşmayı önlemek için kartları biraz daha kare (uzun) yaptık
+      childAspectRatio: 1.0,
       physics: const NeverScrollableScrollPhysics(),
       children: [
         _buildStatCard(
@@ -386,7 +518,7 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         _buildStatCard(
           'Personel',
-          '5', // Şimdilik sabit veya user tablosundan çekilebilir
+          '5', // TODO: Fetch from users table if needed
           Icons.people_outline,
           Colors.green,
         ),
@@ -395,7 +527,10 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildStatusOverviewCard() {
-    final totalRecent = _recentOpenCount + _recentInProgressCount + _recentPanelStockCount + _recentPanelSentCount;
+    final totalRecent = _recentOpenCount +
+        _recentInProgressCount +
+        _recentPanelStockCount +
+        _recentPanelSentCount;
 
     Widget buildRow(String label, int count, Color color) {
       final ratio = (totalRecent > 0) ? count / totalRecent : 0.0;
@@ -413,7 +548,13 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
             Text('$count', style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(width: 12),
@@ -452,19 +593,30 @@ class _DashboardPageState extends State<DashboardPage> {
         children: [
           const Text(
             'Durum Özeti (Son 50 İş)',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
           ),
           const SizedBox(height: 12),
           if (totalRecent == 0)
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: Text('Gösterilecek iş bulunamadı.', style: TextStyle(color: Colors.grey)),
+              child: Text(
+                'Gösterilecek iş bulunamadı.',
+                style: TextStyle(color: Colors.grey),
+              ),
             )
           else ...[
             buildRow('Açık', _recentOpenCount, Colors.blue),
             buildRow('Serviste', _recentInProgressCount, Colors.orange),
             buildRow('Pano Yapıldı (Stok)', _recentPanelStockCount, Colors.purple),
-            buildRow('Pano Yapıldı (Gönderildi)', _recentPanelSentCount, Colors.indigo),
+            buildRow(
+              'Pano Yapıldı (Gönderildi)',
+              _recentPanelSentCount,
+              Colors.indigo,
+            ),
           ],
         ],
       ),
@@ -490,7 +642,11 @@ class _DashboardPageState extends State<DashboardPage> {
         children: [
           const Text(
             'Son İş Emirleri',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
           ),
           const SizedBox(height: 4),
           const Text(
@@ -501,7 +657,10 @@ class _DashboardPageState extends State<DashboardPage> {
           if (_recentTickets.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: Text('Henüz iş emri açılmamış.', style: TextStyle(color: Colors.grey)),
+              child: Text(
+                'Henüz iş emri açılmamış.',
+                style: TextStyle(color: Colors.grey),
+              ),
             )
           else
             ListView.separated(
@@ -515,14 +674,19 @@ class _DashboardPageState extends State<DashboardPage> {
                 final title = t['title'] as String? ?? 'Başlıksız';
                 final plannedDate = t['planned_date'] as String?;
                 final jobCode = t['job_code'] as String? ?? '---';
-                final partnerName = t['device_brand'] as String?;
+                
+                // Extract partner name from joined data
+                final partnerData = t['partners'] as Map<String, dynamic>?;
+                final partnerName = partnerData?['name'] as String?;
 
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => TicketDetailPage(ticketId: t['id'].toString()),
+                        builder: (_) => TicketDetailPage(
+                          ticketId: t['id'].toString(),
+                        ),
                       ),
                     );
                   },
@@ -530,21 +694,37 @@ class _DashboardPageState extends State<DashboardPage> {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Text(jobCode, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                          Text(
+                            jobCode,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
                           if (plannedDate != null) ...[
                             const SizedBox(width: 8),
-                            const Icon(Icons.calendar_today, size: 11, color: Colors.grey),
+                            const Icon(
+                              Icons.calendar_today,
+                              size: 11,
+                              color: Colors.grey,
+                            ),
                             const SizedBox(width: 2),
                             Text(
                               plannedDate.substring(0, 10),
-                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey,
+                              ),
                             ),
                           ],
                         ],
@@ -553,7 +733,11 @@ class _DashboardPageState extends State<DashboardPage> {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            const Icon(Icons.handshake_outlined, size: 11, color: Colors.deepPurple),
+                            const Icon(
+                              Icons.handshake_outlined,
+                              size: 11,
+                              color: Colors.deepPurple,
+                            ),
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
@@ -572,7 +756,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     ],
                   ),
                   trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: _getStatusColor(status).withOpacity(0.08),
                       borderRadius: BorderRadius.circular(20),
@@ -596,7 +783,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(12), // Padding'i biraz azalttık (16->12)
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -626,7 +813,7 @@ class _DashboardPageState extends State<DashboardPage> {
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: color, // Sayıyı renkli yapalım
+              color: color,
             ),
           ),
           const SizedBox(height: 4),
@@ -662,7 +849,11 @@ class _DashboardPageState extends State<DashboardPage> {
         children: [
           const Text(
             'Partner İş Durumu',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
           ),
           const SizedBox(height: 4),
           const Text(
@@ -673,7 +864,10 @@ class _DashboardPageState extends State<DashboardPage> {
           if (_partnerOverview.isEmpty)
             const Padding(
               padding: EdgeInsets.all(12),
-              child: Text('Şu anda partnerlere atanmış aktif iş bulunmuyor.', style: TextStyle(color: Colors.grey)),
+              child: Text(
+                'Şu anda partnerlere atanmış aktif iş bulunmuyor.',
+                style: TextStyle(color: Colors.grey),
+              ),
             )
           else
             ListView.separated(
@@ -688,13 +882,17 @@ class _DashboardPageState extends State<DashboardPage> {
                 final inProgress = p['in_progress'] as int? ?? 0;
                 final ratio = total > 0 ? inProgress / total : 0.0;
 
-                final openJobs = (p['openJobs'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+                final openJobs = (p['openJobs'] as List<dynamic>? ?? [])
+                    .cast<Map<String, dynamic>>();
 
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(
                     p['name'] as String? ?? '-',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -702,9 +900,21 @@ class _DashboardPageState extends State<DashboardPage> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Text('Açık: $open', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                          Text(
+                            'Açık: $open',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
                           const SizedBox(width: 12),
-                          Text('Serviste: $inProgress', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                          Text(
+                            'Serviste: $inProgress',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 6),
@@ -718,20 +928,29 @@ class _DashboardPageState extends State<DashboardPage> {
                               onTap: () {
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
-                                    builder: (_) => TicketDetailPage(ticketId: job['id'].toString()),
+                                    builder: (_) => TicketDetailPage(
+                                      ticketId: job['id'].toString(),
+                                    ),
                                   ),
                                 );
                               },
                               borderRadius: BorderRadius.circular(12),
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
                                 decoration: BoxDecoration(
                                   color: Colors.deepPurple.withOpacity(0.06),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
                                   code,
-                                  style: const TextStyle(fontSize: 11, color: Colors.deepPurple, fontWeight: FontWeight.w500),
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.deepPurple,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                             );
@@ -751,14 +970,17 @@ class _DashboardPageState extends State<DashboardPage> {
                     ],
                   ),
                   trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.deepPurple.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Text(
-                      '$total İş',
-                      style: const TextStyle(
+                    child: const Text(
+                      'İş',
+                      style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                         color: Colors.deepPurple,
@@ -790,21 +1012,28 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-           Row(
-             children: [
-               const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
-               const SizedBox(width: 8),
-               const Text(
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
+              const SizedBox(width: 8),
+              const Text(
                 'Stok Uyarı Listesi',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                ),
               ),
-             ],
-           ),
+            ],
+          ),
           const Divider(height: 30),
           if (_lowStockItems.isEmpty)
             const Padding(
               padding: EdgeInsets.all(20),
-              child: Text('Kritik seviyenin altında ürün yok.', style: TextStyle(color: Colors.green)),
+              child: Text(
+                'Kritik seviyenin altında ürün yok.',
+                style: TextStyle(color: Colors.green),
+              ),
             )
           else
             ListView.separated(
@@ -817,17 +1046,30 @@ class _DashboardPageState extends State<DashboardPage> {
                 final qty = item['quantity'] as int? ?? 0;
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(item['name'] ?? '-', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  title: Text(
+                    item['name'] ?? '-',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                   trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.red.shade50,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.red.shade200),
                     ),
                     child: Text(
-                      '$qty Adet', 
-                      style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
+                      '$qty Adet',
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 );
@@ -838,7 +1080,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // Durum label ve renkleri (ticket listesi ile tutarlı)
+  // Status label and colors (consistent with ticket list)
   String _statusLabel(String status) {
     switch (status) {
       case 'open':
@@ -873,4 +1115,3 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 }
-

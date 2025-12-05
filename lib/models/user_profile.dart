@@ -1,30 +1,75 @@
+// MODELS/user_profile.dart
+
+// Burada UserService import YOK, bağımlılık tersine dönmüyor. 🔥
+
+/// Rol tanımlarını model ile birlikte tutmak en temiz çözüm.
+class UserRole {
+  static const String admin = 'admin';
+  static const String manager = 'manager';
+  static const String technician = 'technician';
+  static const String pending = 'pending';
+  static const String partnerUser = 'partner_user';
+}
+
 class UserProfile {
   final String id;
   final String? email;
   final String? fullName;
-  final String role; // 'admin', 'technician', 'manager', 'partner_user'
+  final String role;
   final DateTime? createdAt;
-  final int? partnerId; // Partner ID (Eğer partner kullanıcısıysa)
+  final int? partnerId;
 
-  UserProfile({
+  const UserProfile({
     required this.id,
     this.email,
     this.fullName,
-    this.role = 'pending', // Varsayılan rol: onay bekliyor
+    this.role = UserRole.pending,
     this.createdAt,
     this.partnerId,
   });
+
+  // ---- Yardımcı statik parser fonksiyonları ----
+
+  static String _validateRole(String? role) {
+    const validRoles = {
+      UserRole.admin,
+      UserRole.manager,
+      UserRole.technician,
+      UserRole.pending,
+      UserRole.partnerUser,
+    };
+
+    if (role != null && validRoles.contains(role)) {
+      return role;
+    }
+
+    // Burada istersen dart:developer.log kullanabilirsin
+    // developer.log("Geçersiz rol '$role', pending atanıyor", name: "UserProfile");
+    return UserRole.pending;
+  }
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    return DateTime.tryParse(value.toString());
+  }
+
+  static int? _parsePartnerId(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is BigInt) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
+  // ---- JSON Dönüşümleri ----
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
       id: json['id'] as String,
       email: json['email'] as String?,
       fullName: json['full_name'] as String?,
-      role: json['role'] as String? ?? 'pending',
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at'] as String) 
-          : null,
-      partnerId: json['partner_id'] as int?,
+      role: _validateRole(json['role'] as String?),
+      createdAt: _parseDate(json['created_at']),
+      partnerId: _parsePartnerId(json['partner_id']),
     );
   }
 
@@ -35,16 +80,39 @@ class UserProfile {
       'full_name': fullName,
       'role': role,
       'partner_id': partnerId,
-      // created_at genellikle güncellenmez
     };
   }
 
-  // Yardımcı metodlar
-  bool get isAdmin => role == 'admin';
-  bool get isManager => role == 'manager' || role == 'admin';
-  bool get isPartner => role == 'partner_user';
+  // ---- Yetki Getter'ları ----
 
-  String get displayName => fullName ?? email ?? 'Bilinmeyen Kullanıcı';
+  bool get isAdmin => role == UserRole.admin;
+
+  bool get isManager =>
+      role == UserRole.manager || role == UserRole.admin;
+
+  bool get isTechnician => role == UserRole.technician;
+
+  bool get isPending => role == UserRole.pending;
+
+  bool get isPartnerUser => role == UserRole.partnerUser;
+
+  bool get hasCompany => partnerId != null;
+
+  /// Gösterilecek isim:
+  /// 1) fullName doluysa → onu kullan
+  /// 2) değilse email
+  /// 3) o da yoksa id
+  String get displayName {
+    if (fullName != null && fullName!.trim().isNotEmpty) {
+      return fullName!.trim();
+    }
+    if (email != null && email!.trim().isNotEmpty) {
+      return email!.trim();
+    }
+    return id;
+  }
+
+  // ---- CopyWith ----
 
   UserProfile copyWith({
     String? id,
@@ -63,5 +131,33 @@ class UserProfile {
       partnerId: partnerId ?? this.partnerId,
     );
   }
-}
 
+  // ---- Debug & Equality ----
+
+  @override
+  String toString() {
+    return 'UserProfile(id: $id, fullName: $fullName, role: $role, partnerId: $partnerId)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    return other is UserProfile &&
+        other.id == id &&
+        other.email == email &&
+        other.fullName == fullName &&
+        other.role == role &&
+        other.partnerId == partnerId;
+    // İstersen createdAt'i de buraya dahil edebilirsin;
+    // ben genelde identity + business fields ile sınırlarım.
+  }
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      (email?.hashCode ?? 0) ^
+      (fullName?.hashCode ?? 0) ^
+      role.hashCode ^
+      (partnerId ?? 0).hashCode;
+}

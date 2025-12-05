@@ -328,6 +328,44 @@ class NotificationService {
     );
   }
 
+  /// Partner notu eklendiğinde sadece admin ve manager'lara bildirim gönderir
+  Future<bool> notifyPartnerNoteAdded({
+    required String ticketId,
+    required String ticketTitle,
+    required String noteAuthor,
+    String? jobCode,
+  }) async {
+    final title = "Yeni Partner Notu";
+    final message = jobCode != null
+        ? "$noteAuthor, $jobCode iş emrine partner notu ekledi"
+        : "$noteAuthor, iş emrine partner notu ekledi";
+
+    // Sadece admin ve manager'lara bildirim gönder
+    final response = await _supabase
+        .from('profiles')
+        .select('id')
+        .inFilter('role', ['admin', 'manager']);
+
+    final userIds = (response as List)
+        .map((e) => e['id'] as String)
+        .toList();
+
+    if (userIds.isEmpty) return false;
+
+    return await sendNotificationToExternalUsers(
+      externalUserIds: userIds,
+      title: title,
+      message: message,
+      data: {
+        "type": "partner_note_added",
+        "ticket_id": ticketId,
+        "ticket_title": ticketTitle,
+        "note_author": noteAuthor,
+        "job_code": jobCode,
+      },
+    );
+  }
+
   /// Ticket önceliği değiştiğinde bildirim gönderir
   Future<bool> notifyPriorityChanged({
     required String ticketId,

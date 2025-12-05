@@ -123,18 +123,18 @@ class _NewTicketPageState extends State<NewTicketPage> {
   Future<void> _loadDriveBrands() async {
     try {
       final brands = await _stockService.getBrandsByCategory('Sürücü');
-      // Sabit listeyi de ekle
-      final allBrands = {...StockService.driveBrands, ...brands}.toList();
+      // Sadece veritabanından gelenleri kullan
+      final allBrands = brands; 
       if (mounted) {
         setState(() {
           _availableDriveBrands = allBrands;
         });
       }
     } catch (e) {
-      // Hata durumunda sabit listeyi kullan
+      // Hata durumunda boş liste
       if (mounted) {
         setState(() {
-          _availableDriveBrands = StockService.driveBrands;
+          _availableDriveBrands = [];
         });
       }
     }
@@ -161,7 +161,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
   }
 
   Future<void> _loadModelsForBrand(String brand, bool isAspirator) async {
-    if (brand.isEmpty || brand == 'Diğer') {
+    if (brand.isEmpty) {
       if (mounted) {
         setState(() {
           if (isAspirator) {
@@ -980,7 +980,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                       child: _buildDropdown<String>(
                         label: 'İnverter Markası',
                         value: _smokeFans[index]['brand'],
-                        items: StockService.driveBrands,
+                        items: _availableDriveBrands,
                         onChanged: (val) {
                            setState(() => _smokeFans[index]['brand'] = val);
                         },
@@ -1057,7 +1057,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                       child: _buildDropdown<String>(
                         label: 'İnverter Markası',
                         value: _freshFans[index]['brand'],
-                        items: StockService.driveBrands,
+                        items: _availableDriveBrands,
                         onChanged: (val) {
                            setState(() => _freshFans[index]['brand'] = val);
                         },
@@ -1174,7 +1174,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
               child: _buildDropdown(
                 label: 'Marka',
                 value: _selectedAspiratorBrand,
-                items: _availableDriveBrands.isEmpty ? StockService.driveBrands : _availableDriveBrands,
+                items: _availableDriveBrands,
                 onChanged: (val) async {
                   setState(() => _selectedAspiratorBrand = val);
                   await _loadModelsForBrand(val ?? '', true);
@@ -1183,7 +1183,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
             ),
             const SizedBox(width: 12),
             // Model seçimi (sadece modeller varsa göster)
-            if (_selectedAspiratorBrand != null && _selectedAspiratorBrand != 'Diğer' && _availableAspiratorModels.isNotEmpty)
+            if (_selectedAspiratorBrand != null && _availableAspiratorModels.isNotEmpty)
               Expanded(
                 child: _buildDropdown(
                   label: 'Model',
@@ -1219,7 +1219,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
               child: _buildDropdown(
                 label: 'Marka',
                 value: _selectedVantBrand,
-                items: _availableDriveBrands.isEmpty ? StockService.driveBrands : _availableDriveBrands,
+                items: _availableDriveBrands,
                 onChanged: (val) async {
                   setState(() => _selectedVantBrand = val);
                   await _loadModelsForBrand(val ?? '', false);
@@ -1228,7 +1228,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
             ),
             const SizedBox(width: 12),
             // Model seçimi (sadece modeller varsa göster)
-            if (_selectedVantBrand != null && _selectedVantBrand != 'Diğer' && _availableVantModels.isNotEmpty)
+            if (_selectedVantBrand != null && _availableVantModels.isNotEmpty)
               Expanded(
                 child: _buildDropdown(
                   label: 'Model',

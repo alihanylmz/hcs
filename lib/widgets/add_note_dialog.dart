@@ -6,11 +6,13 @@ import '../services/ticket_service.dart';
 class AddNoteDialog extends StatefulWidget {
   final String ticketId;
   final Function() onSuccess;
+  final bool isPartnerNote;
 
   const AddNoteDialog({
     super.key, 
     required this.ticketId, 
-    required this.onSuccess
+    required this.onSuccess,
+    this.isPartnerNote = false,
   });
 
   @override
@@ -38,13 +40,20 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
       }
 
       // Notu Kaydet
-      await _ticketService.addNote(widget.ticketId, _noteController.text.trim(), uploadedUrls);
+      if (widget.isPartnerNote) {
+        await _ticketService.addPartnerNote(widget.ticketId, _noteController.text.trim(), uploadedUrls);
+      } else {
+        await _ticketService.addNote(widget.ticketId, _noteController.text.trim(), uploadedUrls);
+      }
 
       if (mounted) {
         Navigator.pop(context);
         widget.onSuccess();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Not eklendi'), backgroundColor: Colors.green),
+          SnackBar(
+            content: Text(widget.isPartnerNote ? 'Partner notu eklendi' : 'Not eklendi'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
@@ -87,7 +96,10 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: AppColors.surfaceWhite,
-      title: const Text('Servis Notu Ekle', style: TextStyle(color: AppColors.corporateNavy)),
+      title: Text(
+        widget.isPartnerNote ? 'Partner Notu Ekle' : 'Servis Notu Ekle',
+        style: const TextStyle(color: AppColors.corporateNavy),
+      ),
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(

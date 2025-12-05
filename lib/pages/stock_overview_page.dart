@@ -290,6 +290,7 @@ import 'brand_models_settings_page.dart';
         MaterialPageRoute(
           builder: (_) => PdfViewerPage(
             title: baseName,
+            pdfFileName: '$baseName.pdf',
             pdfGenerator: generator,
           ),
         ),
@@ -958,14 +959,14 @@ import 'brand_models_settings_page.dart';
                   if (_loadingBrands)
                     const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
                   else
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: 'Marka'),
-                      items: (_availableBrands.isEmpty 
-                          ? StockService.driveBrands 
-                          : _availableBrands)
-                          .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                          .toList(),
-                      onChanged: (v) async {
+                      DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(labelText: 'Marka'),
+                        items: (_availableBrands.isEmpty 
+                            ? const ['Diğer'] 
+                            : _availableBrands)
+                            .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                            .toList(),
+                        onChanged: (v) async {
                         if (mounted) {
                           setState(() {
                             _selectedBrand = v;

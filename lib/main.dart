@@ -9,34 +9,61 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'pages/login_page.dart';
 import 'pages/ticket_list_page.dart';
 import 'pages/dashboard_page.dart';
+import 'pages/ticket_detail_page.dart';
 import 'services/user_service.dart';
 import 'services/update_service.dart';
 import 'theme/app_theme.dart';
+import 'models/user_profile.dart'; // UserRole için
 
-void main() async {
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // --- ONESIGNAL AYARLARI ---
-  // Hata ayıklamak için logları açalım (İsteğe bağlı)
+  // --- OneSignal Ayarları ---
   OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
-
-  // SENİN ID'Nİ BURAYA YERLEŞTİRDİM:
   OneSignal.initialize("faeed989-8a81-4fe0-9c73-2eb9ed2144a7");
-
-  // Bildirim izni iste
   OneSignal.Notifications.requestPermission(true);
-  // --------------------------
+
+  OneSignal.Notifications.addClickListener((event) {
+    try {
+      final data = event.notification.additionalData;
+      if (data != null && data.containsKey('ticket_id')) {
+        final ticketId = data['ticket_id'].toString();
+        print("🔔 Bildirime tıklandı, Ticket ID: $ticketId");
+        
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (context) => TicketDetailPage(ticketId: ticketId),
+          ),
+        );
+      }
+    } catch (e) {
+      print("❌ Bildirim tıklama hatası: $e");
+    }
+  });
 
   try {
+    // Ortam değişkenlerini yükle
     await dotenv.load(fileName: ".env");
 
-    await initializeDateFormatting('tr_TR', null); // <--- Eklendi
+    // Tarih formatı (TR)
+    await initializeDateFormatting('tr_TR', null);
+
+    // Supabase init
+    final supabaseUrl = dotenv.env['SUPABASE_URL'];
+    final supabaseKey = dotenv.env['SUPABASE_KEY'];
+
+    if (supabaseUrl == null || supabaseKey == null) {
+      throw Exception("SUPABASE_URL veya SUPABASE_KEY .env dosyasında tanımlı değil.");
+    }
 
     await Supabase.initialize(
-      url: dotenv.env['SUPABASE_URL']!,
-      anonKey: dotenv.env['SUPABASE_KEY']!,
+      url: supabaseUrl,
+      anonKey: supabaseKey,
     );
 
+    // Status bar stil ayarı
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.dark,
@@ -44,13 +71,19 @@ void main() async {
 
     runApp(const IsTakipApp());
   } catch (e) {
-    runApp(MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Text("Başlatma Hatası: $e"),
+    runApp(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(
+            child: Text(
+              "Başlatma Hatası:\n$e",
+              textAlign: TextAlign.center,
+            ),
+          ),
         ),
       ),
-    ));
+    );
   }
 }
 
@@ -78,13 +111,16 @@ class _IsTakipAppState extends State<IsTakipApp> {
     final savedTheme = prefs.getString('theme_mode');
     if (savedTheme != null) {
       setState(() {
-        if (savedTheme == 'light') _themeMode = ThemeMode.light;
-        if (savedTheme == 'dark') _themeMode = ThemeMode.dark;
+        if (savedTheme == 'light') {
+          _themeMode = ThemeMode.light;
+        } else if (savedTheme == 'dark') {
+          _themeMode = ThemeMode.dark;
+        }
       });
     }
   }
 
-  void toggleTheme() async {
+  Future<void> toggleTheme() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       if (_themeMode == ThemeMode.dark) {
@@ -102,6 +138,7 @@ class _IsTakipAppState extends State<IsTakipApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'İş Takip',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
@@ -134,32 +171,64 @@ class _AuthGateState extends State<AuthGate> {
     return StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
-        final session = Supabase.instance.client.auth.currentSession;
-
-        if (session != null) {
-          // Kullanıcı giriş yapmışsa rolünü kontrol et
-          return FutureBuilder(
-            future: UserService().getCurrentUserProfile(),
-            builder: (context, userSnapshot) {
-              if (userSnapshot.connectionState == ConnectionState.waiting) {
-                return const Scaffold(body: Center(child: CircularProgressIndicator()));
-              }
-
-              final userProfile = userSnapshot.data;
-
-              // Rol tabanlı yönlendirme
-              if (userProfile != null &&
-                  (userProfile.role == 'admin' ||
-                      userProfile.role == 'manager')) {
-                return const DashboardPage();
-              } else {
-                return const TicketListPage();
-              }
-            },
+        // Hata durumu
+        if (snapshot.hasError) {
+          return const Scaffold(
+            body: Center(
+              child: Text("Oturum durumu okunurken bir hata oluştu."),
+            ),
           );
-        } else {
+        }
+
+        final session = snapshot.data?.session ?? Supabase.instance.client.auth.currentSession;
+
+        // Kullanıcı oturumu yoksa → Login
+        if (session == null) {
           return const LoginPage();
         }
+
+        // Oturum varsa → Kullanıcı profilini oku
+        return FutureBuilder(
+          future: UserService().getCurrentUserProfile(),
+          builder: (context, userSnapshot) {
+            if (userSnapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            if (userSnapshot.hasError) {
+              return const Scaffold(
+                body: Center(
+                  child: Text("Kullanıcı profili yüklenirken bir hata oluştu."),
+                ),
+              );
+            }
+
+            final userProfile = userSnapshot.data;
+
+            // Profil hiç yoksa: Senaryo A (Admin onayı gerekli)
+            // Profil yoksa kullanıcı giriş yapamaz (LoginPage'de kontrol ediliyor)
+            // Ama yine de burada da güvenlik için kontrol ediyoruz
+            if (userProfile == null) {
+              return const Scaffold(
+                body: Center(
+                  child: Text(
+                    "Profiliniz bulunamadı.\nYöneticinizle görüşün.",
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+
+            // Rol tabanlı yönlendirme
+            if (userProfile.role == UserRole.admin || userProfile.role == UserRole.manager) {
+              return const DashboardPage();
+            } else {
+              return const TicketListPage();
+            }
+          },
+        );
       },
     );
   }

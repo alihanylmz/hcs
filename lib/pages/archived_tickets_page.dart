@@ -35,7 +35,7 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
     if (mounted) {
       setState(() {
         _userRole = profile?.role;
-        _userName = profile?.fullName;
+        _userName = profile?.displayName;
       });
     }
   }

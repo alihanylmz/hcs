@@ -9,6 +9,7 @@ import '../widgets/app_drawer.dart';
 import '../theme/app_colors.dart';
 import 'pdf_viewer_page.dart';
 import 'brand_models_settings_page.dart';
+import 'ticket_detail_page.dart';
 
   class StockOverviewPage extends StatefulWidget {
     const StockOverviewPage({super.key});
@@ -22,7 +23,11 @@ import 'brand_models_settings_page.dart';
     final UserService _userService = UserService();
     
     List<Map<String, dynamic>> _allStocks = [];
+    List<Map<String, dynamic>> _missingTickets = [];
     bool _isLoading = true;
+    bool _missingLoading = true;
+    String? _missingError;
+    bool _missingExpanded = false;
     String _searchQuery = '';
     bool _isSelectionMode = false;
     Set<int> _selectedItems = {}; // Seçilen ürün ID'leri
@@ -39,6 +44,7 @@ import 'brand_models_settings_page.dart';
       super.initState();
       _loadUserProfile();
       _loadStocks();
+      _loadMissingTickets();
     }
 
     Future<void> _loadUserProfile() async {
@@ -63,6 +69,137 @@ import 'brand_models_settings_page.dart';
       } catch (e) {
         if (mounted) setState(() => _isLoading = false);
       }
+    }
+
+    Future<void> _loadMissingTickets() async {
+      setState(() {
+        _missingLoading = true;
+        _missingError = null;
+      });
+      try {
+        final data = await _stockService.getTicketsWithMissingParts();
+        if (mounted) {
+          setState(() {
+            _missingTickets = data;
+            _missingLoading = false;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _missingError = e.toString();
+            _missingLoading = false;
+          });
+        }
+      }
+    }
+
+    Widget _buildMissingTicketsSection(ThemeData theme) {
+      final count = _missingTickets.length;
+
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Container(
+          decoration: BoxDecoration(
+            color: theme.cardTheme.color,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+            border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
+          ),
+          child: ExpansionTile(
+            initiallyExpanded: _missingExpanded,
+            onExpansionChanged: (v) => setState(() => _missingExpanded = v),
+            leading: Icon(Icons.warning_amber_rounded, color: theme.colorScheme.error),
+            title: Text(
+              'Eksik Malzemeler',
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            subtitle: Text(
+              _missingLoading
+                  ? 'Yükleniyor...'
+                  : _missingError != null
+                      ? 'Yüklenemedi'
+                      : '$count işte stok eksiği var',
+              style: theme.textTheme.bodySmall,
+            ),
+            trailing: _missingLoading
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : null,
+            children: [
+              if (_missingError != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _missingError!,
+                          style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: _loadMissingTickets,
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: const Text('Yenile'),
+                      ),
+                    ],
+                  ),
+                )
+              else if (!_missingLoading && _missingTickets.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Text('Eksik malzeme bulunan iş yok.'),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  itemCount: _missingTickets.length,
+                  separatorBuilder: (_, __) => Divider(color: theme.dividerColor.withOpacity(0.2)),
+                  itemBuilder: (context, index) {
+                    final t = _missingTickets[index];
+                    final customer = t['customers'] as Map<String, dynamic>? ?? {};
+                    final title = (t['title'] ?? '').toString();
+                    final jobCode = (t['job_code'] ?? '').toString();
+                    final missing = (t['missing_parts'] ?? '').toString();
+                    final customerName = (customer['name'] ?? '').toString();
+
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        jobCode.isNotEmpty ? '$jobCode • $title' : title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(
+                        (customerName.isNotEmpty ? '$customerName\n' : '') + 'Eksik: $missing',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        final id = t['id'].toString();
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => TicketDetailPage(ticketId: id)),
+                        );
+                      },
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
+      );
     }
 
     // Türkçe karakter desteği için normalize fonksiyonu
@@ -394,7 +531,7 @@ import 'brand_models_settings_page.dart';
         backgroundColor: theme.scaffoldBackgroundColor,
         drawer: AppDrawer(
           currentPage: AppDrawerPage.stock,
-          userName: _userProfile?.fullName,
+          userName: _userProfile?.displayName,
           userRole: _userProfile?.role,
         ),
         appBar: AppBar(
@@ -559,6 +696,9 @@ import 'brand_models_settings_page.dart';
                 ],
               ),
             ),
+
+            // Eksik malzemeli işler (sadece stok sayfasında)
+            if (_userProfile?.role != 'partner_user') _buildMissingTicketsSection(theme),
 
             // 2. ARAMA ÇUBUĞU (Daha yumuşak hatlı)
             Padding(

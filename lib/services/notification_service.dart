@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/notification_item.dart';
 
 /// Otomatik bildirim gönderme servisi
 /// OneSignal REST API kullanarak bildirim gönderir
@@ -19,6 +20,99 @@ class NotificationService {
 
   SupabaseClient get _supabase => Supabase.instance.client;
 
+  /// Supabase'e bildirim kaydeder
+  Future<void> _saveNotificationsToDb({
+    required List<String> userIds,
+    required String title,
+    required String message,
+    Map<String, dynamic>? data,
+  }) async {
+    if (userIds.isEmpty) return;
+
+    try {
+      final List<Map<String, dynamic>> records = userIds.map((uid) {
+        return {
+          'user_id': uid,
+          'title': title,
+          'message': message,
+          'data': data,
+          'is_read': false,
+        };
+      }).toList();
+
+      await _supabase.from('notifications').insert(records);
+    } catch (e) {
+      print('❌ Bildirim veritabanına kaydedilirken hata: $e');
+    }
+  }
+
+  /// Kullanıcının bildirimlerini getirir
+  Future<List<NotificationItem>> getNotifications() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return [];
+
+      final response = await _supabase
+          .from('notifications')
+          .select()
+          .eq('user_id', user.id)
+          .order('created_at', ascending: false)
+          .limit(50);
+
+      final List data = response as List;
+      return data.map((e) => NotificationItem.fromJson(e)).toList();
+    } catch (e) {
+      print('❌ Bildirimler yüklenirken hata: $e');
+      return [];
+    }
+  }
+
+  /// Okunmamış bildirim sayısını getirir
+  Future<int> getUnreadCount() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return 0;
+
+      final response = await _supabase
+          .from('notifications')
+          .count()
+          .eq('user_id', user.id)
+          .eq('is_read', false);
+      
+      return response;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  /// Bildirimi okundu olarak işaretler
+  Future<void> markAsRead(int notificationId) async {
+    try {
+      await _supabase
+          .from('notifications')
+          .update({'is_read': true})
+          .eq('id', notificationId);
+    } catch (e) {
+      print('❌ Bildirim okundu yapılırken hata: $e');
+    }
+  }
+  
+  /// Tüm bildirimleri okundu olarak işaretler
+  Future<void> markAllAsRead() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return;
+
+      await _supabase
+          .from('notifications')
+          .update({'is_read': true})
+          .eq('user_id', user.id)
+          .eq('is_read', false);
+    } catch (e) {
+      print('❌ Tüm bildirimleri okundu yaparken hata: $e');
+    }
+  }
+
   /// Tüm kullanıcılara bildirim gönderir
   /// 
   /// [title] Bildirim başlığı
@@ -29,6 +123,12 @@ class NotificationService {
     required String message,
     Map<String, dynamic>? data,
   }) async {
+    // Tüm kullanıcılara DB kaydı atmak için önce tüm kullanıcı ID'lerini çekmek gerekir.
+    // Ancak sendNotificationToAll genelde OneSignal segmenti kullanıyor.
+    // DB'ye kayıt atmak burada pahalı olabilir, şimdilik sadece OneSignal gönderelim
+    // veya "Sistem Duyurusu" gibi bir tabloya yazmak daha mantıklı olurdu.
+    // Burada pas geçiyoruz veya opsiyonel yapabiliriz.
+
     try {
       final apiKey = _restApiKey;
       if (apiKey == null || apiKey.isEmpty) {
@@ -81,6 +181,15 @@ class NotificationService {
       return false;
     }
 
+    // 1. Önce Veritabanına kaydet (Log)
+    await _saveNotificationsToDb(
+      userIds: externalUserIds,
+      title: title,
+      message: message,
+      data: data,
+    );
+
+    // 2. Sonra OneSignal ile gönder
     try {
       final apiKey = _restApiKey;
       if (apiKey == null || apiKey.isEmpty) {
@@ -191,6 +300,10 @@ class NotificationService {
       print('⚠️ Player ID listesi boş');
       return false;
     }
+    
+    // Not: Player ID'ler ile user_id'leri eşleştirmek zor olduğu için
+    // burada DB kaydı yapamıyoruz (veya zor).
+    // Ancak sendNotificationToExternalUsers metodu kullanılıyor genellikle.
 
     try {
       final apiKey = _restApiKey;
@@ -405,4 +518,3 @@ class NotificationService {
     );
   }
 }
-

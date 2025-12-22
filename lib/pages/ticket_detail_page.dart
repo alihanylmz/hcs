@@ -6,13 +6,16 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/pdf_export_service.dart';
 import '../services/user_service.dart';
 import '../services/ticket_service.dart'; // <--- Yeni Service
+import '../services/stock_service.dart'; // <--- Stock Service
 import '../models/user_profile.dart';
+import '../models/ticket_part.dart';
 import '../pages/edit_ticket_page.dart';
 import 'signature_page.dart';
 import 'pdf_viewer_page.dart';
 import '../theme/app_colors.dart'; // <--- Renkler
 import '../utils/formatters.dart'; // <--- Formatlayıcılar
 import '../widgets/add_note_dialog.dart'; // <--- Dialog Widget
+import '../widgets/ui/ui.dart';
 
 class TicketDetailPage extends StatefulWidget {
   final String ticketId;
@@ -25,6 +28,7 @@ class TicketDetailPage extends StatefulWidget {
 
 class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerProviderStateMixin {
   final _ticketService = TicketService();
+  final _stockService = StockService(); // Stock Service Eklendi
   
   Map<String, dynamic>? _ticket;
   UserProfile? _userProfile;
@@ -35,6 +39,10 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
   // Teknisyen notları için state
   List<Map<String, dynamic>> _notes = [];
   bool _notesLoading = false;
+
+  // Kullanılan Parçalar için state
+  List<TicketPart> _parts = [];
+  bool _partsLoading = false;
   
   // Tab controller
   late TabController _tabController;
@@ -42,11 +50,7 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
   // --- UI İÇİN SABİTLER ---
   static const Map<String, String> _statusLabels = {
     'open': 'Açık',
-    'panel_done_stock': 'Panosu Yapıldı Stokta',
-    'panel_done_sent': 'Panosu Yapıldı Gönderildi',
-    'in_progress': 'Serviste',
     'done': 'İş Tamamlandı',
-    'archived': 'Arşivde'
   };
 
   static const Map<String, String> _priorityLabels = {
@@ -95,6 +99,7 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
       
       if (data != null) {
         _loadNotes();
+        _loadParts(); // Parçaları yükle
       }
     } catch (e) {
       if (!mounted) return;
@@ -125,6 +130,22 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
     } catch (e) {
       debugPrint('Notlar yüklenirken hata: $e');
       if (mounted) setState(() => _notesLoading = false);
+    }
+  }
+
+  Future<void> _loadParts() async {
+    setState(() => _partsLoading = true);
+    try {
+      final parts = await _stockService.getTicketParts(widget.ticketId);
+      if (mounted) {
+        setState(() {
+          _parts = parts;
+          _partsLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Parçalar yüklenirken hata: $e');
+      if (mounted) setState(() => _partsLoading = false);
     }
   }
 
@@ -603,17 +624,11 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
                 label: 'PDF',
                 onPressed: _loading || _ticket == null ? null : _exportToPdf,
               ),
-              if (!isPartnerUser && _userProfile?.isTechnician != true)
+              if (!isPartnerUser)
                 _buildHeaderActionButton(
                   icon: Icons.edit_document,
                   label: 'İmzalar',
                   onPressed: () => _showSignatureMenu(),
-                ),
-              if (_userProfile?.isTechnician == true)
-                _buildHeaderActionButton(
-                  icon: Icons.edit_document,
-                  label: 'Teknisyen İmzası',
-                  onPressed: () => _openTechnicianSignaturePage(),
                 ),
               _buildHeaderActionButton(
                 icon: Icons.refresh_outlined,
@@ -727,12 +742,12 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
         decoration: BoxDecoration(
           color: onPressed == null 
               ? AppColors.backgroundGrey 
-              : AppColors.corporateNavy.withOpacity(0.05),
+              : AppColors.corporateYellow.withOpacity(0.16),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: onPressed == null 
                 ? Colors.grey.shade300 
-                : AppColors.corporateNavy.withOpacity(0.2),
+                : AppColors.corporateYellow.withOpacity(0.7),
           ),
         ),
         child: Row(
@@ -825,41 +840,6 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
                 color: Colors.blue.shade700,
                 fontWeight: FontWeight.w500,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStockWarning(String missingParts) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        border: Border.all(color: Colors.red.shade200),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 24),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Stok Eksiği Tespit Edildi',
-                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Eksik Parçalar: $missingParts',
-                  style: TextStyle(color: Colors.red.shade700, fontSize: 12),
-                ),
-              ],
             ),
           ),
         ],
@@ -1061,10 +1041,16 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1000),
-          child: _buildModernContentCard(
-            title: 'Teknik Bilgiler',
-            icon: Icons.settings_input_component,
+          child: Column(
             children: [
+              // Stok Kullanımı (Yeni)
+              _buildPartsSection(),
+              const SizedBox(height: 20),
+              
+              _buildModernContentCard(
+                title: 'Teknik Bilgiler',
+                icon: Icons.settings_input_component,
+                children: [
               Wrap(
                 spacing: 20,
                 runSpacing: 10,
@@ -1106,9 +1092,59 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
                 children: _buildFeatureChips(ticket),
               ),
             ],
-          ),
+          ), // _buildModernContentCard'ın kapanışı
+          ], // Column'un kapanışı
         ),
       ),
+    ));
+  }
+
+  Widget _buildPartsSection() {
+    if (_partsLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_parts.isEmpty) {
+      return _buildModernContentCard(
+        title: 'Kullanılan Malzemeler', 
+        icon: Icons.inventory_2_outlined,
+        children: [
+          const Text('Henüz malzeme eklenmemiş.', style: TextStyle(color: Colors.grey))
+        ]
+      );
+    }
+
+    return _buildModernContentCard(
+      title: 'Kullanılan Malzemeler',
+      icon: Icons.inventory_2_outlined,
+      children: [
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _parts.length,
+          separatorBuilder: (_, __) => const Divider(),
+          itemBuilder: (context, index) {
+            final part = _parts[index];
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(part.inventoryName ?? 'Bilinmeyen Ürün', style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(part.category ?? ''),
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Text(
+                  '${part.quantity} Adet',
+                  style: TextStyle(color: Colors.blue.shade800, fontWeight: FontWeight.bold),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -1141,8 +1177,6 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
     final status = ticket['status'] as String? ?? 'open';
     final priority = ticket['priority'] as String? ?? 'normal';
     final plannedDate = ticket['planned_date'] as String?;
-    final missingParts = ticket['missing_parts'] as String?; 
-    final hasMissingParts = missingParts != null && missingParts.isNotEmpty;
     final isWide = MediaQuery.of(context).size.width > 960;
 
     return NestedScrollView(
@@ -1159,12 +1193,6 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
               child: _buildPartnerInfoBar(),
             ),
           
-          // Stok eksikliği uyarısı (partner kullanıcılar için gösterilmez)
-          if (hasMissingParts && !isPartnerUser)
-            SliverToBoxAdapter(
-              child: _buildStockWarning(missingParts),
-            ),
-          
           // Tab Bar - Sabit kalacak
           SliverPersistentHeader(
             pinned: true,
@@ -1173,7 +1201,7 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
                 controller: _tabController,
                 labelColor: AppColors.corporateNavy,
                 unselectedLabelColor: AppColors.textLight,
-                indicatorColor: AppColors.corporateNavy,
+                indicatorColor: AppColors.corporateYellow,
                 labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 unselectedLabelStyle: const TextStyle(fontSize: 13),
                 tabs: const [
@@ -1619,49 +1647,57 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
   }
 
   Widget _buildModernContentCard({required String title, required IconData icon, required List<Widget> children}) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceWhite,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return UiCard(
+      padding: const EdgeInsets.all(0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Sol tarafta renkli vertical bar + başlık
+          // Header (kurumsal sarı aksan)
           Container(
             decoration: const BoxDecoration(
               border: Border(
-                left: BorderSide(color: AppColors.corporateNavy, width: 4),
+                left: BorderSide(color: AppColors.corporateYellow, width: 5),
               ),
             ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 20, 12),
-              child: Row(
-                children: [
-                  Icon(icon, color: AppColors.corporateNavy, size: 18),
-                  const SizedBox(width: 10),
-                  Text(
-                    title,
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: AppColors.corporateYellow.withOpacity(0.20),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.corporateYellow.withOpacity(0.6)),
+                  ),
+                  child: Icon(icon, color: AppColors.corporateNavy, size: 16),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title.toUpperCase(),
                     style: const TextStyle(
                       color: AppColors.corporateNavy,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                      letterSpacing: 1.1,
                     ),
                   ),
-                ],
-              ),
+                ),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColors.corporateYellow,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
             ),
           ),
+          Divider(height: 1, color: Colors.black.withOpacity(0.06)),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: children,
@@ -1867,9 +1903,9 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
   Widget _buildPriorityBadge(String label, String priorityKey) {
     Color color;
     switch (priorityKey) {
-      case 'high': color = Colors.red; break;
+      case 'high': color = AppColors.corporateRed; break;
       case 'low': color = Colors.green; break;
-      default: color = Colors.orange;
+      default: color = AppColors.corporateYellow;
     }
     
     return Row(

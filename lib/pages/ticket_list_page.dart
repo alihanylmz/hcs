@@ -1,22 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_svg/flutter_svg.dart'; // Eklendi
-import 'package:intl/intl.dart'; // Tarih formatı için eklendi
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:intl/intl.dart';
 
 import '../main.dart';
-import '../services/general_report_service.dart'; // PDF Servisi
+import '../services/general_report_service.dart';
+import '../services/notification_service.dart'; // Eklendi
 import '../pages/archived_tickets_page.dart';
-import '../pages/dashboard_page.dart'; // DashboardPage importu
+import '../pages/dashboard_page.dart';
 import '../pages/edit_ticket_page.dart';
 import '../pages/login_page.dart';
 import '../pages/new_ticket_page.dart';
 import '../pages/stock_overview_page.dart';
 import '../pages/ticket_detail_page.dart';
+import '../pages/notifications_page.dart'; // Eklendi
 import '../pages/profile_page.dart';
 import '../services/pdf_export_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/ui/ui.dart';
+import '../widgets/notifications_dropdown.dart';
 
 class TicketListPage extends StatefulWidget {
   const TicketListPage({super.key});
@@ -89,12 +93,88 @@ class _TicketListPageState extends State<TicketListPage> {
 
   String? _userName;
   String? _userRole; // Rol bilgisini tutacak değişken
+  int _unreadNotifications = 0; // Okunmamış bildirim sayısı
+  final GlobalKey _notifIconKey = GlobalKey();
+  OverlayEntry? _notifOverlay;
 
   @override
   void initState() {
     super.initState();
     _ticketsFuture = _fetchTickets();
     _loadUserProfile(); 
+    _checkUnreadNotifications(); // Bildirim kontrolü
+  }
+
+  Future<void> _checkUnreadNotifications() async {
+    final count = await NotificationService().getUnreadCount();
+    if (mounted) {
+      setState(() {
+        _unreadNotifications = count;
+      });
+    }
+  }
+
+  void _closeNotificationsDropdown() {
+    _notifOverlay?.remove();
+    _notifOverlay = null;
+    _checkUnreadNotifications();
+  }
+
+  void _openNotificationsDropdown() {
+    if (_notifOverlay != null) {
+      _closeNotificationsDropdown();
+      return;
+    }
+
+    final overlay = Overlay.of(context);
+    if (overlay == null) return;
+
+    final renderBox = _notifIconKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final iconOffset = renderBox.localToGlobal(Offset.zero);
+    final iconSize = renderBox.size;
+    const panelWidth = 360.0;
+
+    _notifOverlay = OverlayEntry(
+      builder: (context) {
+        final screen = MediaQuery.of(context).size;
+        final left = (iconOffset.dx + iconSize.width) - panelWidth;
+        final clampedLeft = left.clamp(8.0, screen.width - panelWidth - 8.0);
+        final top = iconOffset.dy + iconSize.height + 8;
+
+        return Stack(
+          children: [
+            // dışarı tıklanınca kapat
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: _closeNotificationsDropdown,
+                behavior: HitTestBehavior.translucent,
+              ),
+            ),
+            // dropdown panel (zile bağlı)
+            Positioned(
+              left: clampedLeft,
+              top: top,
+              child: Material(
+                color: Colors.transparent,
+                child: NotificationsDropdown(
+                  width: panelWidth,
+                  onClose: _closeNotificationsDropdown,
+                  onOpenTicket: (ticketId) {
+                    Navigator.of(context)
+                        .push(MaterialPageRoute(builder: (_) => TicketDetailPage(ticketId: ticketId)))
+                        .then((_) => _refresh());
+                  },
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    overlay.insert(_notifOverlay!);
   }
 
   Future<void> _loadUserProfile() async {
@@ -156,6 +236,8 @@ class _TicketListPageState extends State<TicketListPage> {
 
   @override
   void dispose() {
+    _notifOverlay?.remove();
+    _notifOverlay = null;
     _searchController.dispose();
     super.dispose();
   }
@@ -184,7 +266,8 @@ class _TicketListPageState extends State<TicketListPage> {
             address
           )
         ''')
-        .neq('status', 'done');
+        // .neq('status', 'done') // Biten işleri de dahil ediyoruz (filtreleme ile yönetilecek)
+        ;
     
     // Sadece yetkisi olmayanlar (örn: pending, partner_user) draftları görmesin
     // Aslında partner_user da draft görmemeli. 
@@ -413,10 +496,7 @@ class _TicketListPageState extends State<TicketListPage> {
   String _statusLabel(String status) {
     switch (status) {
       case 'open': return 'Açık';
-      case 'panel_done_stock': return 'Panosu Yapıldı Stokta';
-      case 'panel_done_sent': return 'Panosu Yapıldı Gönderildi';
-      case 'in_progress': return 'Serviste';
-      case 'done': return 'İş Tamamlandı';
+      case 'done': return 'Bitti';
       default: return status;
     }
   }
@@ -433,9 +513,6 @@ class _TicketListPageState extends State<TicketListPage> {
   Color _getStatusColor(String status, bool isDark) {
     switch (status) {
       case 'open': return isDark ? Colors.blue.shade300 : Colors.blue.shade700;
-      case 'panel_done_stock': return isDark ? Colors.purple.shade300 : Colors.purple.shade700;
-      case 'panel_done_sent': return isDark ? Colors.indigo.shade300 : Colors.indigo.shade700;
-      case 'in_progress': return isDark ? Colors.orange.shade300 : Colors.orange.shade700;
       case 'done': return isDark ? Colors.green.shade300 : Colors.green.shade700;
       default: return Colors.grey;
     }
@@ -502,8 +579,6 @@ class _TicketListPageState extends State<TicketListPage> {
     final plannedDate = ticket['planned_date'] as String?;
     final title = ticket['title'] as String? ?? 'Başlık yok';
     final jobCode = ticket['job_code'] as String? ?? '---';
-    final missingParts = ticket['missing_parts'] as String?; // Eklendi
-    final hasMissingParts = missingParts != null && missingParts.isNotEmpty;
 
     final statusColor = _getStatusColor(status, isDark);
 
@@ -517,11 +592,8 @@ class _TicketListPageState extends State<TicketListPage> {
           ? [BoxShadow(color: theme.cardTheme.shadowColor!, blurRadius: 8, offset: const Offset(0, 2))] 
           : null,
         border: Border.all(
-          // Partner kullanıcılar için kırmızı çerçeve de gösterilmesin
-          color: (hasMissingParts && _userRole != 'partner_user')
-              ? Colors.red.withOpacity(0.5)
-              : theme.dividerColor.withOpacity(0.1),
-          width: (hasMissingParts && _userRole != 'partner_user') ? 1.5 : 1.0,
+          color: theme.dividerColor.withOpacity(0.1),
+          width: 1.0,
         ),
       ),
       child: Column(
@@ -610,32 +682,6 @@ class _TicketListPageState extends State<TicketListPage> {
                   ),
                 ],
              ),
-          ],
-          
-          // Eksik Parça Uyarısı
-          // Partner kullanıcılar iş listesinde stok eksikliği bilgisi görmesin
-          if (hasMissingParts && _userRole != 'partner_user') ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Stokta Yok: $missingParts',
-                      style: const TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
 
           const SizedBox(height: 16),
@@ -792,6 +838,23 @@ class _TicketListPageState extends State<TicketListPage> {
           ],
         ),
         actions: [
+          // Bildirim Butonu
+          Stack(
+            key: _notifIconKey,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined),
+                tooltip: 'Bildirimler',
+                onPressed: _openNotificationsDropdown,
+              ),
+              if (_unreadNotifications > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: UiBadge(text: '$_unreadNotifications'),
+                ),
+            ],
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             tooltip: 'Seçenekler',
@@ -851,21 +914,25 @@ class _TicketListPageState extends State<TicketListPage> {
           ),
         ],
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _ticketsFuture,
-        builder: (context, snapshot) {
+      body: UiMaxWidth(
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: _ticketsFuture,
+          builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const UiLoading(message: 'Yükleniyor...');
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Hata: ${snapshot.error}'));
+            return UiErrorState(
+              message: snapshot.error.toString(),
+              onRetry: _refresh,
+            );
           }
 
           final tickets = snapshot.data ?? [];
           final filtered = _applyFilters(tickets);
           
           final openCount = tickets.where((e) => e['status'] == 'open').length;
-          final progressCount = tickets.where((e) => e['status'] == 'in_progress').length;
+          final doneCount = tickets.where((e) => e['status'] == 'done').length;
 
           return RefreshIndicator(
             onRefresh: _refresh,
@@ -905,49 +972,13 @@ class _TicketListPageState extends State<TicketListPage> {
                               ),
                               const SizedBox(width: 12),
                               _buildStatCard(
-                                title: 'Pano (Stok)', 
-                                value: tickets.where((e) => e['status'] == 'panel_done_stock').length.toString(), 
-                                color: Colors.purple, 
-                                icon: Icons.inventory_2_outlined,
-                                onTap: () {
-                                  setState(() {
-                                    _statusFilter = 'panel_done_stock';
-                                  });
-                                },
-                              ),
-                              const SizedBox(width: 12),
-                              _buildStatCard(
-                                title: 'Pano (Gön.)', 
-                                value: tickets.where((e) => e['status'] == 'panel_done_sent').length.toString(), 
-                                color: Colors.indigo, 
-                                icon: Icons.local_shipping_outlined,
-                                onTap: () {
-                                  setState(() {
-                                    _statusFilter = 'panel_done_sent';
-                                  });
-                                },
-                              ),
-                              const SizedBox(width: 12),
-                              _buildStatCard(
-                                title: 'Serviste', 
-                                value: progressCount.toString(), 
-                                color: Colors.orange, 
-                                icon: Icons.build_circle_outlined,
-                                onTap: () {
-                                  setState(() {
-                                    _statusFilter = 'in_progress';
-                                  });
-                                },
-                              ),
-                              const SizedBox(width: 12),
-                              _buildStatCard(
-                                title: 'Biten Hariç Tümü', 
-                                value: tickets.length.toString(), 
+                                title: 'Biten İşler', 
+                                value: doneCount.toString(), 
                                 color: Colors.green, 
-                                icon: Icons.list_alt_outlined,
+                                icon: Icons.check_circle_outline,
                                 onTap: () {
                                   setState(() {
-                                    _statusFilter = 'all';
+                                    _statusFilter = 'done';
                                   });
                                 },
                               ),
@@ -989,9 +1020,7 @@ class _TicketListPageState extends State<TicketListPage> {
                                   items: const [
                                     DropdownMenuItem(value: 'all', child: Text('Tümü', overflow: TextOverflow.ellipsis)),
                                     DropdownMenuItem(value: 'open', child: Text('Açık', overflow: TextOverflow.ellipsis)),
-                                    DropdownMenuItem(value: 'panel_done_stock', child: Text('Pano Yapıldı (Stok)', overflow: TextOverflow.ellipsis)),
-                                    DropdownMenuItem(value: 'panel_done_sent', child: Text('Pano Yapıldı (Gönderildi)', overflow: TextOverflow.ellipsis)),
-                                    DropdownMenuItem(value: 'in_progress', child: Text('Serviste', overflow: TextOverflow.ellipsis)),
+                                    DropdownMenuItem(value: 'done', child: Text('Bitti', overflow: TextOverflow.ellipsis)),
                                   ],
                                   onChanged: (val) => setState(() => _statusFilter = val!),
                                 ),
@@ -1095,15 +1124,10 @@ class _TicketListPageState extends State<TicketListPage> {
                 if (filtered.isEmpty)
                   SliverFillRemaining(
                     hasScrollBody: false,
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.search_off, size: 64, color: theme.disabledColor),
-                          const SizedBox(height: 16),
-                          Text('Kayıt bulunamadı.', style: TextStyle(color: theme.disabledColor)),
-                        ],
-                      ),
+                    child: const UiEmptyState(
+                      icon: Icons.search_off,
+                      title: 'Kayıt bulunamadı',
+                      subtitle: 'Filtreleri temizleyip tekrar deneyin.',
                     ),
                   )
                 else ...[
@@ -1145,7 +1169,8 @@ class _TicketListPageState extends State<TicketListPage> {
               ],
             ),
           );
-        },
+          },
+        ),
       ),
       // Teknisyenler, partner kullanıcılar ve onay bekleyenler yeni iş açamaz
       floatingActionButton: (_userRole != 'technician' && _userRole != 'pending' && _userRole != 'partner_user')

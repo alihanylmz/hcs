@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/ticket_part.dart';
 
 class StockService {
   final _supabase = Supabase.instance.client;
@@ -38,6 +39,31 @@ class StockService {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  /// Eksik malzemesi olan işleri getirir (Stok sayfasında göstermek için).
+  Future<List<Map<String, dynamic>>> getTicketsWithMissingParts() async {
+    final response = await _supabase
+        .from('tickets')
+        .select('''
+          id,
+          title,
+          job_code,
+          missing_parts,
+          device_brand,
+          device_model,
+          planned_date,
+          created_at,
+          customers (
+            id,
+            name
+          )
+        ''')
+        .not('missing_parts', 'is', null)
+        .neq('missing_parts', '')
+        .order('created_at', ascending: false);
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+
   Future<void> addStock(Map<String, dynamic> data) async {
     await _supabase.from(_table).insert(data);
   }
@@ -54,25 +80,78 @@ class StockService {
     await _supabase.from(_table).update({'quantity': newQuantity}).eq('id', id);
   }
 
-  // --- GÜNCELLENMİŞ STOK DÜŞME MANTIĞI ---
+  // --- TICKET PARTS (Kullanılan Malzemeler) ---
+
+  /// İş emrine parça ekler ve stoktan düşer
+  Future<void> addPartToTicket(String ticketId, int inventoryId, int quantity) async {
+    // 1. Önce stok var mı kontrol et
+    final inv = await _supabase.from('inventory').select('quantity').eq('id', inventoryId).single();
+    final currentQty = inv['quantity'] as int;
+
+    if (currentQty < quantity) {
+      throw Exception('Stok yetersiz! Mevcut: $currentQty');
+    }
+
+    // 2. Parçayı ticket_parts tablosuna ekle
+    await _supabase.from('ticket_parts').insert({
+      'ticket_id': ticketId, // UUID String
+      'inventory_id': inventoryId,
+      'quantity': quantity,
+    });
+
+    // 3. Stoktan düş
+    await _supabase.from('inventory').update({
+      'quantity': currentQty - quantity
+    }).eq('id', inventoryId);
+  }
+
+  /// İş emrinden parça siler ve stoğa iade eder
+  Future<void> removePartFromTicket(int partId) async {
+    // 1. Parça bilgisini çek
+    final part = await _supabase
+        .from('ticket_parts')
+        .select('inventory_id, quantity')
+        .eq('id', partId)
+        .single();
+    
+    final invId = part['inventory_id'] as int;
+    final qty = part['quantity'] as int;
+
+    // 2. Parçayı ticket_parts tablosundan sil
+    await _supabase.from('ticket_parts').delete().eq('id', partId);
+
+    // 3. Stoğa iade et
+    // Not: Stok kaydı silinmişse ne olacak? (Inventory tablosunda soft delete yoksa hata verebilir)
+    // Inventory tablosundaki id kalıcı ise sorun yok.
+    try {
+      final inv = await _supabase.from('inventory').select('quantity').eq('id', invId).single();
+      final currentQty = inv['quantity'] as int;
+      
+      await _supabase.from('inventory').update({
+        'quantity': currentQty + qty
+      }).eq('id', invId);
+    } catch (e) {
+      debugPrint('Stok iade edilirken hata (Ürün silinmiş olabilir): $e');
+    }
+  }
+
+  /// Bir iş emrine ait kullanılan parçaları getirir
+  Future<List<TicketPart>> getTicketParts(String ticketId) async {
+    final response = await _supabase
+        .from('ticket_parts')
+        .select('*, inventory(name, category)')
+        .eq('ticket_id', ticketId) // UUID String
+        .order('created_at', ascending: true);
+    
+    return (response as List).map((e) => TicketPart.fromJson(e)).toList();
+  }
+
+  // --- ESKİ METODLAR (Geriye uyumluluk veya manuel işlemler için) ---
   
   /// Stok miktarını azaltır (ürün adına göre)
   /// 
   /// ⚠️ RACE CONDITION UYARISI: Bu metod "read-modify-write" pattern kullanıyor.
   /// Eğer iki kullanıcı aynı anda aynı ürünü düşürürse, stok tutarsızlığı olabilir.
-  /// 
-  /// Örnek Senaryo:
-  /// - Stok: 10
-  /// - Kullanıcı A okur: 10
-  /// - Kullanıcı B okur: 10
-  /// - Kullanıcı A yazar: 9
-  /// - Kullanıcı B yazar: 9 (Halbuki 8 olmalıydı!)
-  /// 
-  /// 💡 İYİLEŞTİRME ÖNERİSİ: Supabase'de PostgreSQL RPC fonksiyonu oluşturup
-  /// atomik UPDATE ... SET quantity = quantity - $1 WHERE ... şeklinde kullanılmalı.
-  /// Bu sayede veritabanı seviyesinde race condition önlenir.
-  /// 
-  /// Şimdilik bu kod çalışır ancak yüksek eşzamanlılık durumlarında dikkatli olunmalı.
   Future<String?> decreaseStockByName(String productName, {int amount = 1}) async {
     try {
       final response = await _supabase

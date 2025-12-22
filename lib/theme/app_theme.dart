@@ -5,7 +5,7 @@ import 'app_colors.dart';
 class AppTheme {
   // Ana Renkler (Profile Page ile uyumlu)
   static const Color _lightBg = Color(0xFFF8FAFC); // Slate-50
-  static const Color _darkBg = Color(0xFF0F172A); // Slate-900
+  static const Color _darkBg = Color(0xFF0B0B0B); // Kurumsal Siyah
   
   static const Color _inputFillLight = Colors.white;
   static const Color _inputFillDark = Color(0xFF1E293B);
@@ -20,9 +20,9 @@ class AppTheme {
       
       colorScheme: const ColorScheme.light(
         primary: AppColors.corporateNavy,
-        secondary: Colors.orange, // Accent renk
+        secondary: AppColors.corporateYellow,
         surface: Colors.white,
-        error: Colors.redAccent,
+        error: AppColors.corporateRed,
         onPrimary: Colors.white,
         onSurface: AppColors.textDark,
       ),
@@ -47,13 +47,13 @@ class AppTheme {
       ),
 
       // Kart Tasarımı (Hafif gölgeli, oval)
-      cardTheme: CardTheme(
-        color: Colors.white,
-        elevation: 4,
-        shadowColor: Colors.black.withOpacity(0.05),
-        margin: const EdgeInsets.only(bottom: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
+      // cardTheme: CardTheme(
+      //   color: Colors.white,
+      //   elevation: 4,
+      //   shadowColor: Colors.black.withOpacity(0.05),
+      //   margin: const EdgeInsets.only(bottom: 16),
+      //   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      // ),
 
       // Input (Yazı Alanı) Tasarımı - Profil Sayfası Tarzı
       inputDecorationTheme: InputDecorationTheme(
@@ -108,8 +108,9 @@ class AppTheme {
       
       colorScheme: const ColorScheme.dark(
         primary: AppColors.corporateNavy,
-        secondary: Colors.orange,
+        secondary: AppColors.corporateYellow,
         surface: _inputFillDark,
+        error: AppColors.corporateRed,
         onPrimary: Colors.white,
         onSurface: Colors.white,
       ),
@@ -124,15 +125,15 @@ class AppTheme {
         titleTextStyle: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
       ),
 
-      cardTheme: CardTheme(
-        color: _inputFillDark,
-        elevation: 0,
-        margin: const EdgeInsets.only(bottom: 16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Colors.white10),
-        ),
-      ),
+      // cardTheme: CardTheme(
+      //   color: _inputFillDark,
+      //   elevation: 0,
+      //   margin: const EdgeInsets.only(bottom: 16),
+      //   shape: RoundedRectangleBorder(
+      //     borderRadius: BorderRadius.circular(16),
+      //     side: const BorderSide(color: Colors.white10),
+      //   ),
+      // ),
 
       inputDecorationTheme: InputDecorationTheme(
         filled: true,

@@ -7,6 +7,7 @@ class UserRole {
   static const String admin = 'admin';
   static const String manager = 'manager';
   static const String technician = 'technician';
+  static const String supervisor = 'supervisor';
   static const String pending = 'pending';
   static const String partnerUser = 'partner_user';
 }
@@ -35,6 +36,7 @@ class UserProfile {
       UserRole.admin,
       UserRole.manager,
       UserRole.technician,
+      UserRole.supervisor,
       UserRole.pending,
       UserRole.partnerUser,
     };
@@ -91,6 +93,8 @@ class UserProfile {
       role == UserRole.manager || role == UserRole.admin;
 
   bool get isTechnician => role == UserRole.technician;
+
+  bool get isSupervisor => role == UserRole.supervisor;
 
   bool get isPending => role == UserRole.pending;
 

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:file_picker/file_picker.dart'; // Eklendi
-import 'package:flutter_svg/flutter_svg.dart'; // Eklendi
-import '../services/stock_service.dart'; // StockService eklendi
-import '../services/partner_service.dart'; // Partner Service eklendi
-import '../services/user_service.dart'; // User Service eklendi
-import '../models/partner.dart'; // Partner Model eklendi
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import '../services/stock_service.dart';
+import '../services/partner_service.dart';
+import '../services/user_service.dart';
+import '../models/partner.dart';
+import '../models/ticket_part.dart'; // Eklendi
 
 class EditTicketPage extends StatefulWidget {
   final String ticketId;
@@ -85,6 +86,11 @@ class _EditTicketPageState extends State<EditTicketPage> {
   String? _errorMessage;
   String? _userRole; // Kullanıcı rolü (admin/manager kontrolü için)
 
+  // Stok Parça Yönetimi
+  List<TicketPart> _usedParts = [];
+  bool _isLoadingParts = false;
+  List<Map<String, dynamic>> _allInventory = [];
+
   dynamic get _ticketIdQueryValue {
     final parsed = int.tryParse(widget.ticketId);
     return parsed ?? widget.ticketId;
@@ -96,7 +102,136 @@ class _EditTicketPageState extends State<EditTicketPage> {
     _loadDriveBrands();
     _loadTicket();
     _loadUserRole();
-    _loadPartners(); // Partnerleri yükle
+    _loadPartners();
+    _loadUsedParts();
+    _loadInventory();
+  }
+
+  Future<void> _loadInventory() async {
+    try {
+      final items = await _stockService.getStocks();
+      if (mounted) {
+        setState(() {
+          _allInventory = items;
+        });
+      }
+    } catch (e) {
+      debugPrint('Envanter yükleme hatası: $e');
+    }
+  }
+
+  Future<void> _loadUsedParts() async {
+    setState(() => _isLoadingParts = true);
+    try {
+      final parts = await _stockService.getTicketParts(widget.ticketId);
+      if (mounted) {
+        setState(() {
+          _usedParts = parts;
+          _isLoadingParts = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Parça yükleme hatası: $e');
+      if (mounted) setState(() => _isLoadingParts = false);
+    }
+  }
+
+  Future<void> _addPartDialog() async {
+    int? selectedInventoryId;
+    int quantity = 1;
+    final controller = TextEditingController(text: '1');
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Parça Ekle'),
+        content: StatefulBuilder(
+          builder: (context, setState) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<int>(
+                  isExpanded: true,
+                  hint: const Text('Ürün Seçiniz'),
+                  value: selectedInventoryId,
+                  items: _allInventory.map((item) {
+                    return DropdownMenuItem<int>(
+                      value: item['id'] as int,
+                      child: Text(
+                        '${item['name']} (Stok: ${item['quantity']})',
+                        style: TextStyle(
+                          color: (item['quantity'] as int) <= 0 ? Colors.red : Colors.black,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) => setState(() => selectedInventoryId = val),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Adet'),
+                  onChanged: (val) => quantity = int.tryParse(val) ?? 1,
+                ),
+              ],
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (selectedInventoryId == null) return;
+              try {
+                await _stockService.addPartToTicket(
+                  widget.ticketId,
+                  selectedInventoryId!,
+                  quantity,
+                );
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  _loadUsedParts();
+                  _loadInventory(); // Stok güncellendiği için yenile
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Parça eklendi ve stoktan düşüldü.')),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text('Ekle'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _removePart(int partId) async {
+    try {
+      await _stockService.removePartFromTicket(partId);
+      _loadUsedParts();
+      _loadInventory();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Parça silindi ve stoğa iade edildi.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
   
   Future<void> _loadPartners() async {
@@ -253,7 +388,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
           _jobCodeController.text = ticket['job_code'] ?? '';
           _status = ticket['status'] ?? 'open';
           // Eğer veritabanından gelen status listede yoksa varsayılan 'open' olsun (güvenlik)
-          const validStatuses = ['open', 'panel_done_stock', 'panel_done_sent', 'in_progress', 'done', 'archived'];
+          const validStatuses = ['open', 'done', 'archived', 'draft'];
           if (!validStatuses.contains(_status)) {
             _status = 'open';
           }
@@ -403,124 +538,10 @@ class _EditTicketPageState extends State<EditTicketPage> {
     final supabase = Supabase.instance.client;
 
     try {
-      // 4. Adım: Stok Değişikliği Kontrolü
-      // Eski ve yeni parçaları karşılaştır, sadece değişiklik varsa stok güncelle
+      // 4. Adım: Stok Değişikliği Kontrolü (OTOMATİK STOK DÜŞME KALDIRILDI)
+      // Artık manuel parça ekleme kullanılıyor.
       
-      // Önceki veriyi çek (Eski stokları bilmek için)
-      final oldTicketResponse = await supabase
-          .from('tickets')
-          .select()
-          .eq('id', _ticketIdQueryValue)
-          .maybeSingle();
-
-      // Eski kayıt bilgileri
-      final oldPlc = oldTicketResponse != null ? oldTicketResponse['plc_model'] : null;
-      final oldHmiBrand = oldTicketResponse != null ? oldTicketResponse['hmi_brand'] : null;
-      final oldHmiSize = oldTicketResponse != null ? (oldTicketResponse['hmi_size'] as num?)?.toDouble() : null;
-      final oldAspBrand = oldTicketResponse != null ? oldTicketResponse['aspirator_brand'] : null;
-      final oldAspKw = oldTicketResponse != null ? (oldTicketResponse['aspirator_kw'] as num?)?.toDouble() : null;
-      final oldAspModel = oldTicketResponse != null ? oldTicketResponse['aspirator_model'] : null; // Gelecekte eklenecek
-      final oldVantBrand = oldTicketResponse != null ? oldTicketResponse['vant_brand'] : null;
-      final oldVantKw = oldTicketResponse != null ? (oldTicketResponse['vant_kw'] as num?)?.toDouble() : null;
-      final oldVantModel = oldTicketResponse != null ? oldTicketResponse['vant_model'] : null; // Gelecekte eklenecek
-
-      // Yeni seçilenler
-      final newPlc = _selectedPlcModel;
-      final newHmiBrand = _selectedHmiBrand;
-      final newHmiSize = _selectedHmiSize;
-      final newAspBrand = _selectedAspiratorBrand;
-      final newAspModel = _selectedAspiratorModel;
-      final newAspKw = _selectedAspiratorKw;
-      final newVantBrand = _selectedVantBrand;
-      final newVantModel = _selectedVantModel;
-      final newVantKw = _selectedVantKw;
-
-      // PLC değişti mi?
-      if (oldPlc != newPlc) {
-         if (oldPlc != null) await StockService().revertTicketStockUsage(plcModel: oldPlc);
-         if (newPlc != null) await StockService().processTicketStockUsage(plcModel: newPlc);
-      }
-      
-      // HMI değişti mi?
-      if (oldHmiBrand != newHmiBrand || oldHmiSize != newHmiSize) {
-         if (oldHmiBrand != null && oldHmiSize != null) {
-            await StockService().revertTicketStockUsage(hmiBrand: oldHmiBrand, hmiSize: oldHmiSize);
-         }
-         if (newHmiBrand != null && newHmiSize != null) {
-            await StockService().processTicketStockUsage(hmiBrand: newHmiBrand, hmiSize: newHmiSize);
-         }
-      }
-
-      // Aspiratör Sürücü değişti mi?
-      if (oldAspBrand != newAspBrand || oldAspKw != newAspKw || oldAspModel != newAspModel) {
-         // Eski kombinasyonu iade et
-         if (oldAspBrand != null && oldAspKw != null) {
-            await StockService().revertTicketStockUsage(
-              aspiratorBrand: oldAspBrand, 
-              aspiratorModel: oldAspModel,
-              aspiratorKw: oldAspKw
-            );
-         }
-         // Yeni kombinasyonu düş
-         if (newAspBrand != null && newAspKw != null) {
-            await StockService().processTicketStockUsage(
-              aspiratorBrand: newAspBrand, 
-              aspiratorModel: newAspModel,
-              aspiratorKw: newAspKw
-            );
-         }
-      }
-
-      // Vantilatör Sürücü değişti mi?
-      if (oldVantBrand != newVantBrand || oldVantKw != newVantKw || oldVantModel != newVantModel) {
-         // Eski kombinasyonu iade et
-         if (oldVantBrand != null && oldVantKw != null) {
-            await StockService().revertTicketStockUsage(
-              vantBrand: oldVantBrand, 
-              vantModel: oldVantModel,
-              vantKw: oldVantKw
-            );
-         }
-         // Yeni kombinasyonu düş
-         if (newVantBrand != null && newVantKw != null) {
-            await StockService().processTicketStockUsage(
-              vantBrand: newVantBrand, 
-              vantModel: newVantModel,
-              vantKw: newVantKw
-            );
-         }
-      }
-
-      // Eksik Parça Listesini Güncelle (Son duruma göre tekrar kontrol et)
-      // Burada sadece eksik kontrolü yapıyoruz, stok düşmüyoruz (çünkü yukarıda yaptık)
-      final missingItems = <String>[];
-      
-      // PLC Eksik mi?
-      if (newPlc != null && newPlc != 'Diğer') {
-         final stock = await supabase.from('inventory').select('quantity').eq('name', '$newPlc PLC').maybeSingle();
-         if (stock != null && (stock['quantity'] as int) < 0) missingItems.add('$newPlc PLC');
-      }
-
-      // HMI Eksik mi?
-      if (newHmiBrand != null && newHmiSize != null && newHmiBrand != 'Diğer') {
-         final name = '$newHmiBrand ${StockService.formatInch(newHmiSize)} inç HMI';
-         final stock = await supabase.from('inventory').select('quantity').eq('name', name).maybeSingle();
-         if (stock != null && (stock['quantity'] as int) < 0) missingItems.add(name);
-      }
-
-      // Aspiratör Eksik mi?
-      if (newAspBrand != null && newAspKw != null && newAspBrand != 'Diğer') {
-         final name = '$newAspBrand ${StockService.formatKw(newAspKw)} kW Sürücü';
-         final stock = await supabase.from('inventory').select('quantity').eq('name', name).maybeSingle();
-         if (stock != null && (stock['quantity'] as int) < 0) missingItems.add(name);
-      }
-      
-      // Vantilatör Eksik mi?
-      if (newVantBrand != null && newVantKw != null && newVantBrand != 'Diğer') {
-         final name = '$newVantBrand ${StockService.formatKw(newVantKw)} kW Sürücü';
-         final stock = await supabase.from('inventory').select('quantity').eq('name', name).maybeSingle();
-         if (stock != null && (stock['quantity'] as int) < 0) missingItems.add(name);
-      }
+      final String? missingPartsString = null;
 
       // Müşteri bilgilerini güncelle
       final customerId = _customerId;
@@ -571,7 +592,6 @@ class _EditTicketPageState extends State<EditTicketPage> {
       }
 
       // 5. Adım: Ticket Bilgilerini Güncelle
-      final missingPartsString = missingItems.isEmpty ? null : missingItems.join(', ');
       await supabase
           .from('tickets')
           .update({
@@ -710,11 +730,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                               if (_userRole == 'admin' || _userRole == 'manager')
                                                 const DropdownMenuItem(value: 'draft', child: Text('Taslak (Gizli)')),
                                               const DropdownMenuItem(value: 'open', child: Text('Açık')),
-                                              const DropdownMenuItem(value: 'panel_done_stock', child: Text('Panosu Yapıldı (Stok)')),
-                                              const DropdownMenuItem(value: 'panel_done_sent', child: Text('Panosu Yapıldı (Gönderildi)')),
-                                              const DropdownMenuItem(value: 'in_progress', child: Text('Serviste')),
-                                              const DropdownMenuItem(value: 'done', child: Text('Tamamlandı')),
-                                              const DropdownMenuItem(value: 'archived', child: Text('Arşivde')),
+                                              const DropdownMenuItem(value: 'done', child: Text('Bitti')),
                                             ],
                                             onChanged: (val) => setState(() => _status = val!),
                                           ),
@@ -828,6 +844,46 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                     _buildTextField(controller: _customerAddressController, label: 'Adres', icon: Icons.location_on_outlined, maxLines: 2),
                                   ],
                                 ),
+                                const SizedBox(height: 24),
+                                // --- KULLANILAN MALZEMELER (YENİ) ---
+                                _buildContentCard(
+                                  title: 'KULLANILAN MALZEMELER',
+                                  icon: Icons.inventory_2_outlined,
+                                  children: [
+                                    if (_isLoadingParts)
+                                      const Center(child: CircularProgressIndicator())
+                                    else if (_usedParts.isEmpty)
+                                      const Center(child: Text('Henüz malzeme eklenmemiş.', style: TextStyle(color: Colors.grey)))
+                                    else
+                                      ListView.separated(
+                                        shrinkWrap: true,
+                                        physics: const NeverScrollableScrollPhysics(),
+                                        itemCount: _usedParts.length,
+                                        separatorBuilder: (_, __) => const Divider(),
+                                        itemBuilder: (context, index) {
+                                          final part = _usedParts[index];
+                                          return ListTile(
+                                            contentPadding: EdgeInsets.zero,
+                                            title: Text(part.inventoryName ?? 'Bilinmeyen Ürün', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                            subtitle: Text('${part.quantity} Adet', style: const TextStyle(color: Colors.blue)),
+                                            trailing: IconButton(
+                                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                              onPressed: () => _removePart(part.id),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    const SizedBox(height: 16),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: _addPartDialog,
+                                        icon: const Icon(Icons.add),
+                                        label: const Text('Parça Ekle'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
@@ -904,6 +960,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
                   'Elektrostatik',
                   'Heat-Pump',
                   'Jet Fan',
+                  'Diğer / Arıza',
                 ],
                 onChanged: (val) => setState(() => _selectedDeviceModel = val),
               ),

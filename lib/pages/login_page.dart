@@ -135,6 +135,12 @@ class _LoginPageState extends State<LoginPage> {
         // AuthGate stream'i bazen gecikebilir, bu yüzden doğrudan yönlendirme yapıyoruz
         if (mounted) {
           // Profil bilgisine göre doğrudan yönlendirme yap
+          // Artık herkes İş Listesine gidiyor
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const TicketListPage()),
+          );
+          
+          /*
           if (profile.role == UserRole.admin || profile.role == UserRole.manager) {
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (_) => const DashboardPage()),
@@ -144,6 +150,7 @@ class _LoginPageState extends State<LoginPage> {
               MaterialPageRoute(builder: (_) => const TicketListPage()),
             );
           }
+          */
         }
 
       } else {

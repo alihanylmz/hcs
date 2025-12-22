@@ -1,10 +1,15 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/date_symbol_data_local.dart';
+
+import 'package:window_manager/window_manager.dart';
 
 import 'pages/login_page.dart';
 import 'pages/ticket_list_page.dart';
@@ -15,33 +20,52 @@ import 'services/update_service.dart';
 import 'theme/app_theme.dart';
 import 'models/user_profile.dart'; // UserRole için
 
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+    final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // --- OneSignal Ayarları ---
-  OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
-  OneSignal.initialize("faeed989-8a81-4fe0-9c73-2eb9ed2144a7");
-  OneSignal.Notifications.requestPermission(true);
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    await windowManager.ensureInitialized();
+    WindowOptions windowOptions = const WindowOptions(
+      size: Size(1280, 720),
+      minimumSize: Size(800, 600),
+      center: true,
+      backgroundColor: Colors.transparent,
+      skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.normal,
+    );
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
 
-  OneSignal.Notifications.addClickListener((event) {
-    try {
-      final data = event.notification.additionalData;
-      if (data != null && data.containsKey('ticket_id')) {
-        final ticketId = data['ticket_id'].toString();
-        print("🔔 Bildirime tıklandı, Ticket ID: $ticketId");
-        
-        navigatorKey.currentState?.push(
-          MaterialPageRoute(
-            builder: (context) => TicketDetailPage(ticketId: ticketId),
-          ),
-        );
+  // --- OneSignal Ayarları (Sadece Mobil) ---
+  if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+    OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
+    OneSignal.initialize("faeed989-8a81-4fe0-9c73-2eb9ed2144a7");
+    OneSignal.Notifications.requestPermission(true);
+
+    OneSignal.Notifications.addClickListener((event) {
+      try {
+        final data = event.notification.additionalData;
+        if (data != null && data.containsKey('ticket_id')) {
+          final ticketId = data['ticket_id'].toString();
+          print("🔔 Bildirime tıklandı, Ticket ID: $ticketId");
+          
+          navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (context) => TicketDetailPage(ticketId: ticketId),
+            ),
+          );
+        }
+      } catch (e) {
+        print("❌ Bildirim tıklama hatası: $e");
       }
-    } catch (e) {
-      print("❌ Bildirim tıklama hatası: $e");
-    }
-  });
+    });
+  }
 
   try {
     // Ortam değişkenlerini yükle
@@ -144,6 +168,15 @@ class _IsTakipAppState extends State<IsTakipApp> {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: _themeMode,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('tr', 'TR'),
+      ],
+      locale: const Locale('tr', 'TR'),
       home: const AuthGate(),
     );
   }
@@ -221,12 +254,15 @@ class _AuthGateState extends State<AuthGate> {
               );
             }
 
-            // Rol tabanlı yönlendirme
-            if (userProfile.role == UserRole.admin || userProfile.role == UserRole.manager) {
-              return const DashboardPage();
-            } else {
-              return const TicketListPage();
-            }
+            // Rol tabanlı yönlendirme yerine HERKES için İş Listesi
+            return const TicketListPage();
+            
+            // Eski kod:
+            // if (userProfile.role == UserRole.admin || userProfile.role == UserRole.manager) {
+            //   return const DashboardPage();
+            // } else {
+            //   return const TicketListPage();
+            // }
           },
         );
       },

@@ -610,13 +610,6 @@ class _DashboardPageState extends State<DashboardPage> {
             )
           else ...[
             buildRow('Açık', _recentOpenCount, Colors.blue),
-            buildRow('Serviste', _recentInProgressCount, Colors.orange),
-            buildRow('Pano Yapıldı (Stok)', _recentPanelStockCount, Colors.purple),
-            buildRow(
-              'Pano Yapıldı (Gönderildi)',
-              _recentPanelSentCount,
-              Colors.indigo,
-            ),
           ],
         ],
       ),
@@ -1085,14 +1078,8 @@ class _DashboardPageState extends State<DashboardPage> {
     switch (status) {
       case 'open':
         return 'Açık';
-      case 'panel_done_stock':
-        return 'Pano (Stok)';
-      case 'panel_done_sent':
-        return 'Pano (Gön.)';
-      case 'in_progress':
-        return 'Serviste';
       case 'done':
-        return 'Tamamlandı';
+        return 'Bitti';
       default:
         return status;
     }
@@ -1102,12 +1089,6 @@ class _DashboardPageState extends State<DashboardPage> {
     switch (status) {
       case 'open':
         return Colors.blue;
-      case 'panel_done_stock':
-        return Colors.purple;
-      case 'panel_done_sent':
-        return Colors.indigo;
-      case 'in_progress':
-        return Colors.orange;
       case 'done':
         return Colors.green;
       default:

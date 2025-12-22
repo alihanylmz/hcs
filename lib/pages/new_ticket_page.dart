@@ -440,44 +440,18 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
       final ticketId = ticketInsert['id'];
 
-      // --- STOKTAN DÜŞME VE EKSİK KONTROLÜ ---
+      // --- STOKTAN DÜŞME VE EKSİK KONTROLÜ (KALDIRILDI) ---
+      // Artık yeni iş emri oluştururken otomatik stok düşmüyoruz.
+      // Kullanıcı iş emri detayından manuel olarak parça eklemeli.
+      /*
       try {
         final stockService = StockService();
         final List<String> missingItems = [];
 
         // 1. Standart Kontroller (Jet Fan dışındakiler veya ortaklar)
         final standardMissing = await stockService.processTicketStockUsage(
-          plcModel: _selectedPlcModel,
-          aspiratorBrand: _selectedAspiratorBrand,
-          aspiratorModel: _selectedAspiratorModel,
-          aspiratorKw: _selectedAspiratorKw,
-          vantBrand: _selectedVantBrand,
-          vantModel: _selectedVantModel,
-          vantKw: _selectedVantKw,
-          hmiBrand: _selectedHmiBrand,
-          hmiSize: _selectedHmiSize,
-        );
-        missingItems.addAll(standardMissing);
-
-        // 2. Jet Fan Dinamik Stok Düşümü
-        if (widget.deviceType == 'jet_fan') {
-           final jetFanMissing = await stockService.processJetFanStockUsage(
-             smokeFans: _smokeFans,
-             freshFans: _freshFans,
-           );
-           missingItems.addAll(jetFanMissing);
-        }
-
-        // Eğer eksik varsa ticket'a kaydet
-        if (missingItems.isNotEmpty) {
-          await supabase
-            .from('tickets')
-            .update({'missing_parts': missingItems.join(', ')})
-            .eq('id', ticketId);
-        }
-      } catch (stockErr) {
-        debugPrint('Stok düşme hatası (Kritik değil, işlem devam ediyor): $stockErr');
-      }
+      ...
+      */
       // ---------------------------
 
       // --- BİLDİRİM GÖNDERME ---
@@ -1109,6 +1083,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                   'Elektrostatik',
                   'Heat-Pump',
                   'Jet Fan',
+                  'Diğer / Arıza',
                 ],
                 onChanged: (val) => setState(() => _selectedDeviceModel = val),
                 isRequired: true,

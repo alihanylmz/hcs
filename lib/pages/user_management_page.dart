@@ -163,6 +163,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
             const Divider(height: 1),
             _buildRoleOption(ctx, UserRole.admin, 'Sistem Yöneticisi (Tam Yetki)', Icons.admin_panel_settings, Colors.red),
             _buildRoleOption(ctx, UserRole.manager, 'Yönetici (Stok/Rapor)', Icons.manage_accounts, Colors.orange),
+            _buildRoleOption(ctx, UserRole.supervisor, 'Süpervizör (İş Açabilir)', Icons.supervisor_account, Colors.teal),
             _buildRoleOption(ctx, UserRole.technician, 'Saha Teknisyeni (Sınırlı)', Icons.engineering, Colors.blue),
             _buildRoleOption(ctx, UserRole.partnerUser, 'Partner Firma Kullanıcısı', Icons.business, Colors.purple),
             _buildRoleOption(ctx, UserRole.pending, 'Onay Bekliyor (Kısıtlı)', Icons.hourglass_empty, Colors.grey),
@@ -288,6 +289,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                               const DropdownMenuItem(value: null, child: Text('Tüm Roller')),
                               DropdownMenuItem(value: UserRole.admin, child: Text(_getRoleLabel(UserRole.admin))),
                               DropdownMenuItem(value: UserRole.manager, child: Text(_getRoleLabel(UserRole.manager))),
+                              DropdownMenuItem(value: UserRole.supervisor, child: Text(_getRoleLabel(UserRole.supervisor))),
                               DropdownMenuItem(value: UserRole.technician, child: Text(_getRoleLabel(UserRole.technician))),
                               DropdownMenuItem(value: UserRole.partnerUser, child: Text(_getRoleLabel(UserRole.partnerUser))),
                               DropdownMenuItem(value: UserRole.pending, child: Text(_getRoleLabel(UserRole.pending))),
@@ -561,6 +563,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
         return 'Admin';
       case UserRole.manager:
         return 'Yönetici';
+      case UserRole.supervisor:
+        return 'Süpervizör';
       case UserRole.technician:
         return 'Teknisyen';
       case UserRole.partnerUser:
@@ -578,6 +582,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
         return Colors.red;
       case UserRole.manager:
         return Colors.orange;
+      case UserRole.supervisor:
+        return Colors.teal;
       case UserRole.technician:
         return Colors.blue;
       case UserRole.partnerUser:

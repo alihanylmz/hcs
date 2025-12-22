@@ -57,3 +57,12 @@ key.properties
 
 # Mac system files
 **/.DS_Store
+
+# Windows CMake (generated)
+windows/CMakeFiles/
+windows/**/CMakeFiles/
+windows/**/cmake_install.cmake
+windows/**/CMakeCache.txt
+
+# Installer outputs
+installer/

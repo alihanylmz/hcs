@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Kurumsal Renkler (Sarı / Kırmızı / Siyah)
-  // Not: Projede "corporateNavy" birçok yerde kullanıldığı için ismi koruyup rengi siyaha çekiyoruz.
-  static const Color corporateNavy = Color(0xFF0B0B0B); // Kurumsal Siyah
-  static const Color corporateYellow = Color(0xFFFFC107); // Sarı (Amber)
+  // Kurumsal Renkler (Endüstriyel / SCADA vibe)
+  // Primary (AppBar): #1F2933  | Accent: #FBBF24
+  static const Color corporateNavy = Color(0xFF1F2933); // Koyu antrasit / kömür (primary)
+  static const Color corporateYellow = Color(0xFFFBBF24); // Premium amber (accent)
   static const Color corporateRed = Color(0xFFD32F2F); // Kırmızı
 
   static const Color backgroundGrey = Color(0xFFF8FAFC);
@@ -21,9 +21,9 @@ class AppColors {
   static const Color statusArchived = Colors.grey;
 
   // Modern palet (kurumsal renklere uyarlanmış)
-  static const Color primary = corporateNavy; // Siyah
-  static const Color background = Color(0xFFF8FAFC); // Kırık Beyaz (Slate-50)
+  static const Color primary = corporateNavy; // #1F2933
+  static const Color background = Color(0xFFF8FAFC); // Light background
   static const Color surface = Colors.white;
   // textDark ve textLight yukarıda zaten var
-  static const Color accent = corporateYellow; // Sarı vurgu
+  static const Color accent = corporateYellow; // #FBBF24
 }

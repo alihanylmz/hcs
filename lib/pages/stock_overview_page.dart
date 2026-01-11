@@ -671,138 +671,156 @@ import 'ticket_detail_page.dart';
             ],
           ],
         ),
-        body: Column(
-          children: [
-            // 1. ÜST ÖZET KARTLARI (Dashboard Havası)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
+        body: CustomScrollView(
+          slivers: [
+            // Header / controls area (scrolls too, prevents RenderFlex overflow)
+            SliverToBoxAdapter(
+              child: Column(
                 children: [
-                  _buildSummaryCard(
-                    'Toplam Ürün',
-                    '$totalStock',
-                    Icons.inventory_2_outlined,
-                    theme.colorScheme.primary,
-                    theme,
+                  // 1. ÜST ÖZET KARTLARI (Dashboard Havası)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        _buildSummaryCard(
+                          'Toplam Ürün',
+                          '$totalStock',
+                          Icons.inventory_2_outlined,
+                          theme.colorScheme.primary,
+                          theme,
+                        ),
+                        const SizedBox(width: 12),
+                        _buildSummaryCard(
+                          'Kritik Stok',
+                          '$lowStockCount',
+                          Icons.warning_amber_rounded,
+                          theme.colorScheme.secondary,
+                          theme,
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(width: 12),
-                  _buildSummaryCard(
-                    'Kritik Stok',
-                    '$lowStockCount',
-                    Icons.warning_amber_rounded,
-                    theme.colorScheme.secondary,
-                    theme,
+
+                  // Eksik malzemeli işler (sadece stok sayfasında)
+                  if (_userProfile?.role != 'partner_user') _buildMissingTicketsSection(theme),
+
+                  // 2. ARAMA ÇUBUĞU (Daha yumuşak hatlı)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: theme.cardTheme.color,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: TextField(
+                        onChanged: (v) => setState(() => _searchQuery = v),
+                        keyboardType: TextInputType.text,
+                        textInputAction: TextInputAction.search,
+                        enableSuggestions: true,
+                        autocorrect: true,
+                        decoration: InputDecoration(
+                          hintText: 'Ürün, raf veya kategori ara...',
+                          prefixIcon: Icon(Icons.search, color: theme.colorScheme.onSurface.withOpacity(0.6)),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // 3. MODERN KATEGORİ SEÇİCİ (Chips)
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: _uiCategories.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final label = entry.value;
+                        final isSelected = _selectedIndex == index;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedIndex = index;
+                              });
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: isSelected ? theme.colorScheme.primary : theme.cardTheme.color,
+                                borderRadius: BorderRadius.circular(30),
+                                border: Border.all(
+                                  color: isSelected ? Colors.transparent : theme.dividerTheme.color ?? Colors.grey.withOpacity(0.2),
+                                ),
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: theme.colorScheme.primary.withOpacity(0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 4),
+                                        )
+                                      ]
+                                    : [],
+                              ),
+                              child: Text(
+                                label,
+                                style: TextStyle(
+                                  color: isSelected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ],
               ),
             ),
 
-            // Eksik malzemeli işler (sadece stok sayfasında)
-            if (_userProfile?.role != 'partner_user') _buildMissingTicketsSection(theme),
-
-            // 2. ARAMA ÇUBUĞU (Daha yumuşak hatlı)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: theme.cardTheme.color,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+            // 4. LİSTE (Modern Kartlar)
+            if (_isLoading)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (filteredList.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.inbox_outlined, size: 64, color: theme.colorScheme.onSurface.withOpacity(0.3)),
+                      const SizedBox(height: 16),
+                      Text('Ürün bulunamadı', style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.5))),
+                    ],
+                  ),
                 ),
-                child: TextField(
-                  onChanged: (v) => setState(() => _searchQuery = v),
-                  keyboardType: TextInputType.text,
-                  textInputAction: TextInputAction.search,
-                  enableSuggestions: true,
-                  autocorrect: true,
-                  decoration: InputDecoration(
-                    hintText: 'Ürün, raf veya kategori ara...',
-                    prefixIcon: Icon(Icons.search, color: theme.colorScheme.onSurface.withOpacity(0.6)),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final item = filteredList[index];
+                      return _buildModernStockCard(item, theme);
+                    },
+                    childCount: filteredList.length,
                   ),
                 ),
               ),
-            ),
-
-            // 3. MODERN KATEGORİ SEÇİCİ (Chips)
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: _uiCategories.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final label = entry.value;
-                  final isSelected = _selectedIndex == index;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedIndex = index;
-                        });
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: isSelected 
-                              ? theme.colorScheme.primary 
-                              : theme.cardTheme.color,
-                          borderRadius: BorderRadius.circular(30),
-                          border: Border.all(
-                            color: isSelected ? Colors.transparent : theme.dividerTheme.color ?? Colors.grey.withOpacity(0.2),
-                          ),
-                          boxShadow: isSelected
-                              ? [BoxShadow(color: theme.colorScheme.primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]
-                              : [],
-                        ),
-                        child: Text(
-                          label,
-                          style: TextStyle(
-                            color: isSelected 
-                                ? theme.colorScheme.onPrimary 
-                                : theme.colorScheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-
-            // 4. LİSTE (Modern Kartlar)
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : filteredList.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.inbox_outlined, size: 64, color: theme.colorScheme.onSurface.withOpacity(0.3)),
-                              const SizedBox(height: 16),
-                              Text('Ürün bulunamadı', style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.5))),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: filteredList.length,
-                          itemBuilder: (context, index) {
-                            final item = filteredList[index];
-                            return _buildModernStockCard(item, theme);
-                          },
-                        ),
-            ),
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(

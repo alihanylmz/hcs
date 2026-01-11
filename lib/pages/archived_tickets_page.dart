@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'edit_ticket_page.dart';
 import 'ticket_detail_page.dart';
+import 'pdf_viewer_page.dart';
+import '../services/pdf_export_service.dart';
 import '../services/user_service.dart';
 import '../widgets/app_drawer.dart';
 
@@ -53,10 +55,13 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
         .from('tickets')
         .select('''
           id,
+          job_code,
           title,
           status,
           priority,
           planned_date,
+          device_model,
+          device_brand,
           archived_at,
           created_at,
           customers (
@@ -80,11 +85,11 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
 
   Future<void> _deleteTicket(String ticketId) async {
     // Teknisyenler silme yapamaz
-    if (_userRole == 'technician' || _userRole == 'pending') {
+    if (_userRole == 'technician' || _userRole == 'pending' || _userRole == 'partner_user') {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Teknisyenler iş silemez.'),
+          content: Text('Bu işlem için yetkiniz yok.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -131,6 +136,17 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
   }
 
   Future<void> _editTicket(String ticketId) async {
+    // Partner firmalar ve teknisyen/pending düzenleyemez
+    if (_userRole == 'technician' || _userRole == 'pending' || _userRole == 'partner_user') {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bu iş için düzenleme yetkiniz yok.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     final updated = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => EditTicketPage(ticketId: ticketId),
@@ -263,6 +279,45 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         title: const Text('Biten İşler'),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'Seçenekler',
+            onSelected: (value) async {
+              switch (value) {
+                case 'pdf_filtered':
+                  final tickets = await _ticketsFuture;
+                  final filtered = _applyFilters(tickets);
+                  final partnerName = filtered.isNotEmpty ? (filtered.first['device_brand'] as String?) : null;
+                  if (!context.mounted) return;
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PdfViewerPage(
+                        title: 'Biten İşler',
+                        pdfFileName: 'Biten_Isler_${DateTime.now().toIso8601String().substring(0, 10)}.pdf',
+                        pdfGenerator: () => PdfExportService.generateTicketListPdfBytesFromList(
+                          tickets: filtered,
+                          reportTitle: 'Biten İşler (Filtrelenmiş)',
+                          partnerName: partnerName,
+                        ),
+                      ),
+                    ),
+                  );
+                  break;
+              }
+            },
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(
+                value: 'pdf_filtered',
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(Icons.picture_as_pdf_outlined),
+                  title: Text('Filtrelenmiş listeyi PDF al'),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -416,14 +471,20 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
                                   value: 'detail',
                                   child: Text('Detayı Aç'),
                                 ),
-                                const PopupMenuItem(
-                                  value: 'edit',
-                                  child: Text('Düzenle'),
-                                ),
                               ];
                               
-                              // Teknisyenler silme yapamaz
-                              if (_userRole != 'technician' && _userRole != 'pending') {
+                              // Partner/teknisyen/pending düzenleyemez
+                              if (_userRole != 'technician' && _userRole != 'pending' && _userRole != 'partner_user') {
+                                items.add(
+                                  const PopupMenuItem(
+                                    value: 'edit',
+                                    child: Text('Düzenle'),
+                                  ),
+                                );
+                              }
+
+                              // Teknisyenler/pending/partner silme yapamaz
+                              if (_userRole != 'technician' && _userRole != 'pending' && _userRole != 'partner_user') {
                                 items.add(
                                   const PopupMenuItem(
                                     value: 'delete',

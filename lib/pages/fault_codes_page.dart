@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/user_service.dart';
 import '../models/user_profile.dart';
+import '../models/commissioning_step.dart';
+import '../models/quick_parameter.dart';
 import '../widgets/app_drawer.dart';
 import '../theme/app_colors.dart';
 import '../widgets/ui/ui.dart';
@@ -14,11 +16,19 @@ class FaultCodesPage extends StatefulWidget {
   State<FaultCodesPage> createState() => _FaultCodesPageState();
 }
 
-class _FaultCodesPageState extends State<FaultCodesPage> {
+class _FaultCodesPageState extends State<FaultCodesPage> with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final UserService _userService = UserService();
+  
   List<Map<String, dynamic>> _faults = [];
   List<Map<String, dynamic>> _filteredFaults = [];
+  
+  List<CommissioningStep> _steps = [];
+  List<CommissioningStep> _filteredSteps = [];
+  
+  List<QuickParameter> _params = [];
+  List<QuickParameter> _filteredParams = [];
+  
   bool _isLoading = true;
   String? _error;
 
@@ -26,22 +36,25 @@ class _FaultCodesPageState extends State<FaultCodesPage> {
   String _modelFilter = 'all';
   List<String> _brands = const ['all'];
   List<String> _models = const ['all'];
-
-  Map<String, dynamic>? _selectedFault; // desktop split view
   
-  // User Info
+  late TabController _tabController;
   UserProfile? _currentUser;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _loadUserProfile();
-    _loadFaultCodes();
+    _loadAllData();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -54,50 +67,68 @@ class _FaultCodesPageState extends State<FaultCodesPage> {
     }
   }
 
-  Future<void> _loadFaultCodes() async {
+  Future<void> _loadAllData() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    
     try {
-      final response = await Supabase.instance.client
-          .from('fault_codes')
-          .select()
-          .order('code', ascending: true);
+      final supabase = Supabase.instance.client;
       
+      // 1. Arıza Kodları
+      try {
+        final faultsRes = await supabase.from('fault_codes').select().order('code', ascending: true);
+        _faults = List<Map<String, dynamic>>.from(faultsRes);
+      } catch (e) {
+        debugPrint('Arıza kodları yüklenemedi: $e');
+      }
+
+      // 2. Devreye Alma
+      try {
+        final stepsRes = await supabase.from('commissioning_guides').select().order('step_number', ascending: true);
+        _steps = List<Map<String, dynamic>>.from(stepsRes)
+            .map((e) {
+              try { return CommissioningStep.fromJson(e); } 
+              catch (err) { debugPrint('Step parse hatası: $err'); return null; }
+            })
+            .whereType<CommissioningStep>()
+            .toList();
+      } catch (e) {
+        debugPrint('Devreye alma rehberi yüklenemedi: $e');
+      }
+
+      // 3. Hızlı Parametreler
+      try {
+        final paramsRes = await supabase.from('quick_parameters').select().order('parameter_code', ascending: true);
+        _params = List<Map<String, dynamic>>.from(paramsRes)
+            .map((e) {
+              try { return QuickParameter.fromJson(e); } 
+              catch (err) { debugPrint('Param parse hatası: $err'); return null; }
+            })
+            .whereType<QuickParameter>()
+            .toList();
+      } catch (e) {
+        debugPrint('Hızlı parametreler yüklenemedi: $e');
+      }
+
       if (mounted) {
         setState(() {
-          _faults = List<Map<String, dynamic>>.from(response);
           _rebuildFilters();
           _applyFilters();
           _isLoading = false;
         });
       }
     } catch (e) {
+      debugPrint('Genel veri yükleme hatası: $e');
       if (mounted) {
         setState(() {
-          _error = 'Veriler yüklenirken hata oluştu: $e';
+          _error = 'Veriler yüklenirken bir hata oluştu.';
           _isLoading = false;
         });
       }
     }
-  }
-
-  String _normalizeTr(String text) {
-    if (text.isEmpty) return '';
-
-    final sb = StringBuffer();
-    for (int i = 0; i < text.length; i++) {
-      final ch = text[i];
-      switch (ch) {
-        case 'İ':
-          sb.write('i');
-          break;
-        case 'I':
-          sb.write('ı');
-          break;
-        default:
-          sb.write(ch.toLowerCase());
-          break;
-      }
-    }
-    return sb.toString().trim();
   }
 
   void _rebuildFilters() {
@@ -110,48 +141,57 @@ class _FaultCodesPageState extends State<FaultCodesPage> {
       if (b != null && b.isNotEmpty) brandSet.add(b);
       if (m != null && m.isNotEmpty) modelSet.add(m);
     }
+    
+    for (final s in _steps) {
+      if (s.deviceBrand.isNotEmpty) brandSet.add(s.deviceBrand);
+      if (s.deviceModel.isNotEmpty) modelSet.add(s.deviceModel);
+    }
+    
+    for (final p in _params) {
+      if (p.deviceBrand.isNotEmpty) brandSet.add(p.deviceBrand);
+      if (p.deviceModel.isNotEmpty) modelSet.add(p.deviceModel);
+    }
 
     final brands = brandSet.toList()..sort();
     final models = modelSet.toList()..sort();
 
     _brands = ['all', ...brands];
     _models = ['all', ...models];
+
+    if (!_brands.contains(_brandFilter)) _brandFilter = 'all';
+    if (!_models.contains(_modelFilter)) _modelFilter = 'all';
   }
 
   void _applyFilters() {
     final q = _normalizeTr(_searchController.text);
+    
     setState(() {
-      _filteredFaults = _faults.where((fault) {
-        final codeRaw = (fault['code'] as String?) ?? '';
-        final descRaw = (fault['description'] as String?) ?? '';
-        final causesRaw = (fault['possible_causes'] as String?) ?? '';
-        final brandRaw = (fault['device_brand'] as String?) ?? '';
-        final modelRaw = (fault['device_model'] as String?) ?? '';
-
-        if (_brandFilter != 'all' && brandRaw != _brandFilter) return false;
-        if (_modelFilter != 'all' && modelRaw != _modelFilter) return false;
-
+      _filteredFaults = _faults.where((f) {
+        final bRaw = (f['device_brand'] as String?) ?? '';
+        final mRaw = (f['device_model'] as String?) ?? '';
+        if (_brandFilter != 'all' && bRaw != _brandFilter) return false;
+        if (_modelFilter != 'all' && mRaw != _modelFilter) return false;
         if (q.isEmpty) return true;
-
-        final code = _normalizeTr(codeRaw);
-        final desc = _normalizeTr(descRaw);
-        final causes = _normalizeTr(causesRaw);
-        final brand = _normalizeTr(brandRaw);
-        final model = _normalizeTr(modelRaw);
         
-        if (code.startsWith(q) || desc.startsWith(q)) return true;
-
-        return code.contains(q) ||
-            desc.contains(q) ||
-            causes.contains(q) ||
-            brand.contains(q) ||
-            model.contains(q);
+        return _normalizeTr(f['code'] ?? '').contains(q) || 
+               _normalizeTr(f['description'] ?? '').contains(q);
       }).toList();
 
-      if (_selectedFault != null &&
-          !_filteredFaults.any((e) => e['id'] == _selectedFault!['id'])) {
-        _selectedFault = null;
-      }
+      _filteredSteps = _steps.where((s) {
+        if (_brandFilter != 'all' && s.deviceBrand != _brandFilter) return false;
+        if (_modelFilter != 'all' && s.deviceModel != _modelFilter) return false;
+        if (q.isEmpty) return true;
+        return _normalizeTr(s.title).contains(q) || _normalizeTr(s.description ?? '').contains(q);
+      }).toList();
+
+      _filteredParams = _params.where((p) {
+        if (_brandFilter != 'all' && p.deviceBrand != _brandFilter) return false;
+        if (_modelFilter != 'all' && p.deviceModel != _modelFilter) return false;
+        if (q.isEmpty) return true;
+        return _normalizeTr(p.parameterCode).contains(q) || 
+               _normalizeTr(p.parameterName).contains(q) ||
+               _normalizeTr(p.description ?? '').contains(q);
+      }).toList();
     });
   }
 
@@ -168,16 +208,10 @@ class _FaultCodesPageState extends State<FaultCodesPage> {
               child: TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: 'Kod, açıklama, neden, marka/model ara...',
+                  hintText: 'Ara...',
                   prefixIcon: const Icon(Icons.search),
                   suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _searchController.clear();
-                            _applyFilters();
-                          },
-                        )
+                      ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchController.clear(); _applyFilters(); })
                       : null,
                   filled: true,
                   fillColor: isDark ? const Color(0xFF1E293B) : AppColors.surfaceWhite,
@@ -186,56 +220,22 @@ class _FaultCodesPageState extends State<FaultCodesPage> {
               ),
             ),
             SizedBox(
-              width: 220,
+              width: 200,
               child: DropdownButtonFormField<String>(
                 value: _brandFilter,
-                decoration: const InputDecoration(
-                  labelText: 'Marka',
-                  prefixIcon: Icon(Icons.business),
-                ),
-                items: _brands
-                    .map((b) => DropdownMenuItem(
-                          value: b,
-                          child: Text(b == 'all' ? 'Tümü' : b, overflow: TextOverflow.ellipsis),
-                        ))
-                    .toList(),
-                onChanged: (val) {
-                  setState(() => _brandFilter = val ?? 'all');
-                  _applyFilters();
-                },
+                decoration: const InputDecoration(labelText: 'Marka', prefixIcon: Icon(Icons.business)),
+                items: _brands.map((b) => DropdownMenuItem(value: b, child: Text(b == 'all' ? 'Tümü' : b, overflow: TextOverflow.ellipsis))).toList(),
+                onChanged: (val) { setState(() => _brandFilter = val ?? 'all'); _applyFilters(); },
               ),
             ),
             SizedBox(
-              width: 220,
+              width: 200,
               child: DropdownButtonFormField<String>(
                 value: _modelFilter,
-                decoration: const InputDecoration(
-                  labelText: 'Model/Seri',
-                  prefixIcon: Icon(Icons.precision_manufacturing_outlined),
-                ),
-                items: _models
-                    .map((m) => DropdownMenuItem(
-                          value: m,
-                          child: Text(m == 'all' ? 'Tümü' : m, overflow: TextOverflow.ellipsis),
-                        ))
-                    .toList(),
-                onChanged: (val) {
-                  setState(() => _modelFilter = val ?? 'all');
-                  _applyFilters();
-                },
+                decoration: const InputDecoration(labelText: 'Model', prefixIcon: Icon(Icons.precision_manufacturing_outlined)),
+                items: _models.map((m) => DropdownMenuItem(value: m, child: Text(m == 'all' ? 'Tümü' : m, overflow: TextOverflow.ellipsis))).toList(),
+                onChanged: (val) { setState(() => _modelFilter = val ?? 'all'); _applyFilters(); },
               ),
-            ),
-            TextButton.icon(
-              onPressed: () {
-                setState(() {
-                  _brandFilter = 'all';
-                  _modelFilter = 'all';
-                  _searchController.clear();
-                });
-                _applyFilters();
-              },
-              icon: const Icon(Icons.filter_alt_off),
-              label: const Text('Temizle'),
             ),
           ],
         ),
@@ -243,225 +243,185 @@ class _FaultCodesPageState extends State<FaultCodesPage> {
     );
   }
 
-  Widget _buildFaultList({required bool isDesktop}) {
-    if (_filteredFaults.isEmpty) {
-      return const UiEmptyState(
-        icon: Icons.search_off,
-        title: 'Kayıt bulunamadı',
-        subtitle: 'Filtreleri temizleyip tekrar deneyin.',
-      );
-    }
+  Widget _buildFaultCodesTab() {
+    if (_filteredFaults.isEmpty && !_isLoading) return const UiEmptyState(icon: Icons.search_off, title: 'Kayıt bulunamadı');
+    
+    return ListView.separated(
+      key: const PageStorageKey('fault_codes_list'),
+      padding: const EdgeInsets.all(16),
+      itemCount: _filteredFaults.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final fault = _filteredFaults[index];
+        final String code = (fault['code'] ?? '').toString();
+        final String description = (fault['description'] ?? '').toString();
+        final String brand = (fault['device_brand'] ?? '').toString();
+        final String model = (fault['device_model'] ?? '').toString();
+        final String causes = (fault['possible_causes'] ?? 'Bilgi yok').toString();
+        
+        final bool isCritical = code.startsWith('F') || code.contains('Error');
+        final badgeColor = isCritical ? AppColors.corporateRed : AppColors.corporateYellow;
 
-    if (!isDesktop) {
-      return ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        itemCount: _filteredFaults.length,
-        itemBuilder: (context, index) {
-          final fault = _filteredFaults[index];
-          final code = fault['code']?.toString() ?? '';
-          final brand = (fault['device_brand'] ?? '').toString();
-          final model = (fault['device_model'] ?? '').toString();
-
-          final isFault = code.startsWith('F');
-          final badgeColor = isFault ? AppColors.corporateRed : AppColors.corporateYellow;
-
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        return Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
             child: ExpansionTile(
-              leading: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: badgeColor.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: badgeColor),
-                ),
-                child: Text(
-                  code,
-                  style: TextStyle(fontWeight: FontWeight.bold, color: badgeColor),
+              key: PageStorageKey('fault_$code'),
+              leading: SizedBox(
+                width: 56,
+                child: UiBadge(
+                  text: code.isEmpty ? '?' : code, 
+                  backgroundColor: badgeColor, 
+                  textColor: isCritical ? Colors.white : Colors.black,
+                  minSize: 32,
                 ),
               ),
               title: Text(
-                (fault['description'] ?? '').toString(),
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                description.isEmpty ? 'Açıklama yok' : description,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
               subtitle: Text(
-                '$brand $model'.trim(),
-                style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+                '${brand.isEmpty ? "—" : brand} ${model.isEmpty ? "—" : model}',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
               children: [
-                Padding(
+                Container(
+                  width: double.infinity,
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Divider(),
-                      Row(
+                      const SizedBox(height: 8),
+                      const Row(
                         children: [
-                          Expanded(
-                            child: Text(
-                              'Olası Nedenler',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 12,
-                                color: Theme.of(context).hintColor,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Kodu kopyala',
-                            icon: const Icon(Icons.copy, size: 18),
-                            onPressed: () async {
-                              await Clipboard.setData(ClipboardData(text: code));
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Kopyalandı')),
-                                );
-                              }
-                            },
+                          Icon(Icons.lightbulb_outline, size: 16, color: AppColors.corporateNavy),
+                          SizedBox(width: 8),
+                          Text(
+                            'Olası Nedenler & Çözüm:',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.corporateNavy),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       Text(
-                        (fault['possible_causes'] ?? 'Bilgi yok').toString(),
-                        style: const TextStyle(fontSize: 14),
+                        causes,
+                        style: const TextStyle(fontSize: 13, height: 1.5),
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-          );
-        },
-      );
-    }
-
-    return ListView.separated(
-      padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 16),
-      itemCount: _filteredFaults.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final fault = _filteredFaults[index];
-        final code = fault['code']?.toString() ?? '';
-        final desc = (fault['description'] ?? '').toString();
-        final brand = (fault['device_brand'] ?? '').toString();
-        final model = (fault['device_model'] ?? '').toString();
-        final selected = _selectedFault != null && _selectedFault!['id'] == fault['id'];
-
-        final isFault = code.startsWith('F');
-        final badgeColor = isFault ? AppColors.corporateRed : AppColors.corporateYellow;
-
-        return UiCard(
-          onTap: () => setState(() => _selectedFault = fault),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              UiBadge(
-                text: code,
-                backgroundColor: badgeColor,
-                textColor: Colors.black,
-                minSize: 22,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      desc,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontWeight: selected ? FontWeight.w800 : FontWeight.w600),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$brand $model'.trim(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
-                    ),
-                  ],
-                ),
-              ),
-              if (selected) ...[
-                const SizedBox(width: 8),
-                Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.primary),
-              ],
-            ],
           ),
         );
       },
     );
   }
 
-  Widget _buildFaultDetails(Map<String, dynamic> fault) {
-    final theme = Theme.of(context);
-    final code = fault['code']?.toString() ?? '';
-    final desc = (fault['description'] ?? '').toString();
-    final causes = (fault['possible_causes'] ?? 'Bilgi yok').toString();
-    final brand = (fault['device_brand'] ?? '').toString();
-    final model = (fault['device_model'] ?? '').toString();
-
-    final isFault = code.startsWith('F');
-    final badgeColor = isFault ? AppColors.corporateRed : AppColors.corporateYellow;
-
-    return Padding(
-      padding: const EdgeInsets.only(left: 12, right: 16, top: 8, bottom: 16),
-      child: UiCard(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+  Widget _buildCommissioningTab() {
+    if (_filteredSteps.isEmpty && !_isLoading) return const UiEmptyState(icon: Icons.assignment_outlined, title: 'Rehber bulunamadı');
+    return ListView.builder(
+      key: const PageStorageKey('commissioning_list'),
+      padding: const EdgeInsets.all(16),
+      itemCount: _filteredSteps.length,
+      itemBuilder: (context, index) {
+        final step = _filteredSteps[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                UiBadge(
-                  text: code,
-                  backgroundColor: badgeColor,
-                  textColor: Colors.black,
-                  minSize: 22,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: AppColors.corporateNavy,
+                      radius: 14,
+                      child: Text('${step.stepNumber}', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(step.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    desc,
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Kodu kopyala',
-                  icon: const Icon(Icons.copy),
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: code));
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Kopyalandı')),
-                      );
-                    }
-                  },
-                ),
+                if (step.description != null) ...[
+                  const SizedBox(height: 12),
+                  Text(step.description!, style: const TextStyle(height: 1.5)),
+                ],
+                const SizedBox(height: 8),
+                Text('${step.deviceBrand} ${step.deviceModel}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              '$brand $model'.trim(),
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Olası Nedenler',
-              style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            Text(causes, style: theme.textTheme.bodyMedium),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
+  }
+
+  Widget _buildParametersTab() {
+    if (_filteredParams.isEmpty && !_isLoading) return const UiEmptyState(icon: Icons.list_alt, title: 'Parametre bulunamadı');
+    return ListView(
+      key: const PageStorageKey('parameters_list'),
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Table(
+            border: TableBorder.all(color: Colors.grey.shade300, width: 0.5),
+            columnWidths: const {
+              0: FixedColumnWidth(75),
+              1: FlexColumnWidth(2),
+              2: FixedColumnWidth(85),
+            },
+            children: [
+              TableRow(
+                decoration: BoxDecoration(color: Colors.grey.shade100),
+                children: const [
+                  Padding(padding: EdgeInsets.all(10), child: Text('Kod', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                  Padding(padding: EdgeInsets.all(10), child: Text('Parametre Adı', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                  Padding(padding: EdgeInsets.all(10), child: Text('Varsayılan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                ],
+              ),
+              ..._filteredParams.map((p) => TableRow(
+                children: [
+                  Padding(padding: const EdgeInsets.all(10), child: Text(p.parameterCode, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.corporateNavy, fontSize: 12))),
+                  Padding(
+                    padding: const EdgeInsets.all(10), 
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(p.parameterName, style: const TextStyle(fontSize: 13)),
+                        if (p.description != null && p.description!.isNotEmpty) 
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(p.description!, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                          ),
+                      ],
+                    )
+                  ),
+                  Padding(padding: const EdgeInsets.all(10), child: Text(p.defaultValue ?? '-', style: const TextStyle(fontSize: 12))),
+                ],
+              )),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _normalizeTr(String text) {
+    return text
+        .replaceAll('İ', 'i')
+        .replaceAll('I', 'ı')
+        .replaceAll('Ş', 'ş')
+        .replaceAll('Ğ', 'ğ')
+        .replaceAll('Ü', 'ü')
+        .replaceAll('Ö', 'ö')
+        .replaceAll('Ç', 'ç')
+        .toLowerCase();
   }
 
   @override
@@ -471,8 +431,16 @@ class _FaultCodesPageState extends State<FaultCodesPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ARIZA REHBERİ'),
+        title: const Text('İNVERTÖR REHBERİ'),
         centerTitle: true,
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Arıza Kodları'),
+            Tab(text: 'Devreye Alma'),
+            Tab(text: 'Hızlı Parametre'),
+          ],
+        ),
       ),
       drawer: AppDrawer(
         currentPage: AppDrawerPage.faultCodes,
@@ -486,31 +454,14 @@ class _FaultCodesPageState extends State<FaultCodesPage> {
             child: _isLoading
                 ? const UiLoading(message: 'Yükleniyor...')
                 : _error != null
-                    ? UiErrorState(message: _error, onRetry: _loadFaultCodes)
-                    : LayoutBuilder(
-                        builder: (context, constraints) {
-                          final isDesktop = constraints.maxWidth >= 900;
-                          if (!isDesktop) {
-                            return _buildFaultList(isDesktop: false);
-                          }
-
-                          return Row(
-                            children: [
-                              Expanded(flex: 7, child: _buildFaultList(isDesktop: true)),
-                              const VerticalDivider(width: 1),
-                              Expanded(
-                                flex: 8,
-                                child: _selectedFault == null
-                                    ? const UiEmptyState(
-                                        icon: Icons.touch_app_outlined,
-                                        title: 'Bir arıza kodu seçin',
-                                        subtitle: 'Detayları sağ panelde göreceksiniz.',
-                                      )
-                                    : _buildFaultDetails(_selectedFault!),
-                              ),
-                            ],
-                          );
-                        },
+                    ? UiErrorState(message: _error, onRetry: _loadAllData)
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildFaultCodesTab(),
+                          _buildCommissioningTab(),
+                          _buildParametersTab(),
+                        ],
                       ),
           ),
         ],
@@ -518,4 +469,3 @@ class _FaultCodesPageState extends State<FaultCodesPage> {
     );
   }
 }
-

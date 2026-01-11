@@ -32,16 +32,19 @@ class UiBadge extends StatelessWidget {
         minWidth: minSize,
         minHeight: minSize,
       ),
-      alignment: Alignment.center,
-      child: Text(
-        text,
-        style: TextStyle(
-          color: fg,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          height: 1,
+      child: Center(
+        widthFactor: 1,
+        heightFactor: 1,
+        child: Text(
+          text,
+          style: TextStyle(
+            color: fg,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            height: 1,
+          ),
+          textAlign: TextAlign.center,
         ),
-        textAlign: TextAlign.center,
       ),
     );
   }

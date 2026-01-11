@@ -323,7 +323,7 @@ class _BrandModelsSettingsPageState extends State<BrandModelsSettingsPage> {
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF0F172A) : AppColors.backgroundGrey;
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
 
     // Kategoriye göre markaları filtrele

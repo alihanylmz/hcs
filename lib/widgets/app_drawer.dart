@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'dart:math' as math;
 import '../main.dart';
 import '../pages/dashboard_page.dart';
 import '../pages/stock_overview_page.dart';
@@ -45,144 +45,247 @@ class AppDrawer extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     
-    // Arka plan rengi
-    final drawerBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    // Metin renkleri
-    final textColor = isDark ? Colors.white : AppColors.corporateNavy;
+    // Drawer container (neumorphism)
+    final Color baseBg = isDark ? const Color(0xFF111827) : const Color(0xFFF2F2F2);
+    final Color divider = isDark ? Colors.white12 : const Color(0xFFE0E0E0);
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color iconMuted = isDark ? Colors.white70 : Colors.black54;
+    final Color activeBg = isDark ? Colors.white.withOpacity(0.10) : const Color(0xFFE9E9E9);
+    final Color accent = AppColors.corporateYellow;
     
     return Drawer(
-      backgroundColor: drawerBg,
+      width: 320,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
           topRight: Radius.circular(0), // Modern düz tasarım
           bottomRight: Radius.circular(0),
         ),
       ),
-      child: Column(
-        children: [
-          // --- 1. MODERN GRADIENT HEADER ---
-          Container(
-            padding: const EdgeInsets.fromLTRB(24, 60, 24, 30),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: isDark 
-                  ? [Colors.black87, const Color(0xFF0F172A)]
-                  : [AppColors.corporateNavy, AppColors.corporateYellow],
+      child: Padding(
+        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top, bottom: 12, left: 12, right: 12),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.35 : 0.15),
+                blurRadius: 40,
+                offset: const Offset(20, 0),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 10,
-                  offset: const Offset(0, 5),
-                )
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: Stack(
               children: [
-                // Logo ve Marka
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white.withOpacity(0.2)),
-                      ),
-                      child: SvgPicture.asset(
-                        'assets/images/log.svg',
-                        width: 28,
-                        height: 28,
-                        colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-                      ),
+                // Base
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: baseBg,
+                      borderRadius: BorderRadius.circular(28),
                     ),
-                    const SizedBox(width: 16),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'HAN CONTROL',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        Text(
-                          'SYSTEM',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                
-                // Kullanıcı Kartı
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white.withOpacity(0.1)),
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: CircleAvatar(
-                          radius: 20,
-                          backgroundColor: Colors.white,
-                          child: Text(
-                            (userName ?? 'T').substring(0, 1).toUpperCase(),
-                            style: TextStyle(
-                              color: isDark ? const Color(0xFF0F172A) : AppColors.corporateNavy,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
+                ),
+
+                // Noise / grain (procedural)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: isDark ? 0.07 : 0.06,
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          painter: _NoisePainter(isDark: isDark),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                    ),
+                  ),
+                ),
+
+                // Inner shadow overlay
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(28),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.black.withOpacity(isDark ? 0.18 : 0.10),
+                            Colors.transparent,
+                            Colors.transparent,
+                            Colors.black.withOpacity(isDark ? 0.18 : 0.10),
+                          ],
+                          stops: const [0.0, 0.18, 0.82, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Content
+                SafeArea(
+                  top: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _ProfileHeader(
+                        userName: userName,
+                        userRole: userRole,
+                        isDark: isDark,
+                        accent: accent,
+                        textColor: textColor,
+                        iconMuted: iconMuted,
+                      ),
+                      Divider(height: 1, thickness: 1, color: divider),
+                      const SizedBox(height: 8),
+
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: ListView(
+                          padding: const EdgeInsets.only(bottom: 12),
                           children: [
-                            Text(
-                              userName ?? 'İsimsiz Kullanıcı',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                            _NavTile(
+                              label: 'İş Listesi',
+                              icon: Icons.list_alt_rounded,
+                              active: currentPage == AppDrawerPage.ticketList,
+                              iconMuted: iconMuted,
+                              textColor: textColor,
+                              activeBg: activeBg,
+                              accent: accent,
+                              onTap: () => _navigate(context, AppDrawerPage.ticketList, const TicketListPage()),
                             ),
-                            const SizedBox(height: 2),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.statusDone.withOpacity(0.8),
-                                borderRadius: BorderRadius.circular(4),
+                            if (userRole != 'partner_user')
+                              _NavTile(
+                                label: 'Günlük Planım',
+                                icon: Icons.calendar_month_rounded,
+                                active: currentPage == AppDrawerPage.dailyActivities,
+                                iconMuted: iconMuted,
+                                textColor: textColor,
+                                activeBg: activeBg,
+                                accent: accent,
+                                onTap: () => _navigate(context, AppDrawerPage.dailyActivities, const DailyActivitiesPage()),
                               ),
-                              child: Text(
-                                _getUserRoleLabel(userRole),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
+                            if (userRole != 'partner_user')
+                              _NavTile(
+                                label: 'Rapor Oluştur',
+                                icon: Icons.analytics_outlined,
+                                active: currentPage == AppDrawerPage.reports,
+                                iconMuted: iconMuted,
+                                textColor: textColor,
+                                activeBg: activeBg,
+                                accent: accent,
+                                onTap: () => _navigate(context, AppDrawerPage.reports, const ReportsPage()),
+                              ),
+                            if (userRole == 'admin' || userRole == 'manager')
+                              _NavTile(
+                                label: 'Yönetici Paneli',
+                                icon: Icons.dashboard_rounded,
+                                active: currentPage == AppDrawerPage.dashboard,
+                                iconMuted: iconMuted,
+                                textColor: textColor,
+                                activeBg: activeBg,
+                                accent: accent,
+                                onTap: () => _navigate(context, AppDrawerPage.dashboard, const DashboardPage()),
+                              ),
+                            if (userRole != 'partner_user')
+                              _NavTile(
+                                label: 'Stok Durumu',
+                                icon: Icons.inventory_2_outlined,
+                                active: currentPage == AppDrawerPage.stock,
+                                iconMuted: iconMuted,
+                                textColor: textColor,
+                                activeBg: activeBg,
+                                accent: accent,
+                                onTap: () => _navigate(context, AppDrawerPage.stock, const StockOverviewPage()),
+                              ),
+                            _NavTile(
+                              label: 'Biten İşler (Arşiv)',
+                              icon: Icons.task_alt_rounded,
+                              active: currentPage == AppDrawerPage.archived,
+                              iconMuted: iconMuted,
+                              textColor: textColor,
+                              activeBg: activeBg,
+                              accent: accent,
+                              onTap: () => _navigate(context, AppDrawerPage.archived, const ArchivedTicketsPage()),
+                            ),
+                            _NavTile(
+                              label: 'Arıza Rehberi',
+                              icon: Icons.support_agent_rounded,
+                              active: currentPage == AppDrawerPage.faultCodes,
+                              iconMuted: iconMuted,
+                              textColor: textColor,
+                              activeBg: activeBg,
+                              accent: accent,
+                              onTap: () => _navigate(context, AppDrawerPage.faultCodes, const FaultCodesPage()),
+                            ),
+
+                            const SizedBox(height: 8),
+                            Divider(height: 1, thickness: 1, color: divider),
+                            const SizedBox(height: 8),
+
+                            _NavTile(
+                              label: 'Profilim',
+                              icon: Icons.person_outline_rounded,
+                              active: currentPage == AppDrawerPage.profile,
+                              iconMuted: iconMuted,
+                              textColor: textColor,
+                              activeBg: activeBg,
+                              accent: accent,
+                              onTap: () {
+                                Navigator.pop(context);
+                                Navigator.of(context)
+                                    .push(MaterialPageRoute(builder: (_) => const ProfilePage()))
+                                    .then((_) => onProfileReload?.call());
+                              },
+                            ),
+                            _NavTile(
+                              label: IsTakipApp.of(context)?.isDarkMode == true ? 'Aydınlık Mod' : 'Karanlık Mod',
+                              icon: IsTakipApp.of(context)?.isDarkMode == true ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                              active: false,
+                              iconMuted: iconMuted,
+                              textColor: textColor,
+                              activeBg: activeBg,
+                              accent: accent,
+                              onTap: () => IsTakipApp.of(context)?.toggleTheme(),
+                            ),
+
+                            const SizedBox(height: 12),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              child: Material(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(14),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(14),
+                                  onTap: () async {
+                                    await Supabase.instance.client.auth.signOut();
+                                    if (context.mounted) {
+                                      Navigator.of(context).pushAndRemoveUntil(
+                                        MaterialPageRoute(builder: (_) => const LoginPage()),
+                                        (route) => false,
+                                      );
+                                    }
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.logout_rounded, color: Colors.red.withOpacity(0.85), size: 22),
+                                        const SizedBox(width: 14),
+                                        Text(
+                                          'Çıkış Yap',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.red.withOpacity(0.90),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -195,163 +298,7 @@ class AppDrawer extends StatelessWidget {
               ],
             ),
           ),
-
-          // --- 2. MENÜ LİSTESİ ---
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-              children: [
-                _buildSectionHeader('ANA MENÜ', isDark),
-                _buildModernDrawerItem(
-                  icon: Icons.list_alt_rounded,
-                  text: 'İş Listesi',
-                  isActive: currentPage == AppDrawerPage.ticketList,
-                  onTap: () => _navigate(context, AppDrawerPage.ticketList, const TicketListPage()),
-                  textColor: textColor,
-                  activeColor: AppColors.corporateNavy,
-                ),
-                const SizedBox(height: 6),
-                _buildModernDrawerItem(
-                  icon: Icons.calendar_month_rounded,
-                  text: 'Günlük Planım',
-                  isActive: currentPage == AppDrawerPage.dailyActivities,
-                  onTap: () => _navigate(context, AppDrawerPage.dailyActivities, const DailyActivitiesPage()),
-                  textColor: textColor,
-                  activeColor: AppColors.corporateNavy,
-                ),
-                
-                const SizedBox(height: 24),
-                _buildSectionHeader('İŞLEMLER', isDark),
-                
-                _buildModernDrawerItem(
-                  icon: Icons.analytics_outlined,
-                  text: 'Rapor Oluştur',
-                  isActive: currentPage == AppDrawerPage.reports,
-                  onTap: () => _navigate(context, AppDrawerPage.reports, const ReportsPage()),
-                  textColor: textColor,
-                  activeColor: AppColors.corporateNavy,
-                ),
-                
-                if (userRole == 'admin' || userRole == 'manager') ...[
-                  const SizedBox(height: 6),
-                  _buildModernDrawerItem(
-                    icon: Icons.dashboard_rounded,
-                    text: 'Yönetici Paneli',
-                    isActive: currentPage == AppDrawerPage.dashboard,
-                    onTap: () => _navigate(context, AppDrawerPage.dashboard, const DashboardPage()),
-                    textColor: textColor,
-                    activeColor: AppColors.corporateNavy,
-                  ),
-                ],
-                
-                if (userRole != 'partner_user') ...[
-                  const SizedBox(height: 6),
-                  _buildModernDrawerItem(
-                    icon: Icons.inventory_2_outlined,
-                    text: 'Stok Durumu',
-                    isActive: currentPage == AppDrawerPage.stock,
-                    onTap: () => _navigate(context, AppDrawerPage.stock, const StockOverviewPage()),
-                    textColor: textColor,
-                    activeColor: AppColors.corporateNavy,
-                  ),
-                ],
-                
-                const SizedBox(height: 6),
-                _buildModernDrawerItem(
-                  icon: Icons.task_alt_rounded,
-                  text: 'Biten İşler (Arşiv)',
-                  isActive: currentPage == AppDrawerPage.archived,
-                  onTap: () => _navigate(context, AppDrawerPage.archived, const ArchivedTicketsPage()),
-                  textColor: textColor,
-                  activeColor: AppColors.corporateNavy,
-                ),
-                
-                const SizedBox(height: 6),
-                _buildModernDrawerItem(
-                  icon: Icons.support_agent_rounded,
-                  text: 'Arıza Rehberi',
-                  isActive: currentPage == AppDrawerPage.faultCodes,
-                  onTap: () => _navigate(context, AppDrawerPage.faultCodes, const FaultCodesPage()),
-                  textColor: textColor,
-                  activeColor: AppColors.corporateNavy,
-                ),
-              ],
-            ),
-          ),
-
-          // --- 3. ALT FOOTER ---
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            child: Column(
-              children: [
-                const Divider(),
-                _buildModernDrawerItem(
-                  icon: Icons.person_outline_rounded,
-                  text: 'Profilim',
-                  isActive: currentPage == AppDrawerPage.profile,
-                  textColor: textColor,
-                  activeColor: AppColors.corporateNavy,
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ProfilePage()),
-                    ).then((_) {
-                      if (onProfileReload != null) {
-                        onProfileReload!();
-                      }
-                    });
-                  },
-                ),
-                _buildModernDrawerItem(
-                  icon: IsTakipApp.of(context)?.isDarkMode == true ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-                  text: IsTakipApp.of(context)?.isDarkMode == true ? 'Aydınlık Mod' : 'Karanlık Mod',
-                  isActive: false,
-                  textColor: textColor,
-                  activeColor: AppColors.corporateNavy,
-                  onTap: () {
-                    IsTakipApp.of(context)?.toggleTheme();
-                  },
-                ),
-                const SizedBox(height: 12),
-                InkWell(
-                  onTap: () async {
-                    await Supabase.instance.client.auth.signOut();
-                    if (context.mounted) {
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const LoginPage()),
-                        (route) => false,
-                      );
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red.withOpacity(0.2)),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.logout_rounded, color: Colors.red, size: 20),
-                        SizedBox(width: 8),
-                        Text(
-                          'Çıkış Yap',
-                          style: TextStyle(
-                            color: Colors.red,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -359,7 +306,8 @@ class AppDrawer extends StatelessWidget {
   void _navigate(BuildContext context, AppDrawerPage page, Widget widget) {
     Navigator.pop(context);
     if (currentPage != page) {
-      Navigator.of(context).pushReplacement(
+      // pushReplacement iOS geri-swipe/back davranışını bozar; push ile doğal geri hareketi korunur.
+      Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => widget),
       );
     }
@@ -377,74 +325,180 @@ class AppDrawer extends StatelessWidget {
         return 'TEKNİSYEN';
     }
   }
-  
-  Widget _buildSectionHeader(String title, bool isDark) {
+}
+
+class _ProfileHeader extends StatelessWidget {
+  final String? userName;
+  final String? userRole;
+  final bool isDark;
+  final Color accent;
+  final Color textColor;
+  final Color iconMuted;
+
+  const _ProfileHeader({
+    required this.userName,
+    required this.userRole,
+    required this.isDark,
+    required this.accent,
+    required this.textColor,
+    required this.iconMuted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = (userName == null || userName!.trim().isEmpty) ? 'Kullanıcı' : userName!.trim();
+
     return Padding(
-      padding: const EdgeInsets.only(left: 12, bottom: 8, top: 4),
-      child: Text(
-        title,
-        style: TextStyle(
-          color: isDark ? Colors.white54 : Colors.grey[600],
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-        ),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      child: Row(
+        children: [
+          // Avatar ring
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: accent, // ring
+            ),
+            padding: const EdgeInsets.all(3),
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isDark ? const Color(0xFF0B1220) : Colors.white,
+              ),
+              child: CircleAvatar(
+                backgroundColor: isDark ? Colors.white10 : const Color(0xFFEAEAEA),
+                child: Text(
+                  displayName.substring(0, 1).toUpperCase(),
+                  style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black54,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textColor),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _roleLabel(userRole),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13, color: iconMuted),
+                ),
+              ],
+            ),
+          ),
+          // Drawer kapatma (X) — kullanıcı beklentisi: açık menüde net kapatma aksiyonu
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => Navigator.pop(context),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Icon(Icons.close_rounded, color: iconMuted, size: 22),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildModernDrawerItem({
-    required IconData icon,
-    required String text,
-    required bool isActive,
-    required VoidCallback onTap,
-    required Color textColor,
-    required Color activeColor,
-  }) {
-    // Aktif öğe rengini ayarlama
-    final color = isActive ? activeColor : textColor.withOpacity(0.8);
-    final bgColor = isActive ? activeColor.withOpacity(0.1) : Colors.transparent;
+  String _roleLabel(String? role) {
+    switch (role) {
+      case 'admin':
+      case 'manager':
+        return 'Yönetici';
+      case 'partner_user':
+        return 'Partner';
+      case 'technician':
+      default:
+        return 'Teknisyen';
+    }
+  }
+}
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
+class _NavTile extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+  final Color textColor;
+  final Color iconMuted;
+  final Color activeBg;
+  final Color accent;
+
+  const _NavTile({
+    required this.label,
+    required this.icon,
+    required this.active,
+    required this.onTap,
+    required this.textColor,
+    required this.iconMuted,
+    required this.activeBg,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = active ? activeBg : Colors.transparent;
+    final fg = active ? textColor : textColor.withOpacity(0.95);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       child: Material(
-        color: Colors.transparent,
+        color: bg,
+        borderRadius: BorderRadius.circular(14),
         child: InkWell(
+          borderRadius: BorderRadius.circular(14),
           onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
-                Icon(
-                  icon,
-                  color: color,
-                  size: 22,
-                ),
-                const SizedBox(width: 16),
-                Text(
-                  text,
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                    fontSize: 14,
+                Icon(icon, size: 22, color: iconMuted),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: fg,
+                    ),
                   ),
                 ),
-                if (isActive) ...[
-                  const Spacer(),
+                if (active)
                   Container(
-                    width: 6,
-                    height: 6,
+                    width: 8,
+                    height: 8,
                     decoration: BoxDecoration(
+                      color: accent,
                       shape: BoxShape.circle,
-                      color: activeColor,
+                      boxShadow: [
+                        BoxShadow(
+                          color: accent.withOpacity(0.35),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        )
+                      ],
                     ),
-                  )
-                ]
+                  ),
               ],
             ),
           ),
@@ -453,3 +507,30 @@ class AppDrawer extends StatelessWidget {
     );
   }
 }
+
+class _NoisePainter extends CustomPainter {
+  final bool isDark;
+  const _NoisePainter({required this.isDark});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rnd = math.Random(1337);
+    final int count = ((size.width * size.height) / 1200).clamp(400, 1400).toInt();
+    final paint = Paint()
+      ..style = PaintingStyle.fill
+      ..strokeWidth = 1;
+
+    for (int i = 0; i < count; i++) {
+      final dx = rnd.nextDouble() * size.width;
+      final dy = rnd.nextDouble() * size.height;
+      final r = rnd.nextDouble() < 0.08 ? 1.2 : 0.8;
+      final alpha = (rnd.nextDouble() * 35).toInt(); // subtle
+      paint.color = (isDark ? Colors.white : Colors.black).withAlpha(alpha);
+      canvas.drawCircle(Offset(dx, dy), r, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+

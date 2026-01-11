@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart'; // date formatting için
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:printing/printing.dart';
 
 // Modeller ve Servisler
 import '../models/daily_activity.dart';
@@ -10,6 +8,8 @@ import '../models/user_profile.dart';
 import '../services/daily_activity_service.dart';
 import '../services/daily_activity_report_service.dart';
 import '../services/user_service.dart';
+import '../utils/pdf_file_saver/pdf_file_saver.dart';
+import 'pdf_viewer_page.dart';
 
 // Widgetlar
 import '../widgets/app_drawer.dart';
@@ -17,7 +17,12 @@ import '../widgets/add_task_dialog.dart';
 import '../widgets/daily_activities/date_timeline.dart';
 import '../widgets/daily_activities/activity_card.dart';
 import '../widgets/daily_activities/empty_state.dart';
+import '../widgets/daily_activities/daily_background.dart';
+import '../widgets/daily_activities/daily_hero_summary_card.dart';
+import '../widgets/daily_activities/section_header_with_badge.dart';
+import '../widgets/daily_activities/status_chip.dart';
 import '../theme/app_colors.dart';
+import 'ticket_list_page.dart';
 
 class DailyActivitiesPage extends StatefulWidget {
   const DailyActivitiesPage({super.key});
@@ -45,11 +50,19 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
   List<UserProfile> _allUsers = [];
   String? _selectedUserId; // Yönetici başkasını seçerse burası dolar
   bool _isSpeedDialOpen = false; // FAB Menüsü açık mı?
+  final ScrollController _listScrollController = ScrollController();
+  _DailyUiFilter _uiFilter = _DailyUiFilter.all;
 
   @override
   void initState() {
     super.initState();
     _initPage();
+  }
+
+  @override
+  void dispose() {
+    _listScrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _initPage() async {
@@ -63,6 +76,12 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
         _currentUser = profile;
         _selectedUserId = profile?.id; // Varsayılan: Kendisi
       });
+    }
+    
+    // Partner kullanıcılar günlük plan sayfasını göremez
+    if (profile?.isPartnerUser == true) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
     }
 
     // 2. Eğer yönetici ise, personel listesini çek
@@ -143,7 +162,7 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
 
       if (mounted) {
         if (count > 0) {
-          _showSnack('$count adet iş bugüne taşındı 📦', isSuccess: true);
+          _showSnack('$count adet iş bugüne taşındı.', isSuccess: true);
         } else {
           _showSnack('Dünden kalan iş bulunamadı.', isError: false);
         }
@@ -211,7 +230,7 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
         date: _selectedDate, 
         targetUserId: _selectedUserId,
       );
-      _showSnack('"$title" eklendi ✅', isSuccess: true);
+      _showSnack('"$title" eklendi.', isSuccess: true);
       await _loadData();
     } catch (e) {
       _showSnack('Ekleme hatası: $e', isError: true);
@@ -248,15 +267,29 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
         (u) => u.id == _selectedUserId, 
         orElse: () => _currentUser!,
       );
-      final userName = selectedUser.displayName ?? 'Personel';
+      final userName = selectedUser.displayName;
 
-      await Printing.layoutPdf(
-        onLayout: (format) => _reportService.generateReport(
-          activities: _activities, 
-          date: _selectedDate,
-          userName: userName,
+      // Permanent solution: generate real PDF bytes and download/share directly.
+      // This avoids Chrome print preview color/scale issues on Web.
+      final bytes = await _reportService.generateReport(
+        activities: _activities,
+        date: _selectedDate,
+        userName: userName,
+      );
+
+      final filename = 'Rapor_${DateFormat('yyyyMMdd').format(_selectedDate)}.pdf';
+
+      // Önizleme: PDF gerçekten üretiliyor mu kullanıcı direkt görsün.
+      // Bu sayfada "Paylaş/Yazdır" gibi aksiyonlar da var.
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PdfViewerPage(
+            title: 'Günlük Rapor',
+            pdfFileName: filename,
+            pdfGenerator: () async => bytes,
+          ),
         ),
-        name: 'Rapor_${DateFormat('yyyyMMdd').format(_selectedDate)}',
       );
     } catch (e) {
       _showSnack('Rapor hatası: $e', isError: true);
@@ -272,7 +305,7 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
     try {
       final text = await _reportService.generateTextReport(_selectedDate, isDetailed: true);
       await Clipboard.setData(ClipboardData(text: text));
-      _showSnack('Rapor kopyalandı! 📋', isSuccess: true);
+      _showSnack('Rapor kopyalandı.', isSuccess: true);
     } catch (e) {
       _showSnack('Kopyalama hatası: $e', isError: true);
     }
@@ -302,7 +335,7 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
           targetUserId: _selectedUserId, // Seçili kişiye ekle
         );
         _loadData();
-        _showSnack('İş paketi eklendi 🚀', isSuccess: true);
+        _showSnack('İş paketi eklendi.', isSuccess: true);
       } catch (e) {
         _showSnack('Ekleme hatası: $e', isError: true);
       }
@@ -323,7 +356,7 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
       setState(() {
         step.isCompleted = oldState;
       });
-      _showSnack('Bağlantı hatası ⚠️', isError: true);
+      _showSnack('Bağlantı hatası.', isError: true);
     }
   }
 
@@ -376,6 +409,28 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
     }
   }
 
+  Future<void> _updateKpi(DailyActivity activity, int? score) async {
+    final oldScore = activity.kpiScore;
+    setState(() {
+      final index = _activities.indexWhere((a) => a.id == activity.id);
+      if (index != -1) {
+        _activities[index] = _activities[index].copyWith(kpiScore: score);
+      }
+    });
+
+    try {
+      await _activityService.updateKpiScore(activity.id, score);
+    } catch (e) {
+      _showSnack('KPI güncellenemedi.', isError: true);
+      setState(() {
+        final index = _activities.indexWhere((a) => a.id == activity.id);
+        if (index != -1) {
+          _activities[index] = _activities[index].copyWith(kpiScore: oldScore);
+        }
+      });
+    }
+  }
+
   Future<bool> _confirmDelete(DailyActivity activity) async {
     if (activity.isAssignedByManager && _currentUser?.id != activity.creatorId) {
       // Eğer yönetici atadıysa ve silmeye çalışan kişi yönetici değilse engelle
@@ -417,6 +472,50 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Partner kullanıcılar günlük plan sayfasını göremez
+    if (_currentUser?.isPartnerUser == true) {
+      return Scaffold(
+        key: _scaffoldKey,
+        appBar: AppBar(
+          title: const Text('Günlük Planım'),
+          leading: IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          ),
+        ),
+        drawer: AppDrawer(
+          currentPage: AppDrawerPage.ticketList,
+          userName: _currentUser?.displayName,
+          userRole: _currentUser?.role,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Bu sayfaya erişim yetkiniz yok.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const TicketListPage()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.corporateNavy),
+                  child: const Text('İş Listesine Git', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     // İlerleme Hesabı
     double totalProgress = 0;
     int totalSteps = 0;
@@ -441,65 +540,7 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
       key: _scaffoldKey,
       
       // --- APP BAR (Yönetici Seçicili) ---
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        centerTitle: false,
-        iconTheme: const IconThemeData(color: AppColors.textDark),
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-        ),
-        title: isManagerView && _allUsers.isNotEmpty
-            ? DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedUserId,
-                  icon: const Icon(Icons.arrow_drop_down, color: AppColors.primary),
-                  style: const TextStyle(
-                    color: AppColors.textDark, 
-                    fontWeight: FontWeight.bold, 
-                    fontSize: 18
-                  ),
-                  onChanged: _onUserSelected,
-                  items: _allUsers.map((user) {
-                    return DropdownMenuItem<String>(
-                      value: user.id,
-                      child: Text(user.displayName ?? 'İsimsiz'),
-                    );
-                  }).toList(),
-                ),
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Günlük Planım', style: TextStyle(color: AppColors.textLight, fontSize: 12)),
-                  Text(
-                    DateFormat('d MMM yyyy', 'tr_TR').format(_selectedDate),
-                    style: const TextStyle(color: AppColors.textDark, fontWeight: FontWeight.bold, fontSize: 18),
-                  ),
-                ],
-              ),
-        actions: [
-          // BUGÜN Butonu
-          TextButton(
-             onPressed: () => _onDateSelected(DateTime.now()),
-             child: const Text('BUGÜN', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-          ),
-          // Takvim
-          IconButton(
-            icon: const Icon(Icons.calendar_today, color: AppColors.textDark),
-            onPressed: () async {
-              final date = await showDatePicker(
-                context: context,
-                initialDate: _selectedDate,
-                firstDate: DateTime(2023),
-                lastDate: DateTime(2030),
-              );
-              if (date != null) _onDateSelected(date);
-            },
-          ),
-        ],
-      ),
+      appBar: _buildAppBar(isManagerView: isManagerView),
       
       drawer: AppDrawer(
         currentPage: AppDrawerPage.dailyActivities,
@@ -507,93 +548,62 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
         userRole: _currentUser?.role,
       ),
       
-      body: Column(
-        children: [
-          // 1. Tarih Şeridi
-          DateTimeline(
-            selectedDate: _selectedDate, 
-            onDateSelected: _onDateSelected
-          ),
-
-          // 2. Geçmiş Uyarısı (Sadece kendi profilindeyse göster)
-          if (_pendingPastCount > 0 && _selectedUserId == _currentUser?.id)
-            Container(
-              width: double.infinity,
-              color: Colors.orange.shade50,
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-              child: Row(
+      body: DailyBackground(
+        child: SafeArea(
+          top: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final horizontal = constraints.maxWidth < 380 ? 14.0 : 16.0;
+              return Column(
                 children: [
-                  const Icon(Icons.info_outline, size: 20, color: Colors.orange),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Geçmişte $_pendingPastCount tamamlanmamış iş var.',
-                      style: TextStyle(color: Colors.orange.shade900, fontSize: 13, fontWeight: FontWeight.w600),
+                  const SizedBox(height: 10),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: horizontal),
+                    child: DailyHeroSummaryCard(
+                      selectedDate: _selectedDate,
+                      progress: totalProgress,
+                      completedSteps: completedSteps,
+                      totalSteps: totalSteps,
+                      isLoading: _isLoading,
+                      onCtaPressed: _onHeroCtaPressed,
                     ),
                   ),
-                  TextButton.icon(
-                    onPressed: _moveYesterdayToToday,
-                    icon: const Icon(Icons.low_priority, size: 16),
-                    label: const Text('Bugüne Taşı'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.orange.shade900,
-                      backgroundColor: Colors.white.withOpacity(0.5),
-                    ),
-                  )
-                ],
-              ),
-            ),
-          
-          // 3. İlerleme Çubuğu
-          if (_activities.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text("Günün İlerlemesi", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textLight)),
-                      Text("%${(totalProgress * 100).toInt()}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: totalProgress == 1.0 ? AppColors.statusDone : AppColors.primary)),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: totalProgress,
-                      backgroundColor: Colors.grey.shade200,
-                      color: totalProgress == 1.0 ? AppColors.statusDone : AppColors.primary,
-                      minHeight: 6,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                  const SizedBox(height: 12),
 
-          // 4. Liste
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-                : _activities.isEmpty
-                    ? const EmptyActivitiesState()
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(20),
-                        itemCount: _activities.length,
-                        itemBuilder: (context, index) {
-                          final activity = _activities[index];
-                          return ActivityCard(
-                            activity: activity,
-                            onToggleStep: _toggleStep,
-                            onToggleActivity: _toggleActivity,
-                            onDelete: _deleteActivity,
-                            onConfirmDelete: _confirmDelete,
-                          );
-                        },
+                  // 3) DateTimeline (existing) – restyled
+                  DateTimeline(selectedDate: _selectedDate, onDateSelected: _onDateSelected),
+                  const SizedBox(height: 12),
+
+                  // 4) Pending past warning banner (restyled)
+                  if (_pendingPastCount > 0 && _selectedUserId == _currentUser?.id)
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: horizontal),
+                      child: _PendingPastBanner(
+                        pendingCount: _pendingPastCount,
+                        onMoveToToday: _moveYesterdayToToday,
                       ),
+                    ),
+                  if (_pendingPastCount > 0 && _selectedUserId == _currentUser?.id) const SizedBox(height: 12),
+
+                  // 5) Filter row (UI-only)
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: horizontal),
+                    child: _FilterChipsRow(
+                      value: _uiFilter,
+                      onChanged: (v) => setState(() => _uiFilter = v),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // 6) List area
+                  Expanded(
+                    child: _buildActivitiesArea(horizontalPadding: horizontal),
+                  ),
+                ],
+              );
+            },
           ),
-        ],
+        ),
       ),
       
       // --- CUSTOM SPEED DIAL (FAB MENÜ) ---
@@ -661,6 +671,237 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
     );
   }
 
+  AppBar _buildAppBar({required bool isManagerView}) {
+    return AppBar(
+      backgroundColor: AppColors.surface,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      iconTheme: const IconThemeData(color: AppColors.textDark),
+      leading: IconButton(
+        icon: const Icon(Icons.menu),
+        onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+      ),
+      title: isManagerView && _allUsers.isNotEmpty
+          ? DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedUserId,
+                icon: const Icon(Icons.arrow_drop_down, color: AppColors.primary),
+                style: const TextStyle(
+                  color: AppColors.textDark,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                ),
+                onChanged: _onUserSelected,
+                items: _allUsers.map((user) {
+                  return DropdownMenuItem<String>(
+                    value: user.id,
+                    child: Text(user.displayName),
+                  );
+                }).toList(),
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Günlük Planım',
+                  style: TextStyle(
+                    color: AppColors.textDark,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  DateFormat('d MMM yyyy', 'tr_TR').format(_selectedDate),
+                  style: const TextStyle(
+                    color: AppColors.textLight,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+      actions: [
+        TextButton(
+          onPressed: () => _onDateSelected(DateTime.now()),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.primary,
+            textStyle: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+          child: const Text('BUGÜN'),
+        ),
+        IconButton(
+          icon: const Icon(Icons.calendar_today, color: AppColors.textDark),
+          onPressed: () async {
+            final date = await showDatePicker(
+              context: context,
+              initialDate: _selectedDate,
+              firstDate: DateTime(2023),
+              lastDate: DateTime(2030),
+              locale: const Locale('tr', 'TR'),
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: const ColorScheme.light(
+                      primary: AppColors.corporateNavy,
+                      onPrimary: Colors.white,
+                      onSurface: AppColors.textDark,
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+            if (date != null) _onDateSelected(date);
+          },
+        ),
+        const SizedBox(width: 4),
+      ],
+    );
+  }
+
+  void _onHeroCtaPressed() {
+    if (!mounted) return;
+    setState(() => _isSpeedDialOpen = false);
+    _handleHeroCta();
+  }
+
+  Future<void> _handleHeroCta() async {
+    // CTA is for focusing the task list (not adding).
+    if (_activities.isEmpty && !_isLoading) {
+      _showSnack('Bugün için iş yok.', isError: false);
+      return;
+    }
+    if (_isLoading) return;
+    if (!_listScrollController.hasClients) return;
+
+    final current = _listScrollController.offset;
+    // If already at top, do a tiny "bounce" so it feels like an action.
+    if (current <= 1.0) {
+      final bump = (_listScrollController.position.maxScrollExtent >= 48) ? 48.0 : 0.0;
+      if (bump > 0) {
+        await _listScrollController.animateTo(
+          bump,
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+        );
+        await _listScrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        _showSnack('Liste zaten üstte.', isError: false);
+      }
+      return;
+    }
+
+    await _listScrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  Widget _buildActivitiesArea({required double horizontalPadding}) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+    }
+
+    if (_activities.isEmpty) {
+      return const EmptyActivitiesState();
+    }
+
+    final sections = _buildSectionsForUi(_activities);
+    final visibleSections = _filterSections(sections, _uiFilter);
+
+    return ListView.builder(
+      controller: _listScrollController,
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 6, horizontalPadding, 120),
+      itemCount: visibleSections.length,
+      itemBuilder: (context, index) {
+        final section = visibleSections[index];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SectionHeaderWithBadge(title: section.title, count: section.items.length),
+              const SizedBox(height: 10),
+              ...section.items.map((activity) {
+                return ActivityCard(
+                  activity: activity,
+                  onToggleStep: _toggleStep,
+                  onToggleActivity: _toggleActivity,
+                  onDelete: _deleteActivity,
+                  onConfirmDelete: _confirmDelete,
+                  canGiveKpi: isManagerView && _selectedUserId != _currentUser?.id,
+                  onKpiChanged: _updateKpi,
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  List<_ActivitySection> _buildSectionsForUi(List<DailyActivity> activities) {
+    ActivityStatus statusOf(DailyActivity a) {
+      if (a.isCompleted || a.progress >= 1.0) return ActivityStatus.done;
+      if (a.progress > 0) return ActivityStatus.inProgress;
+      return ActivityStatus.todo;
+    }
+
+    final todo = <DailyActivity>[];
+    final inProgress = <DailyActivity>[];
+    final done = <DailyActivity>[];
+
+    for (final a in activities) {
+      switch (statusOf(a)) {
+        case ActivityStatus.todo:
+          todo.add(a);
+          break;
+        case ActivityStatus.inProgress:
+          inProgress.add(a);
+          break;
+        case ActivityStatus.done:
+          done.add(a);
+          break;
+      }
+    }
+
+    final sections = <_ActivitySection>[];
+    if (todo.isNotEmpty) sections.add(_ActivitySection(title: 'Yapılacak', items: todo));
+    if (inProgress.isNotEmpty) sections.add(_ActivitySection(title: 'Devam Eden', items: inProgress));
+    if (done.isNotEmpty) sections.add(_ActivitySection(title: 'Bitti', items: done));
+    return sections;
+  }
+
+  List<_ActivitySection> _filterSections(List<_ActivitySection> sections, _DailyUiFilter filter) {
+    if (filter == _DailyUiFilter.all) return sections;
+
+    String? title;
+    switch (filter) {
+      case _DailyUiFilter.all:
+        title = null;
+        break;
+      case _DailyUiFilter.todo:
+        title = 'Yapılacak';
+        break;
+      case _DailyUiFilter.inProgress:
+        title = 'Devam Eden';
+        break;
+      case _DailyUiFilter.done:
+        title = 'Bitti';
+        break;
+    }
+    if (title == null) return sections;
+    return sections.where((s) => s.title == title).toList();
+  }
+
   Widget _buildFabItem({
     required IconData icon, 
     required String label, 
@@ -670,16 +911,27 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))
-            ],
+        Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.10)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 10,
+                  offset: const Offset(0, 6),
+                )
+              ],
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: AppColors.textDark),
+            ),
           ),
-          child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
         ),
         const SizedBox(width: 8),
         FloatingActionButton.small(
@@ -689,6 +941,142 @@ class _DailyActivitiesPageState extends State<DailyActivitiesPage> {
           child: Icon(icon, color: Colors.white),
         ),
       ],
+    );
+  }
+}
+
+enum _DailyUiFilter { all, todo, inProgress, done }
+
+class _ActivitySection {
+  final String title;
+  final List<DailyActivity> items;
+  _ActivitySection({required this.title, required this.items});
+}
+
+class _FilterChipsRow extends StatelessWidget {
+  final _DailyUiFilter value;
+  final ValueChanged<_DailyUiFilter> onChanged;
+
+  const _FilterChipsRow({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _chip(label: 'Tümü', selected: value == _DailyUiFilter.all, onTap: () => onChanged(_DailyUiFilter.all)),
+          const SizedBox(width: 10),
+          _chip(label: 'Yapılacak', selected: value == _DailyUiFilter.todo, onTap: () => onChanged(_DailyUiFilter.todo)),
+          const SizedBox(width: 10),
+          _chip(label: 'Devam', selected: value == _DailyUiFilter.inProgress, onTap: () => onChanged(_DailyUiFilter.inProgress)),
+          const SizedBox(width: 10),
+          _chip(label: 'Bitti', selected: value == _DailyUiFilter.done, onTap: () => onChanged(_DailyUiFilter.done)),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip({required String label, required bool selected, required VoidCallback onTap}) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 14,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : [],
+      ),
+      child: ChoiceChip(
+        selected: selected,
+        label: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : AppColors.textDark,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.15,
+          ),
+        ),
+        onSelected: (_) => onTap(),
+        selectedColor: AppColors.primary,
+        backgroundColor: selected ? AppColors.primary.withValues(alpha: 0.12) : AppColors.surface,
+        side: BorderSide(color: selected ? Colors.transparent : AppColors.primary.withValues(alpha: 0.10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+}
+
+class _PendingPastBanner extends StatelessWidget {
+  final int pendingCount;
+  final VoidCallback onMoveToToday;
+
+  const _PendingPastBanner({
+    required this.pendingCount,
+    required this.onMoveToToday,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = AppColors.accent.withValues(alpha: 0.14);
+    final border = AppColors.accent.withValues(alpha: 0.20);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 16,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: border),
+        ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.corporateNavy),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Geçmişte $pendingCount tamamlanmamış iş var.',
+              style: const TextStyle(
+                color: AppColors.textDark,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          TextButton.icon(
+            onPressed: onMoveToToday,
+            icon: const Icon(Icons.low_priority, size: 16),
+            label: const Text('Bugüne Taşı'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.corporateNavy,
+              backgroundColor: AppColors.surface.withValues(alpha: 0.85),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+              textStyle: const TextStyle(fontWeight: FontWeight.w900),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ],
+      ),
+      ),
     );
   }
 }

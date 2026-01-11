@@ -299,4 +299,32 @@ class TicketService {
     }
     return uploadedUrls;
   }
+
+  /// Herhangi bir dosyayı (PDF, EXE, ZIP vb.) Supabase Storage'a yükler
+  Future<String?> uploadFile(String ticketId, PlatformFile file) async {
+    if (file.bytes == null) return null;
+
+    try {
+      final cleanName = file.name.replaceAll(RegExp(r'[^a-zA-Z0-9._]'), '');
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_$cleanName';
+      final filePath = '$ticketId/$fileName';
+
+      // Dosya tipini belirle
+      String contentType = 'application/octet-stream';
+      if (file.extension == 'pdf') contentType = 'application/pdf';
+      if (file.extension == 'jpg' || file.extension == 'jpeg') contentType = 'image/jpeg';
+      if (file.extension == 'png') contentType = 'image/png';
+
+      await _supabase.storage.from('ticket-files').uploadBinary(
+            filePath,
+            file.bytes!,
+            fileOptions: FileOptions(contentType: contentType, upsert: false),
+          );
+
+      return _supabase.storage.from('ticket-files').getPublicUrl(filePath);
+    } catch (e) {
+      debugPrint('Dosya yükleme hatası: $e');
+      return null;
+    }
+  }
 }

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -21,6 +22,7 @@ import '../theme/app_colors.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/ui/ui.dart';
 import '../widgets/notifications_dropdown.dart';
+import 'pdf_viewer_page.dart';
 
 class TicketListPage extends StatefulWidget {
   const TicketListPage({super.key});
@@ -48,14 +50,14 @@ class _TicketActionButton extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     
     // Buton renkleri ve tasarımı
-    final Color baseColor = danger 
-        ? (isDark ? Colors.redAccent.shade200 : Colors.red.shade600) 
-        : (isDark ? Colors.white : const Color(0xFF0F172A));
+    final Color baseColor = danger
+        ? (isDark ? Colors.redAccent.shade200 : Colors.red.shade600)
+        : (isDark ? Colors.white : AppColors.corporateNavy);
         
     // Karanlık modda arka planı biraz daha belirgin yapalım
     final Color bg = danger 
         ? (isDark ? Colors.red.withOpacity(0.2) : Colors.red.withOpacity(0.1))
-        : (isDark ? Colors.white.withOpacity(0.15) : const Color(0xFF0F172A).withOpacity(0.05));
+        : (isDark ? Colors.white.withOpacity(0.15) : AppColors.corporateNavy.withOpacity(0.05));
     
     return TextButton.icon(
       style: TextButton.styleFrom(
@@ -199,10 +201,32 @@ class _TicketListPageState extends State<TicketListPage> {
     }
   }
 
-  void _createPdfReport(List<Map<String, dynamic>> allTickets) {
+  Future<void> _createPdfReport(List<Map<String, dynamic>> allTickets, {required bool isFiltered}) async {
+    // Partner kullanıcılar "günlük/genel rapor" alamaz; sadece ekranda gördüğü filtreli listeyi alabilir.
+    if (_userRole == 'partner_user') {
+      if (!isFiltered) return;
+
+      final partnerName = allTickets.isNotEmpty ? (allTickets.first['device_brand'] as String?) : null;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PdfViewerPage(
+            title: 'İş Listesi',
+            pdfFileName: 'Is_Listesi_${DateTime.now().toIso8601String().substring(0, 10)}.pdf',
+            pdfGenerator: () => PdfExportService.generateTicketListPdfBytesFromList(
+              tickets: allTickets,
+              reportTitle: 'İş Listesi (Filtrelenmiş)',
+              partnerName: partnerName,
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Diğer roller: mevcut genel rapor mantığı kalsın
     GeneralReportService().generateAndPrintReport(
-      allTickets, 
-      _userName ?? 'Kullanıcı'
+      allTickets,
+      _userName ?? 'Kullanıcı',
     );
   }
 
@@ -571,6 +595,7 @@ class _TicketListPageState extends State<TicketListPage> {
   Widget _buildTicketCard(Map<String, dynamic> ticket) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isWide = MediaQuery.of(context).size.width >= 900;
     
     final customer = ticket['customers'] as Map<String, dynamic>? ?? <String, dynamic>{};
     final deviceBrand = ticket['device_brand'] as String?; // Partner adı cihaz markası alanında
@@ -581,156 +606,260 @@ class _TicketListPageState extends State<TicketListPage> {
     final jobCode = ticket['job_code'] as String? ?? '---';
 
     final statusColor = _getStatusColor(status, isDark);
+    final accent = AppColors.corporateYellow;
+
+    IconData leadingIcon;
+    switch (status) {
+      case 'done':
+        leadingIcon = Icons.check_circle_outline;
+        break;
+      case 'in_progress':
+        leadingIcon = Icons.handyman_outlined;
+        break;
+      case 'open':
+      default:
+        leadingIcon = Icons.assignment_outlined;
+        break;
+    }
+
+    String plannedText = '-';
+    if (plannedDate != null && plannedDate.isNotEmpty) {
+      final dt = DateTime.tryParse(plannedDate);
+      if (dt != null) plannedText = DateFormat('dd.MM.yyyy').format(dt);
+    }
+
+    final cardBg = isDark ? const Color(0xFF1C1F26) : Colors.white;
+    final primaryText = isDark ? const Color(0xFFF9FAFB) : AppColors.textDark;
+    final secondaryText = isDark ? const Color(0xFF9CA3AF) : AppColors.textLight;
+    final shadowColor = Colors.black.withOpacity(isDark ? 0.45 : 0.08);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: theme.cardTheme.shadowColor != null 
-          ? [BoxShadow(color: theme.cardTheme.shadowColor!, blurRadius: 8, offset: const Offset(0, 2))] 
-          : null,
-        border: Border.all(
-          color: theme.dividerColor.withOpacity(0.1),
-          width: 1.0,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  jobCode,
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
-                ),
-              ),
-              Flexible(
-                child: Container(
-                  margin: const EdgeInsets.only(left: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: statusColor.withOpacity(0.2)),
-                  ),
-                  child: Text(
-                    _statusLabel(status).toUpperCase(),
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(Icons.business, size: 14, color: theme.textTheme.bodySmall?.color),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  customer['name'] as String? ?? 'Müşteri bilgisi yok',
-                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.textTheme.bodySmall?.color),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          if (deviceBrand != null && deviceBrand.trim().isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(Icons.handshake_outlined, size: 14, color: theme.colorScheme.primary),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    deviceBrand,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+          // Base + ambient shadow
+          Container(
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(
+                  color: shadowColor,
+                  blurRadius: 40,
+                  offset: const Offset(0, 14),
                 ),
               ],
             ),
-          ],
-          if (plannedDate != null) ...[
-             const SizedBox(height: 4),
-             Row(
-                children: [
-                  Icon(Icons.calendar_today, size: 14, color: theme.textTheme.bodySmall?.color),
-                  const SizedBox(width: 6),
-                  Text(
-                    plannedDate.substring(0, 10),
-                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.textTheme.bodySmall?.color),
-                  ),
-                ],
-             ),
-          ],
+          ),
 
-          const SizedBox(height: 16),
-          const Divider(),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _TicketActionButton(
-                  label: 'Detay',
-                  icon: Icons.visibility_outlined,
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => TicketDetailPage(ticketId: ticket['id'].toString()))).then((_) => _refresh()),
+          // Noise / grain overlay
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: isDark ? 0.035 : 0.02,
+                  child: CustomPaint(
+                    painter: _ListNoisePainter(
+                      seed: (ticket['id'] ?? 1).hashCode,
+                      // Mobil: daha hafif, Desktop/Web: biraz daha yoğun
+                      densityDivisor: isWide ? 1200 : 1800,
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                if (_userRole != 'partner_user' && _userRole != 'technician')
-                  _TicketActionButton(
-                    label: 'Düzenle',
-                    icon: Icons.edit_outlined,
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EditTicketPage(ticketId: ticket['id'].toString()))).then((_) => _refresh()),
+              ),
+            ),
+          ),
+
+          // Inner shadow overlay (very subtle)
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      // Mobil: daha "material" hissi için tek eksen
+                      begin: isWide ? Alignment.topLeft : Alignment.topCenter,
+                      end: isWide ? Alignment.bottomRight : Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withOpacity(isDark ? 0.22 : 0.08),
+                        Colors.transparent,
+                        Colors.transparent,
+                        Colors.white.withOpacity(isDark ? 0.04 : 0.10),
+                      ],
+                      stops: const [0.0, 0.20, 0.80, 1.0],
+                    ),
                   ),
-                // Teknisyenler ve partner kullanıcılar silme yapamaz
-                if (_userRole != 'technician' && _userRole != 'pending' && _userRole != 'partner_user') ...[
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                    onPressed: () {
-                      showDialog(
-                         context: context, 
-                         builder: (ctx) => AlertDialog(
-                           title: const Text('Sil'),
-                           content: const Text('Bu işi silmek istediğine emin misin?'),
-                           actions: [
-                             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
-                             TextButton(
-                               onPressed: () async {
-                                 Navigator.pop(ctx);
-                                 final supabase = Supabase.instance.client;
-                                 await supabase.from('tickets').delete().eq('id', ticket['id']);
-                                 if (context.mounted) _refresh();
-                               }, 
-                               child: const Text('Sil', style: TextStyle(color: Colors.red))
-                             ),
-                           ],
-                         )
-                      );
-                    },
+                ),
+              ),
+            ),
+          ),
+
+          // Content
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Left icon (brand accent ring)
+                    Container(
+                      width: 44,
+                      height: 44,
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: accent,
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: cardBg,
+                        ),
+                        child: Icon(leadingIcon, color: statusColor, size: 22),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+
+                    // Title / subtitle
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: primaryText,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            (customer['name'] as String? ?? 'Müşteri bilgisi yok'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: secondaryText,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          if (deviceBrand != null && deviceBrand.trim().isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              deviceBrand,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: secondaryText.withOpacity(0.9),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(width: 10),
+
+                    // Right "value" column (job code + planned)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: accent.withOpacity(isDark ? 0.10 : 0.12),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: accent.withOpacity(isDark ? 0.35 : 0.25)),
+                          ),
+                          child: Text(
+                            jobCode,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.black87,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          plannedText,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: secondaryText,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 14),
+                Divider(color: (isDark ? Colors.white10 : Colors.black12)),
+                const SizedBox(height: 10),
+
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _TicketActionButton(
+                        label: 'Detay',
+                        icon: Icons.visibility_outlined,
+                        onTap: () => Navigator.of(context)
+                            .push(MaterialPageRoute(builder: (_) => TicketDetailPage(ticketId: ticket['id'].toString())))
+                            .then((_) => _refresh()),
+                      ),
+                      const SizedBox(width: 8),
+                      if (_userRole != 'partner_user' && _userRole != 'technician')
+                        _TicketActionButton(
+                          label: 'Düzenle',
+                          icon: Icons.edit_outlined,
+                          onTap: () => Navigator.of(context)
+                              .push(MaterialPageRoute(builder: (_) => EditTicketPage(ticketId: ticket['id'].toString())))
+                              .then((_) => _refresh()),
+                        ),
+                      if (_userRole != 'technician' && _userRole != 'pending' && _userRole != 'partner_user') ...[
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: Icon(Icons.delete_outline, size: 20, color: Colors.red.withOpacity(0.85)),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Sil'),
+                                content: const Text('Bu işi silmek istediğine emin misin?'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+                                  TextButton(
+                                    onPressed: () async {
+                                      Navigator.pop(ctx);
+                                      final supabase = Supabase.instance.client;
+                                      await supabase.from('tickets').delete().eq('id', ticket['id']);
+                                      if (context.mounted) _refresh();
+                                    },
+                                    child: const Text('Sil', style: TextStyle(color: Colors.red)),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ],
                   ),
-                ],
+                ),
               ],
             ),
           ),
@@ -863,11 +992,13 @@ class _TicketListPageState extends State<TicketListPage> {
                 case 'pdf_filtered':
                   final tickets = await _ticketsFuture;
                   final filtered = _applyFilters(tickets);
-                  _createPdfReport(filtered);
+                  await _createPdfReport(filtered, isFiltered: true);
                   break;
                 case 'pdf_all':
+                  // Partner kullanıcılar tüm işleri PDF alamaz
+                  if (_userRole == 'partner_user') break;
                   final allTickets = await _fetchAllTicketsForReport();
-                  _createPdfReport(allTickets);
+                  await _createPdfReport(allTickets, isFiltered: false);
                   break;
                 case 'toggle_theme':
                   IsTakipApp.of(context)?.toggleTheme();
@@ -886,14 +1017,15 @@ class _TicketListPageState extends State<TicketListPage> {
                   title: Text('Filtrelenmiş listeyi PDF al'),
                 ),
               ),
-              const PopupMenuItem(
-                value: 'pdf_all',
-                child: ListTile(
-                  dense: true,
-                  leading: Icon(Icons.picture_as_pdf),
-                  title: Text('Tüm işleri PDF al'),
+              if (_userRole != 'partner_user')
+                const PopupMenuItem(
+                  value: 'pdf_all',
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(Icons.picture_as_pdf),
+                    title: Text('Tüm işleri PDF al'),
+                  ),
                 ),
-              ),
               PopupMenuItem(
                 value: 'toggle_theme',
                 child: ListTile(
@@ -1135,7 +1267,9 @@ class _TicketListPageState extends State<TicketListPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     sliver: SliverList(
                       delegate: SliverChildBuilderDelegate(
-                        (context, index) => _buildTicketCard(filtered[index]),
+                        (context, index) => RepaintBoundary(
+                          child: _buildTicketCard(filtered[index]),
+                        ),
                         childCount: filtered.length,
                       ),
                     ),
@@ -1184,4 +1318,31 @@ class _TicketListPageState extends State<TicketListPage> {
           : null,
     );
   }
+}
+
+class _ListNoisePainter extends CustomPainter {
+  final int seed;
+  final double densityDivisor;
+  const _ListNoisePainter({
+    required this.seed,
+    required this.densityDivisor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rnd = math.Random(seed);
+    final paint = Paint()..style = PaintingStyle.fill;
+    final count = ((size.width * size.height) / densityDivisor).clamp(220, 850).toInt();
+
+    for (int i = 0; i < count; i++) {
+      final dx = rnd.nextDouble() * size.width;
+      final dy = rnd.nextDouble() * size.height;
+      final alpha = (rnd.nextDouble() * 30).toInt();
+      paint.color = (rnd.nextBool() ? Colors.white : Colors.black).withAlpha(alpha);
+      canvas.drawRect(Rect.fromLTWH(dx, dy, 1, 1), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ListNoisePainter oldDelegate) => false;
 }

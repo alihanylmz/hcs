@@ -10,6 +10,7 @@ import '../widgets/app_drawer.dart';
 import '../services/user_service.dart';
 import '../services/partner_service.dart';
 import '../models/user_profile.dart';
+import '../theme/app_colors.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -319,7 +320,7 @@ class _DashboardPageState extends State<DashboardPage> {
         title: Text(
           _getAppBarTitle(),
           style: const TextStyle(
-            color: Color(0xFF0F172A),
+            color: AppColors.corporateNavy,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -350,7 +351,7 @@ class _DashboardPageState extends State<DashboardPage> {
             PopupMenuButton<String>(
               icon: const Icon(
                 Icons.more_vert,
-                color: Color(0xFF0F172A),
+                color: AppColors.corporateNavy,
               ),
               onSelected: (value) {
                 switch (value) {
@@ -375,7 +376,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   value: 'users',
                   child: Row(
                     children: [
-                      Icon(Icons.people_outline, color: Color(0xFF0F172A)),
+                      Icon(Icons.people_outline, color: AppColors.corporateNavy),
                       SizedBox(width: 12),
                       Text('Kullanıcı Yönetimi'),
                     ],
@@ -385,7 +386,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   value: 'partners',
                   child: Row(
                     children: [
-                      Icon(Icons.business_rounded, color: Color(0xFF0F172A)),
+                      Icon(Icons.business_rounded, color: AppColors.corporateNavy),
                       SizedBox(width: 12),
                       Text('Partner Firmalar'),
                     ],
@@ -484,7 +485,7 @@ class _DashboardPageState extends State<DashboardPage> {
         },
         label: const Text('İş Emirleri Listesi'),
         icon: const Icon(Icons.list_alt),
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: AppColors.corporateNavy,
       ),
     );
   }
@@ -596,7 +597,7 @@ class _DashboardPageState extends State<DashboardPage> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF0F172A),
+              color: AppColors.corporateNavy,
             ),
           ),
           const SizedBox(height: 12),
@@ -610,6 +611,9 @@ class _DashboardPageState extends State<DashboardPage> {
             )
           else ...[
             buildRow('Açık', _recentOpenCount, Colors.blue),
+            buildRow('Serviste', _recentInProgressCount, Colors.orange),
+            buildRow('Stokta (Pano)', _recentPanelStockCount, Colors.purple),
+            buildRow('Gönderildi', _recentPanelSentCount, Colors.indigo),
           ],
         ],
       ),
@@ -638,7 +642,7 @@ class _DashboardPageState extends State<DashboardPage> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF0F172A),
+              color: AppColors.corporateNavy,
             ),
           ),
           const SizedBox(height: 4),
@@ -845,7 +849,7 @@ class _DashboardPageState extends State<DashboardPage> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF0F172A),
+              color: AppColors.corporateNavy,
             ),
           ),
           const SizedBox(height: 4),
@@ -1014,7 +1018,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+                  color: AppColors.corporateNavy,
                 ),
               ),
             ],
@@ -1080,6 +1084,12 @@ class _DashboardPageState extends State<DashboardPage> {
         return 'Açık';
       case 'done':
         return 'Bitti';
+      case 'in_progress':
+        return 'Serviste';
+      case 'panel_done_stock':
+        return 'Stokta';
+      case 'panel_done_sent':
+        return 'Gönderildi';
       default:
         return status;
     }
@@ -1091,6 +1101,12 @@ class _DashboardPageState extends State<DashboardPage> {
         return Colors.blue;
       case 'done':
         return Colors.green;
+      case 'in_progress':
+        return Colors.orange;
+      case 'panel_done_stock':
+        return Colors.purple;
+      case 'panel_done_sent':
+        return Colors.indigo;
       default:
         return Colors.grey;
     }

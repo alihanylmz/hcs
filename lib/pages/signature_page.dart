@@ -5,7 +5,8 @@ import 'package:flutter/services.dart'; // Ekran yönü için
 import 'package:signature/signature.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
-import '../widgets/custom_header.dart'; // Header widget'ını eklemeyi unutma
+import '../widgets/custom_header.dart';
+import '../services/user_service.dart';
 
 enum SignatureType { customer, technician }
 
@@ -167,15 +168,40 @@ class _SignaturePageState extends State<SignaturePage> {
       final idValue = int.tryParse(widget.ticketId) ?? widget.ticketId;
       final user = supabase.auth.currentUser;
 
+      // --- ÖZEL DURUM: PROFİL İMZA AYARI ---
+      if (widget.ticketId == 'PROFILE_SETUP') {
+        if (user != null) {
+          await supabase.from('profiles').update({
+            'signature_data': signatureBase64,
+          }).eq('id', user.id);
+          
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profil imzanız başarıyla kaydedildi!'), backgroundColor: Colors.green),
+          );
+          Navigator.pop(context, true);
+          return;
+        }
+      }
+      // ------------------------------------
+
       Map<String, dynamic> updateData = {};
 
       if (widget.type == SignatureType.customer) {
+        // --- YENİ MANTIK: Müşteri imzalarken personelin imzasını da bilete mühürle ---
+        final userService = UserService();
+        final userProfile = await userService.getCurrentUserProfile();
+
         updateData = {
           'signature_data': signatureBase64,
           'signature_name': _nameController.text.trim(),
           'signature_surname': _surnameController.text.trim(),
           'signature_phone': _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : null,
           'signature_date': DateTime.now().toIso8601String(),
+          // Personelin profilindeki imzayı ve ismini bilete kopyalıyoruz
+          'technician_signature_data': userProfile?.signatureData,
+          'technician_signature_name': userProfile?.fullName,
+          'technician_id': user?.id,
         };
       } else {
         // Teknisyen

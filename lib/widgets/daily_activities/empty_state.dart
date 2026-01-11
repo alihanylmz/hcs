@@ -11,12 +11,13 @@ class EmptyActivitiesState extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(24),
-            decoration: const BoxDecoration(
-              color: Colors.blueAccent,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: AppColors.accent.withOpacity(0.16),
               shape: BoxShape.circle,
+              border: Border.all(color: AppColors.accent.withOpacity(0.22)),
             ),
-            child: Icon(Icons.assignment_add, size: 48, color: Colors.white.withOpacity(0.9)),
+            child: const Icon(Icons.assignment_add, size: 44, color: AppColors.corporateNavy),
           ),
           const SizedBox(height: 24),
           const Text(

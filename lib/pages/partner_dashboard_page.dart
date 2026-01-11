@@ -127,7 +127,7 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF0F172A) : AppColors.backgroundGrey;
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
 
     return Scaffold(
@@ -141,7 +141,6 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
                   title: _partnerInfo?.name ?? 'Partner Portalı',
                   subtitle: 'Hoş geldiniz, ${_userProfile?.fullName ?? ''}',
                   showBackArrow: false,
-                  onBackPressed: () {}, // Drawer menü butonu olabilir
                 ),
                 
                 // İstatistik Kartları

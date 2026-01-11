@@ -5,10 +5,10 @@ import 'app_colors.dart';
 class AppTheme {
   // Ana Renkler (Profile Page ile uyumlu)
   static const Color _lightBg = Color(0xFFF8FAFC); // Slate-50
-  static const Color _darkBg = Color(0xFF0B0B0B); // Kurumsal Siyah
+  static const Color _darkBg = Color(0xFF0B1220); // Koyu kömür (industrial)
   
   static const Color _inputFillLight = Colors.white;
-  static const Color _inputFillDark = Color(0xFF1E293B);
+  static const Color _inputFillDark = Color(0xFF111827);
 
   // --- LIGHT THEME ---
   static ThemeData get lightTheme {
@@ -32,17 +32,18 @@ class AppTheme {
         displayColor: AppColors.corporateNavy,
       ),
 
-      // AppBar Varsayılan Ayarı (Header kullanılmayan sayfalar için)
+      // AppBar Varsayılan Ayarı
       appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.corporateNavy,
+        foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        iconTheme: IconThemeData(color: AppColors.corporateNavy),
+        iconTheme: IconThemeData(color: Colors.white),
         titleTextStyle: TextStyle(
-          color: AppColors.corporateNavy,
+          color: Colors.white,
           fontSize: 18,
           fontWeight: FontWeight.bold,
-          letterSpacing: 0.5,
+          letterSpacing: 0.2,
         ),
       ),
 
@@ -70,7 +71,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.corporateNavy, width: 2),
+          borderSide: const BorderSide(color: AppColors.corporateYellow, width: 2),
         ),
         labelStyle: TextStyle(color: Colors.grey.shade600),
         hintStyle: TextStyle(color: Colors.grey.shade400),
@@ -118,7 +119,8 @@ class AppTheme {
       textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
 
       appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.corporateNavy,
+        foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
         iconTheme: IconThemeData(color: Colors.white),
@@ -149,7 +151,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.corporateNavy, width: 2),
+          borderSide: const BorderSide(color: AppColors.corporateYellow, width: 2),
         ),
         labelStyle: const TextStyle(color: Colors.grey),
         hintStyle: TextStyle(color: Colors.grey.shade700),

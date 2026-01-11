@@ -26,50 +26,54 @@ import 'models/user_profile.dart'; // UserRole için
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-    await windowManager.ensureInitialized();
-    WindowOptions windowOptions = const WindowOptions(
-      size: Size(1280, 720),
-      minimumSize: Size(800, 600),
-      center: true,
-      backgroundColor: Colors.transparent,
-      skipTaskbar: false,
-      titleBarStyle: TitleBarStyle.normal,
-    );
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    });
+  if (!kIsWeb) {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      await windowManager.ensureInitialized();
+      WindowOptions windowOptions = const WindowOptions(
+        size: Size(1280, 720),
+        minimumSize: Size(800, 600),
+        center: true,
+        backgroundColor: Colors.transparent,
+        skipTaskbar: false,
+        titleBarStyle: TitleBarStyle.normal,
+      );
+      windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.show();
+        await windowManager.focus();
+      });
+    }
   }
 
   // --- OneSignal Ayarları (Sadece Mobil) ---
-  if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
-    OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
-    OneSignal.initialize("faeed989-8a81-4fe0-9c73-2eb9ed2144a7");
-    OneSignal.Notifications.requestPermission(true);
+  if (!kIsWeb) {
+    if (Platform.isIOS || Platform.isAndroid) {
+      OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
+      OneSignal.initialize("faeed989-8a81-4fe0-9c73-2eb9ed2144a7");
+      OneSignal.Notifications.requestPermission(true);
 
-    OneSignal.Notifications.addClickListener((event) {
-      try {
-        final data = event.notification.additionalData;
-        if (data != null && data.containsKey('ticket_id')) {
-          final ticketId = data['ticket_id'].toString();
-          print("🔔 Bildirime tıklandı, Ticket ID: $ticketId");
-          
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(
-              builder: (context) => TicketDetailPage(ticketId: ticketId),
-            ),
-          );
+      OneSignal.Notifications.addClickListener((event) {
+        try {
+          final data = event.notification.additionalData;
+          if (data != null && data.containsKey('ticket_id')) {
+            final ticketId = data['ticket_id'].toString();
+            print("🔔 Bildirime tıklandı, Ticket ID: $ticketId");
+            
+            navigatorKey.currentState?.push(
+              MaterialPageRoute(
+                builder: (context) => TicketDetailPage(ticketId: ticketId),
+              ),
+            );
+          }
+        } catch (e) {
+          print("❌ Bildirim tıklama hatası: $e");
         }
-      } catch (e) {
-        print("❌ Bildirim tıklama hatası: $e");
-      }
-    });
+      });
+    }
   }
 
   try {
     // Ortam değişkenlerini yükle
-    await dotenv.load(fileName: ".env");
+    await dotenv.load(fileName: "env.txt");
 
     // Tarih formatı (TR)
     await initializeDateFormatting('tr_TR', null);

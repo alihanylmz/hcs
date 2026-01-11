@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:file_picker/file_picker.dart';
 
 // Yeni oluşturduğumuz modülleri import ediyoruz
 import '../services/pdf_export_service.dart';
@@ -12,6 +14,7 @@ import '../models/ticket_part.dart';
 import '../pages/edit_ticket_page.dart';
 import 'signature_page.dart';
 import 'pdf_viewer_page.dart';
+import 'profile_page.dart'; // <--- Eklendi
 import '../theme/app_colors.dart'; // <--- Renkler
 import '../utils/formatters.dart'; // <--- Formatlayıcılar
 import '../widgets/add_note_dialog.dart'; // <--- Dialog Widget
@@ -34,6 +37,7 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
   UserProfile? _userProfile;
   bool _loading = true;
   bool _isUpdating = false;
+  bool _isUploadingFile = false; // Supabase yükleme durumu
   String? _error;
   
   // Teknisyen notları için state
@@ -296,74 +300,71 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
   Future<void> _exportToPdf() async {
     if (_ticket == null) return;
 
-    // İmza kontrolü
-    final hasCustomerSignature = _ticket!['signature_data'] != null;
-    final hasTechnicianSignature = _ticket!['technician_signature_data'] != null;
-    final hasAllSignatures = hasCustomerSignature && hasTechnicianSignature;
+    final userService = UserService();
+    final userProfile = await userService.getCurrentUserProfile();
 
-    // İmza eksikliği kontrolü
-    if (!hasAllSignatures) {
-      String message;
-      if (!hasCustomerSignature && !hasTechnicianSignature) {
-        // Hiç imza yok
-        message = 'PDF imzaları atılmamıştır. Yine de PDF oluşturulsun mu?';
-      } else {
-        // Bir imza eksik
-        String missingSignatures = '';
-        if (!hasCustomerSignature) {
-          missingSignatures = 'Müşteri İmzası';
-        }
-        if (!hasTechnicianSignature) {
-          if (missingSignatures.isNotEmpty) {
-            missingSignatures += ' ve ';
-          }
-          missingSignatures += 'Teknisyen İmzası';
-        }
-        message = 'İmza eksikleri vardır ($missingSignatures). Yine de PDF oluşturulsun mu?';
-      }
-
-      final shouldContinue = await showDialog<bool>(
+    // 1. TEKNİSYEN İMZASI KONTROLÜ (PROFiLDEN)
+    if (userProfile?.signatureData == null) {
+      final shouldGoToSetup = await showDialog<bool>(
         context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
-              SizedBox(width: 12),
-              Text('İmza Uyarısı'),
-            ],
-          ),
-          content: Text(message),
+        builder: (ctx) => AlertDialog(
+          title: const Text('Profil İmzası Eksik'),
+          content: const Text('PDF raporu oluşturabilmek için profilinize bir imza eklemeniz gerekmektedir. Şimdi eklemek ister misiniz?'),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Hayır'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
             ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.corporateNavy,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Evet'),
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.corporateNavy, foregroundColor: Colors.white),
+              child: const Text('İmza Ayarla'),
             ),
           ],
         ),
       );
 
-      // Kullanıcı hayır dediyse iptal et
-      if (shouldContinue != true) {
+      if (shouldGoToSetup == true) {
+        if (!mounted) return;
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage()));
+        // Profil sayfasından döndüğünde tekrar kontrol etmek için metodu durduruyoruz
+        return;
+      } else {
+        return; // İşlemi iptal et
+      }
+    }
+
+    // 2. MÜŞTERİ İMZASI KONTROLÜ
+    final hasCustomerSignature = _ticket!['signature_data'] != null;
+
+    if (!hasCustomerSignature) {
+      final shouldGoToSign = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Müşteri İmzası Eksik'),
+          content: const Text('Müşteri imzası atılmamış. İmza sayfasına yönlendirilsin mi?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hayır, İmzasız Devam Et')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.corporateNavy, foregroundColor: Colors.white),
+              child: const Text('İmzaya Git'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldGoToSign == true) {
+        _openSignaturePage(); // Müşteri imzasına yönlendir
         return;
       }
     }
 
+    // PDF oluşturma işlemi devam eder...
     final jobCode = Formatters.safeText(_ticket!['job_code']);
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PdfViewerPage(
           title: 'İş Emri: $jobCode',
           pdfFileName: 'Is_Emri_$jobCode.pdf',
-          pdfGenerator: () => PdfExportService.generateSingleTicketPdfBytes(widget.ticketId),
+          pdfGenerator: () => PdfExportService.generateSingleTicketPdfBytes(widget.ticketId, technicianSignature: userProfile?.signatureData),
         ),
       ),
     );
@@ -430,6 +431,59 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
     final regex = RegExp(r'Ekli PDF Dosyası: (https?://[^\s]+?)(?=[.,;:]?(\s|$))');
     final match = regex.firstMatch(description);
     return match?.group(1);
+  }
+
+  List<Map<String, String>> _extractFileLinks(String? description) {
+    if (description == null) return [];
+    // Format: Program Dosyası ([NAME]): [URL]
+    final regex = RegExp(r'Program Dosyası \((.*?)\): (https?://[^\s]+?)(?=[.,;:]?(\s|$))');
+    final matches = regex.allMatches(description);
+    return matches.map((m) => {
+      'name': m.group(1) ?? 'Bilinmeyen Dosya',
+      'url': m.group(2) ?? '',
+    }).toList();
+  }
+
+  Future<void> _uploadFileToStorage() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+      final pickedFile = result.files.first;
+
+      setState(() => _isUploadingFile = true);
+
+      final fileUrl = await _ticketService.uploadFile(widget.ticketId, pickedFile);
+
+      if (fileUrl != null) {
+        // Supabase'deki bilet açıklamasını güncelle
+        final oldDesc = _ticket?['description'] as String? ?? '';
+        final newLinkLine = '\nProgram Dosyası (${pickedFile.name}): $fileUrl';
+        final newDesc = '$oldDesc$newLinkLine';
+
+        await _updateTicketLocal({'description': newDesc});
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Dosya yüklendi.'), backgroundColor: Colors.green),
+          );
+        }
+      } else {
+        throw 'Yükleme başarısız oldu.';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingFile = false);
+    }
   }
   
   String _getFileNameFromUrl(String url) {
@@ -977,6 +1031,7 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
   Widget _buildDocumentsTab(Map<String, dynamic> ticket) {
     final rawDesc = ticket['description'] as String? ?? '';
     final pdfUrl = _extractPdfUrl(rawDesc);
+    final fileLinks = _extractFileLinks(rawDesc);
     
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -987,6 +1042,63 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Dosya Yükleme Butonu (Supabase)
+              _buildModernContentCard(
+                title: 'Dosya Yükle (Supabase)',
+                icon: Icons.cloud_upload_outlined,
+                children: [
+                  const Text(
+                    'Program veya dokümanları Supabase depolama alanına yükleyip iş detayına ekleyebilirsiniz.',
+                    style: TextStyle(fontSize: 12, color: AppColors.textLight),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _isUploadingFile ? null : _uploadFileToStorage,
+                      icon: _isUploadingFile 
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.upload_file),
+                      label: Text(_isUploadingFile ? 'Yükleniyor...' : 'Supabase\'e Yükle'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.corporateNavy,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Yüklenen Dosyalar
+              if (fileLinks.isNotEmpty) ...[
+                _buildModernContentCard(
+                  title: 'Yüklenen Dosyalar',
+                  icon: Icons.terminal_outlined,
+                  children: fileLinks.map((link) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: OutlinedButton.icon(
+                        onPressed: () => _launchAttachment(link['url']!),
+                        icon: const Icon(Icons.download, size: 20),
+                        label: Text(
+                          link['name']!,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.corporateNavy,
+                          side: const BorderSide(color: AppColors.corporateNavy),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          alignment: Alignment.centerLeft,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 20),
+              ],
+
               // Ekli PDF - Sadece gömülü PDF göster
               if (pdfUrl != null)
                 _buildModernContentCard(
@@ -1008,7 +1120,7 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
                     ),
                   ],
                 )
-              else
+              else if (fileLinks.isEmpty)
                 _buildModernContentCard(
                   title: 'Dokümanlar',
                   icon: Icons.folder_outlined,

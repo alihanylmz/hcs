@@ -7,6 +7,7 @@ import '../services/partner_service.dart';
 import '../services/user_service.dart';
 import '../models/partner.dart';
 import '../models/ticket_part.dart'; // Eklendi
+import '../theme/app_colors.dart';
 
 class EditTicketPage extends StatefulWidget {
   final String ticketId;
@@ -19,7 +20,7 @@ class EditTicketPage extends StatefulWidget {
 
 class _EditTicketPageState extends State<EditTicketPage> {
   // --- SABİTLER VE AYARLAR ---
-  static const Color _corporateNavy = Color(0xFF0F172A);
+  static const Color _corporateNavy = AppColors.corporateNavy;
   static const Color _backgroundGrey = Color(0xFFF8FAFC);
   static const Color _surfaceWhite = Colors.white;
   static const Color _textDark = Color(0xFF1E293B);
@@ -644,7 +645,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 960;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF0F172A) : _backgroundGrey;
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final surfaceColor = isDark ? const Color(0xFF1E293B) : _surfaceWhite;
     final textColor = isDark ? Colors.white : _textDark;
 

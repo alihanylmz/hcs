@@ -7,6 +7,7 @@ import '../services/notification_service.dart'; // Bildirim servisi
 import '../services/user_service.dart'; // Kullanıcı servisi
 import '../services/partner_service.dart'; // Partner Service eklendi
 import '../models/partner.dart'; // Partner Model eklendi
+import '../theme/app_colors.dart';
 
 class NewTicketPage extends StatefulWidget {
   const NewTicketPage({super.key, this.deviceType});
@@ -19,7 +20,7 @@ class NewTicketPage extends StatefulWidget {
 
 class _NewTicketPageState extends State<NewTicketPage> {
   // --- SABİTLER VE AYARLAR ---
-  static const Color _corporateNavy = Color(0xFF0F172A);
+  static const Color _corporateNavy = AppColors.corporateNavy;
   static const Color _backgroundGrey = Color(0xFFF8FAFC);
   static const Color _surfaceWhite = Colors.white;
   static const Color _textDark = Color(0xFF1E293B);
@@ -503,7 +504,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 960;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF0F172A) : _backgroundGrey;
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final surfaceColor = isDark ? const Color(0xFF1E293B) : _surfaceWhite;
     // Metin renkleri: Dark mode'da beyaz, Light mode'da koyu gri/siyah
     final textColor = isDark ? Colors.white : _textDark; 

@@ -79,15 +79,39 @@ class UserService {
   Future<void> updateProfile(
     String userId, {
     String? fullName,
+    String? signatureData,
   }) async {
     try {
+      final updates = <String, dynamic>{};
+      if (fullName != null) updates['full_name'] = fullName;
+      if (signatureData != null) updates['signature_data'] = signatureData;
+      
+      if (updates.isEmpty) return;
+      
       await _client
           .from('profiles')
-          .update({'full_name': fullName}).eq('id', userId);
+          .update(updates).eq('id', userId);
     } catch (e, st) {
       developer.log(
         '🔴 Profil güncelleme hatası',
         name: 'UserService.updateProfile',
+        error: e,
+        stackTrace: st,
+      );
+      rethrow;
+    }
+  }
+
+  /// İmzayı temizle
+  Future<void> clearSignature(String userId) async {
+    try {
+      await _client
+          .from('profiles')
+          .update({'signature_data': null}).eq('id', userId);
+    } catch (e, st) {
+      developer.log(
+        '🔴 İmza temizleme hatası',
+        name: 'UserService.clearSignature',
         error: e,
         stackTrace: st,
       );

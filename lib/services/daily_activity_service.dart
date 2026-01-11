@@ -7,9 +7,47 @@ class DailyActivityService {
       : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
+  bool _roleLoaded = false;
+  bool _isPartnerUser = false;
+
+  Future<bool> _checkIsPartnerUser() async {
+    if (_roleLoaded) return _isPartnerUser;
+    final user = _client.auth.currentUser;
+    if (user == null) {
+      _roleLoaded = true;
+      _isPartnerUser = false;
+      return false;
+    }
+
+    try {
+      final data = await _client
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      final role = (data is Map<String, dynamic>) ? (data['role'] as String?) : null;
+      _isPartnerUser = role == 'partner_user';
+    } catch (_) {
+      // Rol okunamazsa, erişimi kısıtlamadan devam et (log spam istemiyoruz).
+      _isPartnerUser = false;
+    } finally {
+      _roleLoaded = true;
+    }
+
+    return _isPartnerUser;
+  }
+
+  Future<void> _ensureNotPartnerUser() async {
+    if (await _checkIsPartnerUser()) {
+      throw Exception('Bu işlem için yetkiniz yok.');
+    }
+  }
 
   /// Belirli bir tarihe ait aktiviteleri getirir.
   Future<List<DailyActivity>> getActivities(DateTime date, {String? userId}) async {
+    // Partner kullanıcılar günlük plan verisi göremez
+    if (await _checkIsPartnerUser()) return [];
     try {
       final targetUserId = userId ?? _client.auth.currentUser?.id;
       if (targetUserId == null) return [];
@@ -45,6 +83,7 @@ class DailyActivityService {
     List<ActivityStep> steps = const [],
   }) async {
     try {
+      await _ensureNotPartnerUser();
       final myUserId = _client.auth.currentUser?.id;
       if (myUserId == null) throw Exception('Kullanıcı oturumu kapalı');
 
@@ -74,6 +113,7 @@ class DailyActivityService {
   /// ama yine de manuel kontrol gerekebilir.
   Future<void> toggleCompletion(String activityId, bool isCompleted) async {
     try {
+      await _ensureNotPartnerUser();
       await _client
           .from('daily_activities')
           .update({'is_completed': isCompleted}).eq('id', activityId);
@@ -91,6 +131,7 @@ class DailyActivityService {
   /// Alt adımları günceller (Komple steps listesini JSON olarak basar).
   Future<void> updateActivitySteps(String activityId, List<ActivityStep> steps) async {
     try {
+      await _ensureNotPartnerUser();
       // Steps'in hepsi bitti mi?
       final allDone = steps.isNotEmpty && steps.every((s) => s.isCompleted);
 
@@ -113,6 +154,7 @@ class DailyActivityService {
   /// Aktiviteyi siler.
   Future<void> deleteActivity(String activityId) async {
     try {
+      await _ensureNotPartnerUser();
       await _client.from('daily_activities').delete().eq('id', activityId);
     } catch (e, st) {
       developer.log(
@@ -125,8 +167,28 @@ class DailyActivityService {
     }
   }
 
+  /// KPI puanını günceller.
+  Future<void> updateKpiScore(String activityId, int? score) async {
+    try {
+      await _ensureNotPartnerUser();
+      await _client
+          .from('daily_activities')
+          .update({'kpi_score': score}).eq('id', activityId);
+    } catch (e, st) {
+      developer.log(
+        '🔴 KPI puanı güncelleme hatası',
+        name: 'DailyActivityService.updateKpiScore',
+        error: e,
+        stackTrace: st,
+      );
+      rethrow;
+    }
+  }
+
   /// Geçmişte tamamlanmamış aktivitelerin sayısını getirir.
   Future<int> getPendingPastActivitiesCount() async {
+    // Partner kullanıcılar günlük plan verisi göremez
+    if (await _checkIsPartnerUser()) return 0;
     try {
       final user = _client.auth.currentUser;
       if (user == null) return 0;
@@ -154,6 +216,8 @@ class DailyActivityService {
     required DateTime toDate,   // Hangi tarihe? (Genelde bugün)
     String? userId,
   }) async {
+    // Partner kullanıcılar günlük plan verisi göremez / taşıma yapamaz
+    if (await _checkIsPartnerUser()) return 0;
     try {
       final targetUserId = userId ?? _client.auth.currentUser?.id;
       if (targetUserId == null) return 0;
@@ -188,8 +252,8 @@ class DailyActivityService {
         
         // --- 1. YENİ GÖREV OLUŞTUR (BUGÜNE) ---
         String newTitle = oldTitle;
-        if (!newTitle.contains('📦')) {
-           newTitle = '📦 ($oldDateDisplay) $newTitle'; 
+        if (!newTitle.contains('[DEVİR]')) {
+           newTitle = '[DEVİR] ($oldDateDisplay) $newTitle'; 
         }
 
         // Yeni görev ekle
@@ -209,6 +273,7 @@ class DailyActivityService {
         
         // Eski başlığı güncelle: "➡️ (22.5'e Devredildi) Eski Başlık"
         String traceTitle = "➡️ ($todayDisplay'e Devredildi) $oldTitle";
+        traceTitle = "($todayDisplay'e Devredildi) $oldTitle";
 
         await _client
           .from('daily_activities')

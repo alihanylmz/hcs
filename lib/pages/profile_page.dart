@@ -5,6 +5,8 @@ import '../models/user_profile.dart';
 import '../widgets/app_drawer.dart';
 import '../theme/app_colors.dart';
 import 'user_management_page.dart';
+import 'signature_page.dart'; // <--- Eklendi
+import 'dart:convert'; // base64 için
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -82,7 +84,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF0F172A) : AppColors.backgroundGrey;
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
     final textColor = isDark ? Colors.white : AppColors.corporateNavy;
 
@@ -240,6 +242,139 @@ class _ProfilePageState extends State<ProfilePage> {
                         isEditable: false, // E-posta değişmez
                         isDark: isDark,
                       ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // --- İMZA AYARLARI ---
+                  _buildProfileCard(
+                    context,
+                    title: 'İmza Ayarları',
+                    icon: Icons.draw_outlined,
+                    cardColor: cardColor,
+                    children: [
+                      if (_userProfile?.signatureData != null) ...[
+                        Container(
+                          height: 120,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.black26 : Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.corporateNavy.withOpacity(0.2)),
+                          ),
+                          child: Stack(
+                            children: [
+                              Center(
+                                child: Image.memory(
+                                  base64Decode(_userProfile!.signatureData!),
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                  onPressed: () async {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('İmzayı Sil'),
+                                        content: const Text('Kayıtlı imzanızı silmek istediğinize emin misiniz?'),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(ctx, true),
+                                            child: const Text('Sil', style: TextStyle(color: Colors.red)),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirm == true) {
+                                      setState(() => _isLoading = true);
+                                      try {
+                                        await _userService.clearSignature(_userProfile!.id);
+                                        await _loadProfile();
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('İmza başarıyla silindi'), backgroundColor: Colors.green),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+                                          );
+                                        }
+                                      } finally {
+                                        if (mounted) setState(() => _isLoading = false);
+                                      }
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final result = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => SignaturePage(
+                                    ticketId: 'PROFILE_SETUP',
+                                    type: SignatureType.technician,
+                                  ),
+                                ),
+                              );
+                              if (result == true) {
+                                _loadProfile();
+                              }
+                            },
+                            icon: const Icon(Icons.edit_outlined),
+                            label: const Text('İMZAYI GÜNCELLE'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.corporateNavy,
+                              side: const BorderSide(color: AppColors.corporateNavy),
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        const Text(
+                          'Kayıtlı imzanız bulunmamaktadır. PDF raporlarında kullanılmak üzere imza ekleyin.',
+                          style: TextStyle(fontSize: 13, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              final result = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => SignaturePage(
+                                    ticketId: 'PROFILE_SETUP',
+                                    type: SignatureType.technician,
+                                  ),
+                                ),
+                              );
+                              if (result == true) {
+                                _loadProfile();
+                              }
+                            },
+                            icon: const Icon(Icons.add),
+                            label: const Text('İMZA EKLE'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.corporateNavy,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
 

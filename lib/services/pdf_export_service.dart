@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -10,8 +11,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import '../services/stock_service.dart';
+import '../utils/pdf_file_saver/pdf_file_saver.dart';
 
 import 'package:intl/intl.dart'; // <--- Eklendi
+import '../utils/text_sanitizer.dart';
 
 class PdfExportService {
   // --- AYARLAR VE SABİTLER ---
@@ -99,7 +102,8 @@ class PdfExportService {
   static String _safeText(dynamic value) {
     if (value == null) return '-';
     if (value is String && value.trim().isEmpty) return '-';
-    return value.toString();
+    // Emojileri temizle (PDF fontları genellikle emojileri desteklemez)
+    return TextSanitizer.stripEmoji(value.toString());
   }
 
   /// Açıklama/tekst içindeki "Ekli PDF Dosyası: <url>" ifadesini gizlemek için kullanılır.
@@ -202,12 +206,12 @@ class PdfExportService {
   // --- PDF GENERATION & ACTIONS ---
 
   /// Verileri çeker ve PDF baytlarını oluşturur
-  static Future<Uint8List> generateSingleTicketPdfBytes(String ticketId) async {
+  static Future<Uint8List> generateSingleTicketPdfBytes(String ticketId, {String? technicianSignature}) async {
     try {
       final supabase = Supabase.instance.client;
       final idValue = int.tryParse(ticketId) ?? ticketId;
 
-      final ticket = await supabase
+      final ticketData = await supabase
           .from('tickets')
           .select('''
             *,
@@ -225,8 +229,15 @@ class PdfExportService {
           .eq('id', idValue)
           .maybeSingle();
 
-      if (ticket == null) {
+      if (ticketData == null) {
         throw Exception('İş bulunamadı.');
+      }
+      
+      final Map<String, dynamic> ticket = Map<String, dynamic>.from(ticketData);
+
+      // Eğer dışarıdan teknisyen imzası gelmişse ve ticket'ta yoksa, ticket'a ekle
+      if (technicianSignature != null && ticket['technician_signature_data'] == null) {
+        ticket['technician_signature_data'] = technicianSignature;
       }
 
       final notesResponse = await supabase
@@ -274,7 +285,11 @@ class PdfExportService {
   /// PDF'i dosya olarak kaydeder (İndirir)
   static Future<String?> savePdf(Uint8List bytes, String fileName) async {
     try {
-      if (Platform.isAndroid || Platform.isIOS) {
+      if (kIsWeb) {
+        // Web için PdfFileSaver (Universal) kullanıyoruz
+        await PdfFileSaver.save(bytes: bytes, filename: fileName);
+        return 'Dosya indiriliyor';
+      } else if (Platform.isAndroid || Platform.isIOS) {
         await Printing.sharePdf(bytes: bytes, filename: '$fileName.pdf');
         return 'Dosya paylaşım menüsü açıldı';
       } else {
@@ -295,6 +310,221 @@ class PdfExportService {
       }
     } catch (e) {
       throw Exception('PDF kaydetme hatası: $e');
+    }
+  }
+
+  /// Liste görünümündeki işleri tek PDF olarak üretir.
+  /// - Partner kullanıcılar için partnerName gönderilirse (Point/Vensa), ilgili tema+logo ile üretir.
+  static Future<Uint8List> generateTicketListPdfBytesFromList({
+    required List<Map<String, dynamic>> tickets,
+    required String reportTitle,
+    String? partnerName,
+  }) async {
+    try {
+      final pdf = pw.Document();
+      final font = await _loadTurkishFont();
+      final now = DateTime.now();
+
+      final lowerPartner = (partnerName ?? '').toLowerCase();
+      final bool isPoint = lowerPartner.contains('point');
+      final bool isVensa = lowerPartner.contains('vensa');
+
+      // Tema
+      final PdfColor themePrimary = isPoint
+          ? const PdfColor.fromInt(0xFFD32F2F)
+          : isVensa
+              ? const PdfColor.fromInt(0xFF1976D2)
+              : _primaryColor;
+
+      // Logo
+      final pw.ImageProvider? logo = isPoint
+          ? await _loadPointLogo()
+          : isVensa
+              ? await _loadVensaLogo()
+              : null;
+
+      String statusLabel(String? status) => _statusLabels[status] ?? (status ?? '-');
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageTheme: pw.PageTheme(
+            pageFormat: PdfPageFormat.a4,
+            margin: const pw.EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+            theme: pw.ThemeData.withFont(base: font, bold: font),
+          ),
+          header: (context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        if (logo != null) ...[
+                          pw.Container(width: 56, height: 56, child: pw.Image(logo, fit: pw.BoxFit.contain)),
+                          pw.SizedBox(width: 12),
+                        ],
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(
+                              reportTitle,
+                              style: pw.TextStyle(font: font, fontSize: 16, fontWeight: pw.FontWeight.bold, color: themePrimary),
+                            ),
+                            if ((partnerName ?? '').trim().isNotEmpty)
+                              pw.Text(
+                                _safeText(partnerName),
+                                style: pw.TextStyle(font: font, fontSize: 10, color: PdfColors.grey700),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(
+                          DateFormat('dd.MM.yyyy HH:mm', 'tr_TR').format(now),
+                          style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.grey700),
+                        ),
+                        pw.Text(
+                          'Toplam: ${tickets.length}',
+                          style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.grey700),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 10),
+                pw.Divider(color: themePrimary, thickness: 2),
+                pw.SizedBox(height: 6),
+              ],
+            );
+          },
+          footer: (context) {
+            return pw.Container(
+              margin: const pw.EdgeInsets.only(top: 10),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'HanCoSys İş Takip Sistemi',
+                    style: pw.TextStyle(font: font, fontSize: 8, color: PdfColors.grey600),
+                  ),
+                  pw.Text(
+                    'Sayfa ${context.pageNumber} / ${context.pagesCount}',
+                    style: pw.TextStyle(font: font, fontSize: 8, color: PdfColors.grey600),
+                  ),
+                ],
+              ),
+            );
+          },
+          build: (context) {
+            if (tickets.isEmpty) {
+              return [
+                pw.SizedBox(height: 40),
+                pw.Center(
+                  child: pw.Text(
+                    'Liste boş.',
+                    style: pw.TextStyle(font: font, fontSize: 12, color: PdfColors.grey700),
+                  ),
+                ),
+              ];
+            }
+
+            return [
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                columnWidths: const {
+                  0: pw.FixedColumnWidth(70), // KOD
+                  1: pw.FlexColumnWidth(2.5), // MÜŞTERİ
+                  2: pw.FlexColumnWidth(2.2), // İŞ
+                  3: pw.FixedColumnWidth(70), // DURUM
+                  4: pw.FixedColumnWidth(70), // TARİH
+                },
+                children: [
+                  pw.TableRow(
+                    decoration: pw.BoxDecoration(color: themePrimary),
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(6),
+                        child: pw.Text('KOD', style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.white), textAlign: pw.TextAlign.center),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(6),
+                        child: pw.Text('MÜŞTERİ', style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.white), textAlign: pw.TextAlign.center),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(6),
+                        child: pw.Text('İŞ', style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.white), textAlign: pw.TextAlign.center),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(6),
+                        child: pw.Text('DURUM', style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.white), textAlign: pw.TextAlign.center),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(6),
+                        child: pw.Text('TARİH', style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.white), textAlign: pw.TextAlign.center),
+                      ),
+                    ],
+                  ),
+                  ...tickets.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final t = entry.value;
+                    final customer = t['customers'] as Map<String, dynamic>? ?? <String, dynamic>{};
+
+                    final jobCode = _safeText(t['job_code']);
+                    final customerName = _safeText(customer['name']);
+                    final title = _safeText(t['title']);
+                    final status = statusLabel(t['status'] as String?);
+
+                    String dateText = '-';
+                    final planned = t['planned_date'] as String?;
+                    if (planned != null && planned.isNotEmpty) {
+                      final parsed = DateTime.tryParse(planned);
+                      if (parsed != null) dateText = DateFormat('dd.MM.yyyy', 'tr_TR').format(parsed);
+                    }
+
+                    return pw.TableRow(
+                      decoration: pw.BoxDecoration(color: i.isOdd ? PdfColors.grey50 : PdfColors.white),
+                      verticalAlignment: pw.TableCellVerticalAlignment.middle,
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(6),
+                          child: pw.Text(jobCode, style: pw.TextStyle(font: font, fontSize: 9), textAlign: pw.TextAlign.center),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(6),
+                          child: pw.Text(customerName, style: pw.TextStyle(font: font, fontSize: 9)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(6),
+                          child: pw.Text(title, style: pw.TextStyle(font: font, fontSize: 9)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(6),
+                          child: pw.Text(status, style: pw.TextStyle(font: font, fontSize: 9), textAlign: pw.TextAlign.center),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(6),
+                          child: pw.Text(dateText, style: pw.TextStyle(font: font, fontSize: 9), textAlign: pw.TextAlign.center),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ],
+              ),
+            ];
+          },
+        ),
+      );
+
+      return pdf.save();
+    } catch (e) {
+      throw Exception('Liste PDF oluşturma hatası: $e');
     }
   }
 

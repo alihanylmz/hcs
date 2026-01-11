@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,6 +10,9 @@ class UpdateService {
 
   /// Güncelleme kontrolü yapar ve gerekirse dialog gösterir
   Future<void> checkVersion(BuildContext context) async {
+    // Web'de versiyon kontrolü yapmaya gerek yok
+    if (kIsWeb) return;
+
     try {
       // 1. Mevcut uygulamanın sürüm bilgilerini al
       final packageInfo = await PackageInfo.fromPlatform();

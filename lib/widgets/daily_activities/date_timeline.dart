@@ -95,14 +95,17 @@ class _DateTimelineState extends State<DateTimeline> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 110, // Biraz daha yükseklik
+      height: 112,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.primary.withOpacity(0.08)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -111,7 +114,7 @@ class _DateTimelineState extends State<DateTimeline> {
         children: [
           // Ay Göstergesi ve Kontroller
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -169,7 +172,7 @@ class _DateTimelineState extends State<DateTimeline> {
                     label: const Text('Bugün'),
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.corporateNavy,
-                      backgroundColor: Colors.blue.shade50,
+                      backgroundColor: AppColors.primary.withOpacity(0.06),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -183,7 +186,7 @@ class _DateTimelineState extends State<DateTimeline> {
           Expanded(
             child: ListView.separated(
               controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               scrollDirection: Axis.horizontal,
               itemCount: _dates.length,
               separatorBuilder: (_, __) => SizedBox(width: _spacing),
@@ -198,56 +201,68 @@ class _DateTimelineState extends State<DateTimeline> {
                     duration: const Duration(milliseconds: 200),
                     width: _itemWidth,
                     decoration: BoxDecoration(
-                      color: isSelected 
-                          ? AppColors.corporateNavy 
-                          : (isToday ? Colors.blue.shade50 : Colors.grey.shade50),
+                      color: isSelected
+                          ? AppColors.primary
+                          : (isToday ? AppColors.primary.withOpacity(0.07) : AppColors.backgroundGrey),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: isSelected 
                             ? Colors.transparent 
-                            : (isToday ? Colors.blue.shade200 : Colors.transparent),
-                        width: isToday && !isSelected ? 1.5 : 1,
+                            : (isToday ? AppColors.primary.withOpacity(0.25) : AppColors.primary.withOpacity(0.08)),
+                        width: isToday && !isSelected ? 1.2 : 1,
                       ),
                       boxShadow: isSelected
-                          ? [BoxShadow(color: AppColors.corporateNavy.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 4))]
+                          ? [
+                              BoxShadow(
+                                color: AppColors.primary.withOpacity(0.22),
+                                blurRadius: 14,
+                                offset: const Offset(0, 8),
+                              )
+                            ]
                           : [],
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          DateFormat('EEE', 'tr_TR').format(date),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: isSelected 
-                                ? Colors.white.withOpacity(0.8) 
-                                : (isToday ? Colors.blue.shade700 : AppColors.textLight),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          date.day.toString(),
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected 
-                                ? Colors.white 
-                                : (isToday ? Colors.blue.shade900 : AppColors.textDark),
-                          ),
-                        ),
-                        // Bugün ise minik nokta koy
-                        if (isToday)
-                          Container(
-                            margin: const EdgeInsets.only(top: 4),
-                            width: 4,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isSelected ? Colors.white : Colors.blue.shade700,
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              DateFormat('EEE', 'tr_TR').format(date),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: isSelected
+                                    ? Colors.white.withOpacity(0.8)
+                                    : (isToday ? AppColors.primary : AppColors.textLight),
+                              ),
                             ),
-                          ),
-                      ],
+                            const SizedBox(height: 2),
+                            Text(
+                              date.day.toString(),
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: isSelected
+                                    ? Colors.white
+                                    : (isToday ? AppColors.textDark : AppColors.textDark),
+                              ),
+                            ),
+                            // Bugün ise minik nokta koy
+                            if (isToday)
+                              Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                width: 4,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isSelected ? Colors.white : AppColors.primary,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 );

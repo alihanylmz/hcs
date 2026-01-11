@@ -28,6 +28,7 @@ class DailyActivity {
   final DateTime activityDate;
   final DateTime createdAt;
   final List<ActivityStep> steps;
+  final int? kpiScore; // KPI Puanı (Örn: 1-5 arası)
 
   // Manuel 'isCompleted' alanı artık 'steps' durumuna göre hesaplanabilir
   // Ancak geriye dönük uyumluluk veya "Adımsız işler" için veritabanındaki değeri de tutabiliriz.
@@ -42,6 +43,7 @@ class DailyActivity {
     required this.activityDate,
     required this.createdAt,
     this.steps = const [],
+    this.kpiScore,
   }) : _manualIsCompleted = isCompleted;
 
   // Getter: Ana iş bitti mi?
@@ -75,6 +77,7 @@ class DailyActivity {
       activityDate: DateTime.parse(json['activity_date'] as String),
       createdAt: DateTime.parse(json['created_at'] as String),
       steps: stepsList,
+      kpiScore: json['kpi_score'] as int?,
     );
   }
 
@@ -89,6 +92,7 @@ class DailyActivity {
       'activity_date': activityDate.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
       'steps': steps.map((s) => s.toJson()).toList(),
+      'kpi_score': kpiScore,
     };
   }
 
@@ -102,6 +106,7 @@ class DailyActivity {
     DateTime? activityDate,
     DateTime? createdAt,
     List<ActivityStep>? steps,
+    int? kpiScore,
   }) {
     return DailyActivity(
       id: id ?? this.id,
@@ -112,6 +117,7 @@ class DailyActivity {
       activityDate: activityDate ?? this.activityDate,
       createdAt: createdAt ?? this.createdAt,
       steps: steps ?? this.steps,
+      kpiScore: kpiScore ?? this.kpiScore,
     );
   }
 

@@ -19,6 +19,7 @@ class UserProfile {
   final String role;
   final DateTime? createdAt;
   final int? partnerId;
+  final String? signatureData; // <--- Eklendi
 
   const UserProfile({
     required this.id,
@@ -27,6 +28,7 @@ class UserProfile {
     this.role = UserRole.pending,
     this.createdAt,
     this.partnerId,
+    this.signatureData, // <--- Eklendi
   });
 
   // ---- Yardımcı statik parser fonksiyonları ----
@@ -72,6 +74,7 @@ class UserProfile {
       role: _validateRole(json['role'] as String?),
       createdAt: _parseDate(json['created_at']),
       partnerId: _parsePartnerId(json['partner_id']),
+      signatureData: json['signature_data'] as String?, // <--- Eklendi
     );
   }
 
@@ -82,6 +85,7 @@ class UserProfile {
       'full_name': fullName,
       'role': role,
       'partner_id': partnerId,
+      'signature_data': signatureData, // <--- Eklendi
     };
   }
 
@@ -125,6 +129,7 @@ class UserProfile {
     String? role,
     DateTime? createdAt,
     int? partnerId,
+    String? signatureData, // <--- Eklendi
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -133,6 +138,7 @@ class UserProfile {
       role: role ?? this.role,
       createdAt: createdAt ?? this.createdAt,
       partnerId: partnerId ?? this.partnerId,
+      signatureData: signatureData ?? this.signatureData, // <--- Eklendi
     );
   }
 

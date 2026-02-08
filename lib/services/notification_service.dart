@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,11 +15,50 @@ class NotificationService {
   static const String _oneSignalApiUrl = "https://onesignal.com/api/v1/notifications";
 
   /// OneSignal REST API Key'i .env dosyasından alır
+  /// Güvenlik uyarısı: Web build'de bu anahtarın client'ta olmaması gerekir.
   String? get _restApiKey {
+    if (kIsWeb) return null; // Web'de anahtar kullanılmasın
     return dotenv.env['ONESIGNAL_REST_API_KEY'];
   }
 
   SupabaseClient get _supabase => Supabase.instance.client;
+
+  /// Bildirim gönderir (Web'de server-side endpoint, mobil/desktop'ta doğrudan REST API)
+  Future<bool> _sendNotification({
+    required Map<String, dynamic> body,
+  }) async {
+    try {
+      // Web'de isek veya API anahtarı yoksa Supabase Edge Function üzerinden gönder
+      if (kIsWeb || _restApiKey == null) {
+        print('🌐 Bildirim Web üzerinden (Edge Function) gönderiliyor...');
+        final response = await _supabase.functions.invoke(
+          'send-notification',
+          body: body,
+        );
+        return response.status == 200;
+      }
+
+      // Mobil/Desktop'ta doğrudan OneSignal REST API kullan
+      final response = await http.post(
+        Uri.parse(_oneSignalApiUrl),
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Authorization": "Basic ${_restApiKey!}",
+        },
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        print('❌ Bildirim gönderme hatası: ${response.statusCode} - ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Bildirim gönderme hatası: $e');
+      return false;
+    }
+  }
 
   /// Supabase'e bildirim kaydeder
   Future<void> _saveNotificationsToDb({
@@ -123,47 +163,15 @@ class NotificationService {
     required String message,
     Map<String, dynamic>? data,
   }) async {
-    // Tüm kullanıcılara DB kaydı atmak için önce tüm kullanıcı ID'lerini çekmek gerekir.
-    // Ancak sendNotificationToAll genelde OneSignal segmenti kullanıyor.
-    // DB'ye kayıt atmak burada pahalı olabilir, şimdilik sadece OneSignal gönderelim
-    // veya "Sistem Duyurusu" gibi bir tabloya yazmak daha mantıklı olurdu.
-    // Burada pas geçiyoruz veya opsiyonel yapabiliriz.
+    final body = {
+      "app_id": _oneSignalAppId,
+      "included_segments": ["All"], // Tüm kullanıcılara gönder
+      "headings": {"en": title, "tr": title},
+      "contents": {"en": message, "tr": message},
+      "data": data ?? {},
+    };
 
-    try {
-      final apiKey = _restApiKey;
-      if (apiKey == null || apiKey.isEmpty) {
-        print('⚠️ OneSignal REST API Key bulunamadı. .env dosyasına ONESIGNAL_REST_API_KEY ekleyin.');
-        return false;
-      }
-
-      final body = {
-        "app_id": _oneSignalAppId,
-        "included_segments": ["All"], // Tüm kullanıcılara gönder
-        "headings": {"en": title, "tr": title},
-        "contents": {"en": message, "tr": message},
-        "data": data ?? {},
-      };
-
-      final response = await http.post(
-        Uri.parse(_oneSignalApiUrl),
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          "Authorization": "Basic $apiKey",
-        },
-        body: jsonEncode(body),
-      );
-
-      if (response.statusCode == 200) {
-        print('✅ Bildirim başarıyla gönderildi');
-        return true;
-      } else {
-        print('❌ Bildirim gönderme hatası: ${response.statusCode} - ${response.body}');
-        return false;
-      }
-    } catch (e) {
-      print('❌ Bildirim gönderme hatası: $e');
-      return false;
-    }
+    return await _sendNotification(body: body);
   }
 
   /// Supabase user_id'lerini (external_user_id) hedefleyerek bildirim gönderir
@@ -190,41 +198,15 @@ class NotificationService {
     );
 
     // 2. Sonra OneSignal ile gönder
-    try {
-      final apiKey = _restApiKey;
-      if (apiKey == null || apiKey.isEmpty) {
-        print('⚠️ OneSignal REST API Key bulunamadı. .env dosyasına ONESIGNAL_REST_API_KEY ekleyin.');
-        return false;
-      }
+    final body = {
+      "app_id": _oneSignalAppId,
+      "include_external_user_ids": externalUserIds,
+      "headings": {"en": title, "tr": title},
+      "contents": {"en": message, "tr": message},
+      "data": data ?? {},
+    };
 
-      final body = {
-        "app_id": _oneSignalAppId,
-        "include_external_user_ids": externalUserIds,
-        "headings": {"en": title, "tr": title},
-        "contents": {"en": message, "tr": message},
-        "data": data ?? {},
-      };
-
-      final response = await http.post(
-        Uri.parse(_oneSignalApiUrl),
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          "Authorization": "Basic $apiKey",
-        },
-        body: jsonEncode(body),
-      );
-
-      if (response.statusCode == 200) {
-        print('✅ Bildirim başarıyla gönderildi (${externalUserIds.length} kullanıcı)');
-        return true;
-      } else {
-        print('❌ Bildirim gönderme hatası: ${response.statusCode} - ${response.body}');
-        return false;
-      }
-    } catch (e) {
-      print('❌ Bildirim gönderme hatası: $e');
-      return false;
-    }
+    return await _sendNotification(body: body);
   }
 
   /// Belirli bir iş emri için hangi kullanıcıların bildirim alacağını hesaplar.
@@ -305,41 +287,15 @@ class NotificationService {
     // burada DB kaydı yapamıyoruz (veya zor).
     // Ancak sendNotificationToExternalUsers metodu kullanılıyor genellikle.
 
-    try {
-      final apiKey = _restApiKey;
-      if (apiKey == null || apiKey.isEmpty) {
-        print('⚠️ OneSignal REST API Key bulunamadı. .env dosyasına ONESIGNAL_REST_API_KEY ekleyin.');
-        return false;
-      }
+    final body = {
+      "app_id": _oneSignalAppId,
+      "include_player_ids": playerIds,
+      "headings": {"en": title, "tr": title},
+      "contents": {"en": message, "tr": message},
+      "data": data ?? {},
+    };
 
-      final body = {
-        "app_id": _oneSignalAppId,
-        "include_player_ids": playerIds,
-        "headings": {"en": title, "tr": title},
-        "contents": {"en": message, "tr": message},
-        "data": data ?? {},
-      };
-
-      final response = await http.post(
-        Uri.parse(_oneSignalApiUrl),
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          "Authorization": "Basic $apiKey",
-        },
-        body: jsonEncode(body),
-      );
-
-      if (response.statusCode == 200) {
-        print('✅ Bildirim başarıyla gönderildi (${playerIds.length} kullanıcı)');
-        return true;
-      } else {
-        print('❌ Bildirim gönderme hatası: ${response.statusCode} - ${response.body}');
-        return false;
-      }
-    } catch (e) {
-      print('❌ Bildirim gönderme hatası: $e');
-      return false;
-    }
+    return await _sendNotification(body: body);
   }
 
   /// Yeni ticket oluşturulduğunda bildirim gönderir
@@ -514,6 +470,164 @@ class NotificationService {
         "old_priority": oldPriority,
         "new_priority": newPriority,
         "job_code": jobCode,
+      },
+    );
+  }
+
+  // ==================== KANBAN KART BİLDİRİMLERİ ====================
+
+  /// Takım üyelerinin user_id'lerini getirir (kendisi hariç)
+  Future<List<String>> _getTeamMemberIds(String teamId, {bool excludeSelf = true}) async {
+    try {
+      final currentUserId = _supabase.auth.currentUser?.id;
+
+      final response = await _supabase
+          .from('team_members')
+          .select('user_id')
+          .eq('team_id', teamId);
+
+      final List<String> userIds = (response as List)
+          .map((e) => e['user_id'] as String)
+          .toList();
+
+      // Kendisini hariç tut (isteğe bağlı)
+      if (excludeSelf && currentUserId != null) {
+        userIds.remove(currentUserId);
+      }
+
+      return userIds;
+    } catch (e) {
+      print('❌ Takım üyeleri alınırken hata: $e');
+      return [];
+    }
+  }
+
+  /// Yeni kart oluşturulduğunda takım üyelerine bildirim gönderir
+  Future<bool> notifyCardCreated({
+    required String teamId,
+    required String teamName,
+    required String cardId,
+    required String cardTitle,
+    String? createdByName,
+    String? assigneeName,
+  }) async {
+    final title = "📋 Yeni Kart Eklendi";
+    final creatorText = createdByName ?? 'Bir üye';
+    final assigneeText = assigneeName != null ? " ($assigneeName'e atandı)" : '';
+    final message = "$creatorText, $teamName takımına yeni kart ekledi: \"$cardTitle\"$assigneeText";
+
+    final userIds = await _getTeamMemberIds(teamId, excludeSelf: true);
+
+    if (userIds.isEmpty) {
+      print('⚠️ Bildirim gönderilecek takım üyesi bulunamadı');
+      return false;
+    }
+
+    return await sendNotificationToExternalUsers(
+      externalUserIds: userIds,
+      title: title,
+      message: message,
+      data: {
+        "type": "card_created",
+        "team_id": teamId,
+        "team_name": teamName,
+        "card_id": cardId,
+        "card_title": cardTitle,
+      },
+    );
+  }
+
+  /// Kart durumu değiştiğinde takım üyelerine bildirim gönderir
+  Future<bool> notifyCardStatusChanged({
+    required String teamId,
+    required String teamName,
+    required String cardId,
+    required String cardTitle,
+    required String oldStatus,
+    required String newStatus,
+    String? changedByName,
+  }) async {
+    final statusLabels = {
+      'TODO': 'Yapılacak',
+      'DOING': 'Yapılıyor',
+      'DONE': 'Tamamlandı',
+      'SENT': 'Gönderildi',
+    };
+
+    final oldLabel = statusLabels[oldStatus] ?? oldStatus;
+    final newLabel = statusLabels[newStatus] ?? newStatus;
+
+    final title = "🔄 Kart Durumu Değişti";
+    final changerText = changedByName ?? 'Bir üye';
+    final message = "$changerText, \"$cardTitle\" kartını $oldLabel → $newLabel olarak güncelledi";
+
+    final userIds = await _getTeamMemberIds(teamId, excludeSelf: true);
+
+    if (userIds.isEmpty) return false;
+
+    return await sendNotificationToExternalUsers(
+      externalUserIds: userIds,
+      title: title,
+      message: message,
+      data: {
+        "type": "card_status_changed",
+        "team_id": teamId,
+        "team_name": teamName,
+        "card_id": cardId,
+        "card_title": cardTitle,
+        "old_status": oldStatus,
+        "new_status": newStatus,
+      },
+    );
+  }
+
+  /// Kart ataması değiştiğinde ilgili kişiye bildirim gönderir
+  Future<bool> notifyCardAssigned({
+    required String teamId,
+    required String teamName,
+    required String cardId,
+    required String cardTitle,
+    required String assigneeId,
+    String? assignedByName,
+  }) async {
+    final title = "👤 Kart Size Atandı";
+    final assignerText = assignedByName ?? 'Bir üye';
+    final message = "$assignerText size \"$cardTitle\" kartını atadı ($teamName)";
+
+    // Sadece atanan kişiye bildirim gönder
+    return await sendNotificationToExternalUsers(
+      externalUserIds: [assigneeId],
+      title: title,
+      message: message,
+      data: {
+        "type": "card_assigned",
+        "team_id": teamId,
+        "team_name": teamName,
+        "card_id": cardId,
+        "card_title": cardTitle,
+      },
+    );
+  }
+
+  /// Üye takıma davet edildiğinde bildirim gönderir
+  Future<bool> notifyMemberInvited({
+    required String teamId,
+    required String teamName,
+    required String invitedUserId,
+    String? invitedByName,
+  }) async {
+    final title = "🎉 Takıma Davet Edildiniz";
+    final inviterText = invitedByName ?? 'Bir kullanıcı';
+    final message = "$inviterText sizi \"$teamName\" takımına davet etti";
+
+    return await sendNotificationToExternalUsers(
+      externalUserIds: [invitedUserId],
+      title: title,
+      message: message,
+      data: {
+        "type": "member_invited",
+        "team_id": teamId,
+        "team_name": teamName,
       },
     );
   }

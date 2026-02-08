@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../main.dart';
 import '../services/general_report_service.dart';
-import '../services/notification_service.dart'; // Eklendi
+import '../services/notification_service.dart';
 import '../pages/archived_tickets_page.dart';
 import '../pages/dashboard_page.dart';
 import '../pages/edit_ticket_page.dart';
@@ -14,12 +14,12 @@ import '../pages/login_page.dart';
 import '../pages/new_ticket_page.dart';
 import '../pages/stock_overview_page.dart';
 import '../pages/ticket_detail_page.dart';
-import '../pages/notifications_page.dart'; // Eklendi
+import '../pages/notifications_page.dart';
 import '../pages/profile_page.dart';
 import '../services/pdf_export_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_colors.dart';
-import '../widgets/app_drawer.dart';
+import '../widgets/sidebar/app_layout.dart';
 import '../widgets/ui/ui.dart';
 import '../widgets/notifications_dropdown.dart';
 import 'pdf_viewer_page.dart';
@@ -77,7 +77,6 @@ class _TicketActionButton extends StatelessWidget {
 }
 
 class _TicketListPageState extends State<TicketListPage> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late Future<List<Map<String, dynamic>>> _ticketsFuture;
 
   final TextEditingController _searchController = TextEditingController();
@@ -940,113 +939,106 @@ class _TicketListPageState extends State<TicketListPage> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      key: _scaffoldKey,
-      drawer: AppDrawer(
-        currentPage: AppDrawerPage.ticketList,
-        userName: _userName,
-        userRole: _userRole,
-        onProfileReload: _loadUserProfile,
-      ),
-      appBar: AppBar(
-        title: const Text('İŞ TAKİP KONTROL'),
-        centerTitle: true,
-        leadingWidth: 100, // Logo ve menü ikonu için genişlik
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
+    return AppLayout(
+      currentPage: AppPage.ticketList,
+      userName: _userName,
+      userRole: _userRole,
+      title: 'İŞ TAKİP KONTROL',
+      onProfileReload: _loadUserProfile,
+      actions: [
+        // Bildirim Butonu
+        Stack(
+          key: _notifIconKey,
           children: [
             IconButton(
-              icon: const Icon(Icons.menu),
-              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+              icon: const Icon(Icons.notifications_outlined),
+              tooltip: 'Bildirimler',
+              onPressed: _openNotificationsDropdown,
             ),
-            SvgPicture.asset(
-              'assets/images/log.svg',
-              width: 30,
-              height: 30,
+            if (_unreadNotifications > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: UiBadge(text: '$_unreadNotifications'),
+              ),
+          ],
+        ),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert),
+          tooltip: 'Seçenekler',
+          onSelected: (value) async {
+            switch (value) {
+              case 'pdf_filtered':
+                final tickets = await _ticketsFuture;
+                final filtered = _applyFilters(tickets);
+                await _createPdfReport(filtered, isFiltered: true);
+                break;
+              case 'pdf_all':
+                // Partner kullanıcılar tüm işleri PDF alamaz
+                if (_userRole == 'partner_user') break;
+                final allTickets = await _fetchAllTicketsForReport();
+                await _createPdfReport(allTickets, isFiltered: false);
+                break;
+              case 'toggle_theme':
+                IsTakipApp.of(context)?.toggleTheme();
+                break;
+              case 'refresh':
+                _refresh();
+                break;
+            }
+          },
+          itemBuilder: (ctx) => [
+            const PopupMenuItem(
+              value: 'pdf_filtered',
+              child: ListTile(
+                dense: true,
+                leading: Icon(Icons.picture_as_pdf_outlined),
+                title: Text('Filtrelenmiş listeyi PDF al'),
+              ),
+            ),
+            if (_userRole != 'partner_user')
+              const PopupMenuItem(
+                value: 'pdf_all',
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(Icons.picture_as_pdf),
+                  title: Text('Tüm işleri PDF al'),
+                ),
+              ),
+            PopupMenuItem(
+              value: 'toggle_theme',
+              child: ListTile(
+                dense: true,
+                leading: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+                title: Text(isDark ? 'Açık tema' : 'Koyu tema'),
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'refresh',
+              child: ListTile(
+                dense: true,
+                leading: Icon(Icons.refresh),
+                title: Text('Yenile'),
+              ),
             ),
           ],
         ),
-        actions: [
-          // Bildirim Butonu
-          Stack(
-            key: _notifIconKey,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_outlined),
-                tooltip: 'Bildirimler',
-                onPressed: _openNotificationsDropdown,
-              ),
-              if (_unreadNotifications > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: UiBadge(text: '$_unreadNotifications'),
-                ),
-            ],
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            tooltip: 'Seçenekler',
-            onSelected: (value) async {
-              switch (value) {
-                case 'pdf_filtered':
-                  final tickets = await _ticketsFuture;
-                  final filtered = _applyFilters(tickets);
-                  await _createPdfReport(filtered, isFiltered: true);
-                  break;
-                case 'pdf_all':
-                  // Partner kullanıcılar tüm işleri PDF alamaz
-                  if (_userRole == 'partner_user') break;
-                  final allTickets = await _fetchAllTicketsForReport();
-                  await _createPdfReport(allTickets, isFiltered: false);
-                  break;
-                case 'toggle_theme':
-                  IsTakipApp.of(context)?.toggleTheme();
-                  break;
-                case 'refresh':
-                  _refresh();
-                  break;
-              }
-            },
-            itemBuilder: (ctx) => [
-              const PopupMenuItem(
-                value: 'pdf_filtered',
-                child: ListTile(
-                  dense: true,
-                  leading: Icon(Icons.picture_as_pdf_outlined),
-                  title: Text('Filtrelenmiş listeyi PDF al'),
-                ),
-              ),
-              if (_userRole != 'partner_user')
-                const PopupMenuItem(
-                  value: 'pdf_all',
-                  child: ListTile(
-                    dense: true,
-                    leading: Icon(Icons.picture_as_pdf),
-                    title: Text('Tüm işleri PDF al'),
-                  ),
-                ),
-              PopupMenuItem(
-                value: 'toggle_theme',
-                child: ListTile(
-                  dense: true,
-                  leading: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
-                  title: Text(isDark ? 'Açık tema' : 'Koyu tema'),
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'refresh',
-                child: ListTile(
-                  dense: true,
-                  leading: Icon(Icons.refresh),
-                  title: Text('Yenile'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      body: UiMaxWidth(
+      ],
+      floatingActionButton: (_userRole == 'admin' || _userRole == 'manager' || _userRole == 'technician')
+          ? FloatingActionButton.extended(
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NewTicketPage()),
+                );
+                _refresh();
+              },
+              label: const Text('Yeni İş Emri'),
+              icon: const Icon(Icons.add),
+              backgroundColor: AppColors.corporateNavy,
+            )
+          : null,
+      child: UiMaxWidth(
         child: FutureBuilder<List<Map<String, dynamic>>>(
           future: _ticketsFuture,
           builder: (context, snapshot) {
@@ -1306,16 +1298,6 @@ class _TicketListPageState extends State<TicketListPage> {
           },
         ),
       ),
-      // Teknisyenler, partner kullanıcılar ve onay bekleyenler yeni iş açamaz
-      floatingActionButton: (_userRole != 'technician' && _userRole != 'pending' && _userRole != 'partner_user')
-          ? FloatingActionButton.extended(
-              backgroundColor: theme.colorScheme.primary,
-              foregroundColor: Colors.white,
-              onPressed: () => _showDeviceSelection(context),
-              label: const Text('YENİ İŞ'),
-              icon: const Icon(Icons.add),
-            )
-          : null,
     );
   }
 }

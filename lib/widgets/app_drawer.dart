@@ -10,8 +10,7 @@ import '../pages/ticket_list_page.dart';
 import '../pages/login_page.dart';
 import '../pages/partner_management_page.dart';
 import '../pages/fault_codes_page.dart';
-import '../pages/daily_activities_page.dart';
-import '../pages/reports_page.dart'; 
+import '../pages/my_teams_page.dart';
 import '../theme/app_colors.dart';
 
 enum AppDrawerPage {
@@ -21,8 +20,8 @@ enum AppDrawerPage {
   archived,
   profile,
   faultCodes,
-  dailyActivities,
-  reports,
+  myTeams,
+  notifications,
   other,
 }
 
@@ -148,6 +147,27 @@ class AppDrawer extends StatelessWidget {
                           padding: const EdgeInsets.only(bottom: 12),
                           children: [
                             _NavTile(
+                              label: 'Takımlarım',
+                              icon: Icons.groups_outlined,
+                              active: currentPage == AppDrawerPage.myTeams,
+                              iconMuted: iconMuted,
+                              textColor: textColor,
+                              activeBg: activeBg,
+                              accent: accent,
+                              onTap: () => _navigate(context, AppDrawerPage.myTeams, MyTeamsPage()),
+                            ),
+                            // Bildirimler geçici kapalı
+                            // _NavTile(
+                            //   label: 'Bildirimler',
+                            //   icon: Icons.notifications_outlined,
+                            //   active: currentPage == AppDrawerPage.notifications,
+                            //   iconMuted: iconMuted,
+                            //   textColor: textColor,
+                            //   activeBg: activeBg,
+                            //   accent: accent,
+                            //   onTap: () => _navigate(context, AppDrawerPage.notifications, TeamNotificationsPage()),
+                            // ),
+                            _NavTile(
                               label: 'İş Listesi',
                               icon: Icons.list_alt_rounded,
                               active: currentPage == AppDrawerPage.ticketList,
@@ -157,28 +177,6 @@ class AppDrawer extends StatelessWidget {
                               accent: accent,
                               onTap: () => _navigate(context, AppDrawerPage.ticketList, const TicketListPage()),
                             ),
-                            if (userRole != 'partner_user')
-                              _NavTile(
-                                label: 'Günlük Planım',
-                                icon: Icons.calendar_month_rounded,
-                                active: currentPage == AppDrawerPage.dailyActivities,
-                                iconMuted: iconMuted,
-                                textColor: textColor,
-                                activeBg: activeBg,
-                                accent: accent,
-                                onTap: () => _navigate(context, AppDrawerPage.dailyActivities, const DailyActivitiesPage()),
-                              ),
-                            if (userRole != 'partner_user')
-                              _NavTile(
-                                label: 'Rapor Oluştur',
-                                icon: Icons.analytics_outlined,
-                                active: currentPage == AppDrawerPage.reports,
-                                iconMuted: iconMuted,
-                                textColor: textColor,
-                                activeBg: activeBg,
-                                accent: accent,
-                                onTap: () => _navigate(context, AppDrawerPage.reports, const ReportsPage()),
-                              ),
                             if (userRole == 'admin' || userRole == 'manager')
                               _NavTile(
                                 label: 'Yönetici Paneli',

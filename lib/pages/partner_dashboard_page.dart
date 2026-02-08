@@ -107,9 +107,11 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
   Color _getStatusColor(String status) {
     switch (status) {
       case 'open': return Colors.orange;
-      case 'completed': return Colors.green;
-      case 'pending': return Colors.blue;
+      case 'done': return Colors.green;
+      case 'in_progress': return Colors.blue;
       case 'cancelled': return Colors.red;
+      case 'panel_done_stock': return Colors.blueGrey;
+      case 'panel_done_sent': return Colors.indigo;
       default: return Colors.grey;
     }
   }
@@ -117,9 +119,11 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
   String _getStatusText(String status) {
     switch (status) {
       case 'open': return 'Açık / İşlemde';
-      case 'completed': return 'Tamamlandı';
-      case 'pending': return 'Beklemede';
+      case 'done': return 'Tamamlandı';
+      case 'in_progress': return 'Serviste';
       case 'cancelled': return 'İptal';
+      case 'panel_done_stock': return 'Panosu Hazır (Stok)';
+      case 'panel_done_sent': return 'Panosu Gönderildi';
       default: return status;
     }
   }
@@ -194,7 +198,7 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
                             itemCount: _tickets.length,
                             itemBuilder: (context, index) {
                               final ticket = _tickets[index];
-                              final status = ticket['status'] as String? ?? 'pending';
+                              final status = ticket['status'] as String? ?? 'open';
                               final date = ticket['created_at'] != null 
                                   ? DateTime.parse(ticket['created_at']).toString().substring(0, 10) 
                                   : '-';
@@ -208,7 +212,7 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
                                   leading: CircleAvatar(
                                     backgroundColor: _getStatusColor(status).withOpacity(0.1),
                                     child: Icon(
-                                      status == 'completed' ? Icons.check : Icons.build,
+                                      status == 'done' ? Icons.check : Icons.build,
                                       color: _getStatusColor(status),
                                       size: 20,
                                     ),
@@ -224,7 +228,7 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
                                       Text('Tarih: $date', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
                                     ],
                                   ),
-                                  trailing: status == 'completed' 
+                                  trailing: status == 'done' 
                                       ? IconButton(
                                           icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
                                           onPressed: () => _downloadReport(ticket),

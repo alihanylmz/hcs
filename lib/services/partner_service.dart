@@ -77,14 +77,14 @@ class PartnerService {
         .from('tickets')
         .select('id')
         .eq('partner_id', partnerId)
-        .neq('status', 'completed')
+        .neq('status', 'done')
         .count(CountOption.exact);
         
     final completedCount = await _supabase
         .from('tickets')
         .select('id')
         .eq('partner_id', partnerId)
-        .eq('status', 'completed')
+        .eq('status', 'done')
         .count(CountOption.exact);
         
     return {

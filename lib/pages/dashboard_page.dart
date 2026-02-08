@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'ticket_list_page.dart';
-import 'login_page.dart';
 import 'ticket_detail_page.dart';
 import 'partner_management_page.dart';
 import 'user_management_page.dart';
-import '../widgets/app_drawer.dart';
+import '../widgets/sidebar/app_layout.dart';
 import '../services/user_service.dart';
 import '../services/partner_service.dart';
 import '../models/user_profile.dart';
@@ -23,7 +21,6 @@ class _DashboardPageState extends State<DashboardPage> {
   final _supabase = Supabase.instance.client;
   final _userService = UserService();
   final PartnerService _partnerService = PartnerService();
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   
   // User Profile - Loaded first
   UserProfile? _currentUser;
@@ -294,109 +291,78 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  Future<void> _logout() async {
-    await _supabase.auth.signOut();
-    if (mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-        (route) => false,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 900;
 
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: const Color(0xFFF1F5F9),
-      drawer: AppDrawer(
-        currentPage: AppDrawerPage.dashboard,
-        userName: _currentUser?.displayName,
-        userRole: _currentUser?.role,
-      ),
-      appBar: AppBar(
-        title: Text(
-          _getAppBarTitle(),
-          style: const TextStyle(
-            color: AppColors.corporateNavy,
-            fontWeight: FontWeight.bold,
+    return AppLayout(
+      currentPage: AppPage.dashboard,
+      userName: _currentUser?.displayName,
+      userRole: _currentUser?.role,
+      title: _getAppBarTitle(),
+      actions: [
+        // Management menu (only for admin/manager)
+        if (_currentUser != null &&
+            (_currentUser!.isAdmin || _currentUser!.isManager))
+          PopupMenuButton<String>(
+            icon: const Icon(
+              Icons.more_vert,
+              color: AppColors.corporateNavy,
+            ),
+            onSelected: (value) {
+              switch (value) {
+                case 'users':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const UserManagementPage(),
+                    ),
+                  );
+                  break;
+                case 'partners':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const PartnerManagementPage(),
+                    ),
+                  );
+                  break;
+              }
+            },
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem<String>(
+                value: 'users',
+                child: Row(
+                  children: [
+                    Icon(Icons.people_outline, color: AppColors.corporateNavy),
+                    SizedBox(width: 12),
+                    Text('Kullanıcı Yönetimi'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'partners',
+                child: Row(
+                  children: [
+                    Icon(Icons.business_rounded, color: AppColors.corporateNavy),
+                    SizedBox(width: 12),
+                    Text('Partner Firmalar'),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ),
-        leadingWidth: 100,
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.menu),
-              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(left: 0),
-              child: SvgPicture.asset(
-                'assets/images/log.svg',
-                width: 32,
-                height: 32,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          // Management menu (only for admin/manager)
-          if (_currentUser != null &&
-              (_currentUser!.isAdmin || _currentUser!.isManager))
-            PopupMenuButton<String>(
-              icon: const Icon(
-                Icons.more_vert,
-                color: AppColors.corporateNavy,
-              ),
-              onSelected: (value) {
-                switch (value) {
-                  case 'users':
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const UserManagementPage(),
-                      ),
-                    );
-                    break;
-                  case 'partners':
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const PartnerManagementPage(),
-                      ),
-                    );
-                    break;
-                }
-              },
-              itemBuilder: (BuildContext context) => [
-                const PopupMenuItem<String>(
-                  value: 'users',
-                  child: Row(
-                    children: [
-                      Icon(Icons.people_outline, color: AppColors.corporateNavy),
-                      SizedBox(width: 12),
-                      Text('Kullanıcı Yönetimi'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'partners',
-                  child: Row(
-                    children: [
-                      Icon(Icons.business_rounded, color: AppColors.corporateNavy),
-                      SizedBox(width: 12),
-                      Text('Partner Firmalar'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-        ],
+      ],
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const TicketListPage()),
+          );
+        },
+        label: const Text('İş Emirleri Listesi'),
+        icon: const Icon(Icons.list_alt),
+        backgroundColor: AppColors.corporateNavy,
       ),
-      body: _isLoading
+      child: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
               ? Center(
@@ -476,17 +442,6 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                   ),
                 ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const TicketListPage()),
-          );
-        },
-        label: const Text('İş Emirleri Listesi'),
-        icon: const Icon(Icons.list_alt),
-        backgroundColor: AppColors.corporateNavy,
-      ),
     );
   }
 

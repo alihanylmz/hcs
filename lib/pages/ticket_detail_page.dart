@@ -17,7 +17,7 @@ import 'pdf_viewer_page.dart';
 import 'profile_page.dart'; // <--- Eklendi
 import '../theme/app_colors.dart'; // <--- Renkler
 import '../utils/formatters.dart'; // <--- Formatlayıcılar
-import '../widgets/add_note_dialog.dart'; // <--- Dialog Widget
+import '../widgets/add_note_dialog.dart';
 import '../widgets/ui/ui.dart';
 
 class TicketDetailPage extends StatefulWidget {
@@ -54,7 +54,12 @@ class _TicketDetailPageState extends State<TicketDetailPage> with SingleTickerPr
   // --- UI İÇİN SABİTLER ---
   static const Map<String, String> _statusLabels = {
     'open': 'Açık',
+    'panel_done_stock': 'Panosu Yapıldı Stokta',
+    'panel_done_sent': 'Panosu Yapıldı Gönderildi',
+    'in_progress': 'Serviste',
     'done': 'İş Tamamlandı',
+    'archived': 'Arşivde',
+    'cancelled': 'İptal',
   };
 
   static const Map<String, String> _priorityLabels = {

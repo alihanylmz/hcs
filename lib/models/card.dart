@@ -33,6 +33,7 @@ class KanbanCard {
   final CardStatus status;
   final String createdBy;
   final String? assigneeId;
+  final String? assigneeName;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -45,11 +46,18 @@ class KanbanCard {
     required this.status,
     required this.createdBy,
     this.assigneeId,
+    this.assigneeName,
     required this.createdAt,
     required this.updatedAt,
   });
 
   factory KanbanCard.fromJson(Map<String, dynamic> json) {
+    // profiles ile join varsa: json['profiles']['full_name']
+    String? name;
+    if (json['profiles'] != null) {
+      name = json['profiles']['full_name'] ?? json['profiles']['email'];
+    }
+
     return KanbanCard(
       id: json['id'],
       boardId: json['board_id'],
@@ -59,6 +67,7 @@ class KanbanCard {
       status: CardStatus.fromDb(json['status']),
       createdBy: json['created_by'],
       assigneeId: json['assignee_id'],
+      assigneeName: name,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
     );

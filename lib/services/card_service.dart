@@ -6,13 +6,49 @@ class CardService {
   final _supabase = Supabase.instance.client;
 
   Future<List<KanbanCard>> getBoardCards(String boardId) async {
+    // 1. Kartları çek
     final response = await _supabase
         .from('cards')
         .select()
         .eq('board_id', boardId)
         .order('created_at', ascending: false);
 
-    return (response as List).map((e) => KanbanCard.fromJson(e)).toList();
+    final List<dynamic> cardsData = response;
+    
+    // 2. Assignee ID'leri topla
+    final assigneeIds = cardsData
+        .map((c) => c['assignee_id'])
+        .where((id) => id != null)
+        .toList();
+
+    // 3. Profilleri çek (Manuel Join - Code Side)
+    Map<String, Map<String, dynamic>> profilesMap = {};
+    if (assigneeIds.isNotEmpty) {
+      try {
+        final profiles = await _supabase
+            .from('profiles')
+            .select('id, full_name') // CSV'deki kolonlar
+            .inFilter('id', assigneeIds);
+            
+        for (var p in profiles) {
+          profilesMap[p['id']] = p;
+        }
+      } catch (e) {
+        print('Profil verisi çekilemedi: $e');
+      }
+    }
+
+    // 4. Verileri kod tarafında birleştir
+    return cardsData.map((c) {
+      final assigneeId = c['assignee_id'];
+      final profile = profilesMap[assigneeId];
+      
+      final merged = Map<String, dynamic>.from(c);
+      if (profile != null) {
+        merged['profiles'] = profile;
+      }
+      return KanbanCard.fromJson(merged);
+    }).toList();
   }
 
   Future<KanbanCard> getCard(String cardId) async {
@@ -25,12 +61,6 @@ class CardService {
   }
 
   Future<List<CardEvent>> getCardHistory(String cardId) async {
-    // profiles tablosuna join atarak kullanıcı adını da alalım
-    // Not: Supabase'de auth.users tablosuna direkt join atamayız, public.profiles varsa oradan alırız.
-    // Şimdilik sadece eventleri çekelim, kullanıcı adı için ayrı bir çözüm gerekebilir veya email auth.users'dan gelmez.
-    // Eğer public.profiles tablonuz varsa: .select('*, profiles(email, full_name)')
-    // Yoksa sadece veriyi çekelim.
-    
     final response = await _supabase
         .from('card_events')
         .select()

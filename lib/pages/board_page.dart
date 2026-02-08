@@ -552,7 +552,7 @@ class _BoardPageState extends State<BoardPage> {
                                   const SizedBox(width: 4),
                                   Flexible(
                                     child: Text(
-                                      'Atanan Kişi', // İsim servisten join ile gelmeli, şimdilik statik
+                                      card.assigneeName ?? 'Atanan Kişi',
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,

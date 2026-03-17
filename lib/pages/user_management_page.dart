@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import '../features/admin/application/admin_access_controller.dart';
 import '../services/user_service.dart';
 import '../services/partner_service.dart';
 import '../models/user_profile.dart';
 import '../models/partner.dart';
 import '../theme/app_colors.dart';
+import '../widgets/access_denied_view.dart';
 import '../widgets/custom_header.dart';
 
 class UserManagementPage extends StatefulWidget {
@@ -14,6 +16,7 @@ class UserManagementPage extends StatefulWidget {
 }
 
 class _UserManagementPageState extends State<UserManagementPage> {
+  final AdminAccessController _adminAccessController = AdminAccessController();
   final UserService _userService = UserService();
   final PartnerService _partnerService = PartnerService();
   final TextEditingController _searchController = TextEditingController();
@@ -21,6 +24,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
   List<UserProfile> _allUsers = [];
   List<UserProfile> _filteredUsers = [];
   List<Partner> _partners = [];
+  bool _hasAccess = false;
   bool _isLoading = true;
   
   // Filtreleme ve sıralama
@@ -91,11 +95,24 @@ class _UserManagementPageState extends State<UserManagementPage> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
+      final accessState = await _adminAccessController.load();
+
+      if (!accessState.hasAccess) {
+        if (mounted) {
+          setState(() {
+            _hasAccess = false;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
       final users = await _userService.getAllUsers();
       final partners = await _partnerService.getAllPartners();
       
       if (mounted) {
         setState(() {
+          _hasAccess = true;
           _allUsers = users;
           _partners = partners;
           _isLoading = false;
@@ -221,6 +238,25 @@ class _UserManagementPageState extends State<UserManagementPage> {
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
     final textColor = isDark ? Colors.white : AppColors.textDark;
+
+    if (!_isLoading && !_hasAccess) {
+      return const Scaffold(
+        body: Column(
+          children: [
+            CustomHeader(
+              title: 'Kullanıcı Yönetimi',
+              subtitle: 'Bu alan yönetici yetkisi gerektirir',
+              showBackArrow: true,
+            ),
+            Expanded(
+              child: AccessDeniedView(
+                message: 'Kullanıcı yönetimi yalnızca admin ve manager kullanıcılar için açıktır.',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: bgColor,

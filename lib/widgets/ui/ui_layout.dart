@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 class UiPage extends StatelessWidget {
   const UiPage({
     super.key,
     required this.child,
-    this.maxWidth = 1100,
-    this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+    this.maxWidth = 1180,
+    this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
     this.center = false,
   });
 
@@ -16,8 +18,14 @@ class UiPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final resolvedPadding =
+        screenWidth < 720
+            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 16)
+            : padding;
+
     final body = Padding(
-      padding: padding,
+      padding: resolvedPadding,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
         child: child,
@@ -40,17 +48,20 @@ class UiSection extends StatelessWidget {
     required this.title,
     required this.child,
     this.trailing,
-    this.padding = const EdgeInsets.symmetric(vertical: 8),
+    this.subtitle,
+    this.padding = const EdgeInsets.symmetric(vertical: 10),
   });
 
   final String title;
   final Widget child;
   final Widget? trailing;
+  final String? subtitle;
   final EdgeInsets padding;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Padding(
       padding: padding,
@@ -58,22 +69,40 @@ class UiSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        subtitle!,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color:
+                              isDark
+                                  ? AppColors.textOnDarkMuted
+                                  : AppColors.textLight,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               if (trailing != null) trailing!,
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           child,
         ],
       ),
     );
   }
 }
-
-

@@ -1,101 +1,89 @@
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:intl/date_symbol_data_local.dart';
-
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'config/app_config.dart';
 import 'pages/login_page.dart';
-import 'pages/ticket_list_page.dart';
-import 'pages/dashboard_page.dart';
 import 'pages/ticket_detail_page.dart';
-import 'services/user_service.dart';
+import 'pages/ticket_list_page.dart';
 import 'services/update_service.dart';
+import 'services/user_service.dart';
 import 'theme/app_theme.dart';
-import 'models/user_profile.dart'; // UserRole için
 
-
-    final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (!kIsWeb) {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      await windowManager.ensureInitialized();
-      WindowOptions windowOptions = const WindowOptions(
-        size: Size(1280, 720),
-        minimumSize: Size(800, 600),
-        center: true,
-        backgroundColor: Colors.transparent,
-        skipTaskbar: false,
-        titleBarStyle: TitleBarStyle.normal,
-      );
-      windowManager.waitUntilReadyToShow(windowOptions, () async {
-        await windowManager.show();
-        await windowManager.focus();
-      });
-    }
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    await windowManager.ensureInitialized();
+    const windowOptions = WindowOptions(
+      size: Size(1280, 720),
+      minimumSize: Size(800, 600),
+      center: true,
+      backgroundColor: Colors.transparent,
+      skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.normal,
+    );
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
   }
 
-  // --- OneSignal Ayarları (Sadece Mobil) ---
-  if (!kIsWeb) {
-    if (Platform.isIOS || Platform.isAndroid) {
-      OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
-      OneSignal.initialize("faeed989-8a81-4fe0-9c73-2eb9ed2144a7");
-      OneSignal.Notifications.requestPermission(true);
+  if (!kIsWeb &&
+      AppConfig.hasOneSignalConfig &&
+      (Platform.isIOS || Platform.isAndroid)) {
+    OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
+    OneSignal.initialize(AppConfig.oneSignalAppId);
+    OneSignal.Notifications.requestPermission(true);
 
-      OneSignal.Notifications.addClickListener((event) {
-        try {
-          final data = event.notification.additionalData;
-          if (data != null && data.containsKey('ticket_id')) {
-            final ticketId = data['ticket_id'].toString();
-            print("🔔 Bildirime tıklandı, Ticket ID: $ticketId");
-            
-            navigatorKey.currentState?.push(
-              MaterialPageRoute(
-                builder: (context) => TicketDetailPage(ticketId: ticketId),
-              ),
-            );
-          }
-        } catch (e) {
-          print("❌ Bildirim tıklama hatası: $e");
+    OneSignal.Notifications.addClickListener((event) {
+      try {
+        final data = event.notification.additionalData;
+        if (data != null && data.containsKey('ticket_id')) {
+          final ticketId = data['ticket_id'].toString();
+          navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (context) => TicketDetailPage(ticketId: ticketId),
+            ),
+          );
         }
-      });
-    }
+      } catch (e) {
+        debugPrint('Bildirim tıklama hatası: $e');
+      }
+    });
   }
 
   try {
-    // Ortam değişkenlerini yükle
-    await dotenv.load(fileName: "env.txt");
-
-    // Tarih formatı (TR)
     await initializeDateFormatting('tr_TR', null);
 
-    // Supabase init
-    final supabaseUrl = dotenv.env['SUPABASE_URL'];
-    final supabaseKey = dotenv.env['SUPABASE_KEY'];
-
-    if (supabaseUrl == null || supabaseKey == null) {
-      throw Exception("SUPABASE_URL veya SUPABASE_KEY .env dosyasında tanımlı değil.");
+    if (!AppConfig.hasSupabaseConfig) {
+      throw Exception(
+        'Eksik konfigürasyon: ${AppConfig.missingRequiredKeys.join(', ')}\n'
+        'Uygulamayı --dart-define ile başlatın.',
+      );
     }
 
     await Supabase.initialize(
-      url: supabaseUrl,
-      anonKey: supabaseKey,
+      url: AppConfig.supabaseUrl,
+      anonKey: AppConfig.supabaseAnonKey,
     );
 
-    // Status bar stil ayarı
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-    ));
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+      ),
+    );
 
     runApp(const IsTakipApp());
   } catch (e) {
@@ -104,10 +92,7 @@ Future<void> main() async {
         debugShowCheckedModeBanner: false,
         home: Scaffold(
           body: Center(
-            child: Text(
-              "Başlatma Hatası:\n$e",
-              textAlign: TextAlign.center,
-            ),
+            child: Text('Başlatma Hatası:\n$e', textAlign: TextAlign.center),
           ),
         ),
       ),
@@ -118,15 +103,18 @@ Future<void> main() async {
 class IsTakipApp extends StatefulWidget {
   const IsTakipApp({super.key});
 
-  static _IsTakipAppState? of(BuildContext context) =>
-      context.findAncestorStateOfType<_IsTakipAppState>();
+  static IsTakipAppState? of(BuildContext context) =>
+      context.findAncestorStateOfType<IsTakipAppState>();
 
   @override
-  State<IsTakipApp> createState() => _IsTakipAppState();
+  State<IsTakipApp> createState() => IsTakipAppState();
 }
 
-class _IsTakipAppState extends State<IsTakipApp> {
+class IsTakipAppState extends State<IsTakipApp> {
   ThemeMode _themeMode = ThemeMode.system;
+
+  Brightness get _systemBrightness =>
+      WidgetsBinding.instance.platformDispatcher.platformBrightness;
 
   @override
   void initState() {
@@ -137,31 +125,37 @@ class _IsTakipAppState extends State<IsTakipApp> {
   Future<void> _loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
     final savedTheme = prefs.getString('theme_mode');
-    if (savedTheme != null) {
-      setState(() {
-        if (savedTheme == 'light') {
-          _themeMode = ThemeMode.light;
-        } else if (savedTheme == 'dark') {
-          _themeMode = ThemeMode.dark;
-        }
-      });
-    }
-  }
-
-  Future<void> toggleTheme() async {
-    final prefs = await SharedPreferences.getInstance();
     setState(() {
-      if (_themeMode == ThemeMode.dark) {
+      if (savedTheme == 'light') {
         _themeMode = ThemeMode.light;
-        prefs.setString('theme_mode', 'light');
-      } else {
+      } else if (savedTheme == 'dark') {
         _themeMode = ThemeMode.dark;
-        prefs.setString('theme_mode', 'dark');
+      } else {
+        _themeMode = ThemeMode.system;
       }
     });
   }
 
-  bool get isDarkMode => _themeMode == ThemeMode.dark;
+  Future<void> toggleTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    final nextMode = isDarkMode ? ThemeMode.light : ThemeMode.dark;
+
+    setState(() {
+      _themeMode = nextMode;
+    });
+
+    await prefs.setString(
+      'theme_mode',
+      nextMode == ThemeMode.dark ? 'dark' : 'light',
+    );
+  }
+
+  bool get isDarkMode {
+    if (_themeMode == ThemeMode.system) {
+      return _systemBrightness == Brightness.dark;
+    }
+    return _themeMode == ThemeMode.dark;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -177,9 +171,7 @@ class _IsTakipAppState extends State<IsTakipApp> {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('tr', 'TR'),
-      ],
+      supportedLocales: const [Locale('tr', 'TR')],
       locale: const Locale('tr', 'TR'),
       home: const AuthGate(),
     );
@@ -197,10 +189,11 @@ class _AuthGateState extends State<AuthGate> {
   @override
   void initState() {
     super.initState();
-    // Uygulama açıldığında versiyon kontrolü yap
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      UpdateService().checkVersion(context);
-    });
+    if (AppConfig.shouldRunStartupChecks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        UpdateService().checkVersion(context);
+      });
+    }
   }
 
   @override
@@ -208,23 +201,22 @@ class _AuthGateState extends State<AuthGate> {
     return StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
-        // Hata durumu
         if (snapshot.hasError) {
           return const Scaffold(
             body: Center(
-              child: Text("Oturum durumu okunurken bir hata oluştu."),
+              child: Text('Oturum durumu okunurken bir hata oluştu.'),
             ),
           );
         }
 
-        final session = snapshot.data?.session ?? Supabase.instance.client.auth.currentSession;
+        final session =
+            snapshot.data?.session ??
+            Supabase.instance.client.auth.currentSession;
 
-        // Kullanıcı oturumu yoksa → Login
         if (session == null) {
           return const LoginPage();
         }
 
-        // Oturum varsa → Kullanıcı profilini oku
         return FutureBuilder(
           future: UserService().getCurrentUserProfile(),
           builder: (context, userSnapshot) {
@@ -237,36 +229,25 @@ class _AuthGateState extends State<AuthGate> {
             if (userSnapshot.hasError) {
               return const Scaffold(
                 body: Center(
-                  child: Text("Kullanıcı profili yüklenirken bir hata oluştu."),
+                  child: Text('Kullanıcı profili yüklenirken bir hata oluştu.'),
                 ),
               );
             }
 
             final userProfile = userSnapshot.data;
 
-            // Profil hiç yoksa: Senaryo A (Admin onayı gerekli)
-            // Profil yoksa kullanıcı giriş yapamaz (LoginPage'de kontrol ediliyor)
-            // Ama yine de burada da güvenlik için kontrol ediyoruz
             if (userProfile == null) {
               return const Scaffold(
                 body: Center(
                   child: Text(
-                    "Profiliniz bulunamadı.\nYöneticinizle görüşün.",
+                    'Profiliniz bulunamadı.\nYöneticinizle görüşün.',
                     textAlign: TextAlign.center,
                   ),
                 ),
               );
             }
 
-            // Rol tabanlı yönlendirme yerine HERKES için İş Listesi
             return const TicketListPage();
-            
-            // Eski kod:
-            // if (userProfile.role == UserRole.admin || userProfile.role == UserRole.manager) {
-            //   return const DashboardPage();
-            // } else {
-            //   return const TicketListPage();
-            // }
           },
         );
       },

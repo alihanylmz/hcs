@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 
-/// Scrollable widget'ların (ListView/CustomScrollView) içine girmeden
-/// sayfa içeriğini kurumsal "max width" ile ortalar.
 class UiMaxWidth extends StatelessWidget {
   const UiMaxWidth({
     super.key,
     required this.child,
-    this.maxWidth = 1100,
+    this.maxWidth = 1180,
     this.padding = const EdgeInsets.symmetric(horizontal: 20),
   });
 
@@ -16,10 +14,16 @@ class UiMaxWidth extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final resolvedPadding =
+        screenWidth < 720
+            ? const EdgeInsets.symmetric(horizontal: 16)
+            : padding;
+
     return Align(
       alignment: Alignment.topCenter,
       child: Padding(
-        padding: padding,
+        padding: resolvedPadding,
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxWidth),
           child: child,
@@ -28,5 +32,3 @@ class UiMaxWidth extends StatelessWidget {
     );
   }
 }
-
-

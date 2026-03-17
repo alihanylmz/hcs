@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+
+import '../../main.dart';
+import '../../theme/app_colors.dart';
 import '../app_drawer.dart';
 import 'sidebar.dart';
 
@@ -16,6 +19,19 @@ enum AppPage {
 }
 
 class AppLayout extends StatelessWidget {
+  const AppLayout({
+    super.key,
+    required this.child,
+    required this.currentPage,
+    required this.title,
+    this.userName,
+    this.userRole,
+    this.actions,
+    this.floatingActionButton,
+    this.onProfileReload,
+    this.showAppBar = true,
+  });
+
   final Widget child;
   final AppPage currentPage;
   final String? userName;
@@ -26,124 +42,248 @@ class AppLayout extends StatelessWidget {
   final VoidCallback? onProfileReload;
   final bool showAppBar;
 
-  const AppLayout({
-    Key? key,
-    required this.child,
-    required this.currentPage,
-    this.userName,
-    this.userRole,
-    required this.title,
-    this.actions,
-    this.floatingActionButton,
-    this.onProfileReload,
-    this.showAppBar = true,
-  }) : super(key: key);
-
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
-    final isWideScreen = screenWidth > 1024; // Desktop/Tablet landscape
+    final isWideScreen = screenWidth > 1024;
+
+    final body = DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors:
+              isDark
+                  ? const [
+                    AppColors.backgroundDark,
+                    Color(0xFF0C1726),
+                    Color(0xFF101E2F),
+                  ]
+                  : const [
+                    AppColors.backgroundGrey,
+                    Color(0xFFF8FAFD),
+                    Color(0xFFEFF4FA),
+                  ],
+        ),
+      ),
+      child:
+          isWideScreen
+              ? Row(
+                children: [
+                  Sidebar(
+                    activeMenuItem: _getActiveMenuItem(),
+                    userName: userName,
+                    userRole: userRole,
+                  ),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        if (showAppBar) _buildDesktopAppBar(context),
+                        Expanded(child: child),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+              : child,
+    );
 
     if (isWideScreen) {
-      // Desktop Layout - Sidebar always visible
       return Scaffold(
-        backgroundColor: const Color(0xFFF1F5F9),
-        body: Row(
-          children: [
-            Sidebar(
-              activeMenuItem: _getActiveMenuItem(),
-              userName: userName,
-              userRole: userRole,
-            ),
-            Expanded(
-              child: Column(
-                children: [
-                  if (showAppBar) _buildAppBar(context, isWideScreen: true),
-                  Expanded(child: child),
-                ],
-              ),
-            ),
-          ],
-        ),
-        floatingActionButton: floatingActionButton,
-      );
-    } else {
-      // Mobile/Tablet Layout - Drawer
-      final scaffoldKey = GlobalKey<ScaffoldState>();
-      return Scaffold(
-        key: scaffoldKey,
-        backgroundColor: const Color(0xFFF1F5F9),
-        drawer: AppDrawer(
-          currentPage: _convertToDrawerPage(),
-          userName: userName,
-          userRole: userRole,
-          onProfileReload: onProfileReload,
-        ),
-        appBar: showAppBar
-            ? AppBar(
-                title: Text(
-                  title,
-                  style: const TextStyle(
-                    color: Color(0xFF1E293B),
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                leadingWidth: 100,
-                leading: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.menu),
-                      onPressed: () => scaffoldKey.currentState?.openDrawer(),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 0),
-                      child: SvgPicture.asset(
-                        'assets/images/log.svg',
-                        width: 32,
-                        height: 32,
-                      ),
-                    ),
-                  ],
-                ),
-                backgroundColor: Colors.white,
-                elevation: 0,
-                actions: actions,
-              )
-            : null,
-        body: child,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        body: body,
         floatingActionButton: floatingActionButton,
       );
     }
+
+    final scaffoldKey = GlobalKey<ScaffoldState>();
+
+    return Scaffold(
+      key: scaffoldKey,
+      backgroundColor: theme.scaffoldBackgroundColor,
+      drawer: AppDrawer(
+        currentPage: _convertToDrawerPage(),
+        userName: userName,
+        userRole: userRole,
+        onProfileReload: onProfileReload,
+      ),
+      appBar: showAppBar ? _buildMobileAppBar(context, scaffoldKey) : null,
+      body: body,
+      floatingActionButton: floatingActionButton,
+    );
   }
 
-  Widget _buildAppBar(BuildContext context, {required bool isWideScreen}) {
-    return Container(
-      height: 64,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+  PreferredSizeWidget _buildMobileAppBar(
+    BuildContext context,
+    GlobalKey<ScaffoldState> scaffoldKey,
+  ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return AppBar(
+      titleSpacing: 0,
+      title: Text(title),
+      leadingWidth: 92,
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.menu_rounded),
+            onPressed: () => scaffoldKey.currentState?.openDrawer(),
+          ),
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color:
+                  isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceAccent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
+              ),
+            ),
+            padding: const EdgeInsets.all(6),
+            child: SvgPicture.asset('assets/images/log.svg'),
           ),
         ],
       ),
+      backgroundColor:
+          isDark
+              ? AppColors.surfaceDark.withOpacity(0.94)
+              : AppColors.surfaceWhite.withOpacity(0.94),
+      elevation: 0,
+      actions: [
+        _buildThemeToggle(context, compact: true),
+        if (actions != null) ...actions!,
+      ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(
+          height: 1,
+          color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopAppBar(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      height: 76,
+      margin: const EdgeInsets.fromLTRB(18, 18, 18, 0),
       padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: BoxDecoration(
+        color:
+            isDark
+                ? AppColors.surfaceDark.withOpacity(0.92)
+                : AppColors.surfaceWhite.withOpacity(0.94),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.16 : 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
       child: Row(
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E293B),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.appBarTheme.titleTextStyle,
             ),
           ),
-          const Spacer(),
+          _buildThemeToggle(context),
+          const SizedBox(width: 12),
           if (actions != null) ...actions!,
         ],
+      ),
+    );
+  }
+
+  Widget _buildThemeToggle(BuildContext context, {bool compact = false}) {
+    final appState = IsTakipApp.of(context);
+    final isDark =
+        appState?.isDarkMode ??
+        (Theme.of(context).brightness == Brightness.dark);
+    final backgroundColor =
+        isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceAccent;
+    final borderColor = isDark ? AppColors.borderDark : AppColors.borderSubtle;
+    final iconColor =
+        isDark ? AppColors.corporateYellow : AppColors.corporateBlue;
+    final labelColor = isDark ? AppColors.textOnDark : AppColors.textDark;
+
+    return Tooltip(
+      message: isDark ? 'Acik temaya gec' : 'Koyu temaya gec',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => appState?.toggleTheme(),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            height: compact ? 42 : 48,
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 10 : 14,
+              vertical: 6,
+            ),
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: borderColor),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  width: compact ? 28 : 32,
+                  height: compact ? 28 : 32,
+                  decoration: BoxDecoration(
+                    color:
+                        isDark ? AppColors.surfaceDark : AppColors.surfaceWhite,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(isDark ? 0.18 : 0.06),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                    size: compact ? 16 : 18,
+                    color: iconColor,
+                  ),
+                ),
+                if (!compact) ...[
+                  const SizedBox(width: 10),
+                  Text(
+                    isDark ? 'Koyu' : 'Acik',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: labelColor,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -166,7 +306,7 @@ class AppLayout extends StatelessWidget {
         return 'my_teams';
       case AppPage.notifications:
         return 'notifications';
-      default:
+      case AppPage.other:
         return '';
     }
   }
@@ -189,7 +329,7 @@ class AppLayout extends StatelessWidget {
         return AppDrawerPage.myTeams;
       case AppPage.notifications:
         return AppDrawerPage.notifications;
-      default:
+      case AppPage.other:
         return AppDrawerPage.other;
     }
   }

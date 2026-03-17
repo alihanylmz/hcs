@@ -6,8 +6,8 @@ class UiBadge extends StatelessWidget {
     required this.text,
     this.backgroundColor,
     this.textColor,
-    this.minSize = 16,
-    this.padding = const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+    this.minSize = 20,
+    this.padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
   });
 
   final String text;
@@ -24,13 +24,18 @@ class UiBadge extends StatelessWidget {
 
     return Container(
       padding: padding,
+      constraints: BoxConstraints(minWidth: minSize, minHeight: minSize),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(999),
-      ),
-      constraints: BoxConstraints(
-        minWidth: minSize,
-        minHeight: minSize,
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        boxShadow: [
+          BoxShadow(
+            color: bg.withOpacity(0.35),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Center(
         widthFactor: 1,
@@ -40,7 +45,7 @@ class UiBadge extends StatelessWidget {
           style: TextStyle(
             color: fg,
             fontSize: 10,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w800,
             height: 1,
           ),
           textAlign: TextAlign.center,
@@ -49,5 +54,3 @@ class UiBadge extends StatelessWidget {
     );
   }
 }
-
-

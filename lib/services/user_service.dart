@@ -1,57 +1,48 @@
-import 'dart:developer' as developer;
-
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../models/user_profile.dart'; // Hem UserProfile hem UserRole buradan gelir
+import '../core/logging/app_logger.dart';
+import '../models/user_profile.dart';
 
 class UserService {
   UserService({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
+  static const AppLogger _logger = AppLogger('UserService');
   final SupabaseClient _client;
 
-  /// Geçerli (auth olmuş) kullanıcının profil kaydını çeker.
-  /// - Profil bulunamazsa: null döner (ghost profile yok!)
-  /// - Hata olursa: log yazar ve null döner.
   Future<UserProfile?> getCurrentUserProfile() async {
     final user = _client.auth.currentUser;
     if (user == null) return null;
 
     try {
-      final data = await _client
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .maybeSingle();
+      final data =
+          await _client
+              .from('profiles')
+              .select('*')
+              .eq('id', user.id)
+              .maybeSingle();
 
       if (data == null) {
-        developer.log(
-          '⚠️ Profil bulunamadı (profiles tablosunda kayıt yok).',
-          name: 'UserService.getCurrentUserProfile',
-        );
+        _logger.warning('profile_not_found', data: {'userId': user.id});
         return null;
       }
 
       return UserProfile.fromJson(data as Map<String, dynamic>);
-    } catch (e, st) {
-      developer.log(
-        '🔴 Profil çekme hatası',
-        name: 'UserService.getCurrentUserProfile',
-        error: e,
-        stackTrace: st,
+    } catch (error, stackTrace) {
+      _logger.error(
+        'get_current_user_profile_failed',
+        error: error,
+        stackTrace: stackTrace,
       );
       return null;
     }
   }
 
-  /// Stok silme yetkisi – business rule.
-  /// Kullanıcı admin veya manager ise true.
   bool canDeleteStock(UserProfile? profile) {
     if (profile == null) return false;
     return profile.isAdmin == true || profile.isManager == true;
   }
 
-  /// Manuel profil oluşturma (normalde Supabase trigger'ı yapar).
   Future<void> createProfile(
     String userId,
     String email,
@@ -64,62 +55,58 @@ class UserService {
         'full_name': fullName,
         'role': UserRole.pending,
       });
-    } catch (e, st) {
-      developer.log(
-        '🔴 Profil oluşturma hatası',
-        name: 'UserService.createProfile',
-        error: e,
-        stackTrace: st,
+    } catch (error, stackTrace) {
+      _logger.error(
+        'create_profile_failed',
+        data: {'userId': userId, 'email': email},
+        error: error,
+        stackTrace: stackTrace,
       );
-      rethrow; // UI bilsin istersek
+      rethrow;
     }
   }
 
-  /// Profil güncelleme (şimdilik sadece isim).
   Future<void> updateProfile(
     String userId, {
     String? fullName,
     String? signatureData,
   }) async {
+    final updates = <String, dynamic>{};
+    if (fullName != null) updates['full_name'] = fullName;
+    if (signatureData != null) updates['signature_data'] = signatureData;
+
+    if (updates.isEmpty) return;
+
     try {
-      final updates = <String, dynamic>{};
-      if (fullName != null) updates['full_name'] = fullName;
-      if (signatureData != null) updates['signature_data'] = signatureData;
-      
-      if (updates.isEmpty) return;
-      
-      await _client
-          .from('profiles')
-          .update(updates).eq('id', userId);
-    } catch (e, st) {
-      developer.log(
-        '🔴 Profil güncelleme hatası',
-        name: 'UserService.updateProfile',
-        error: e,
-        stackTrace: st,
+      await _client.from('profiles').update(updates).eq('id', userId);
+    } catch (error, stackTrace) {
+      _logger.error(
+        'update_profile_failed',
+        data: {'userId': userId, 'updatedFields': updates.keys.join(',')},
+        error: error,
+        stackTrace: stackTrace,
       );
       rethrow;
     }
   }
 
-  /// İmzayı temizle
   Future<void> clearSignature(String userId) async {
     try {
       await _client
           .from('profiles')
-          .update({'signature_data': null}).eq('id', userId);
-    } catch (e, st) {
-      developer.log(
-        '🔴 İmza temizleme hatası',
-        name: 'UserService.clearSignature',
-        error: e,
-        stackTrace: st,
+          .update({'signature_data': null})
+          .eq('id', userId);
+    } catch (error, stackTrace) {
+      _logger.error(
+        'clear_signature_failed',
+        data: {'userId': userId},
+        error: error,
+        stackTrace: stackTrace,
       );
       rethrow;
     }
   }
 
-  /// Tüm kullanıcıları listele (alfabetik).
   Future<List<UserProfile>> getAllUsers() async {
     try {
       final List<dynamic> rows = await _client
@@ -130,20 +117,16 @@ class UserService {
       return rows
           .map((row) => UserProfile.fromJson(row as Map<String, dynamic>))
           .toList();
-    } catch (e, st) {
-      developer.log(
-        '🔴 Kullanıcı listesi çekme hatası',
-        name: 'UserService.getAllUsers',
-        error: e,
-        stackTrace: st,
+    } catch (error, stackTrace) {
+      _logger.error(
+        'get_all_users_failed',
+        error: error,
+        stackTrace: stackTrace,
       );
       return [];
     }
   }
 
-  /// Kullanıcı rolünü güncelle.
-  /// - Başarılı: true
-  /// - Hata: false (UI snackbar vs. gösterebilir)
   Future<bool> updateUserRole(
     String userId,
     String newRole, {
@@ -157,12 +140,12 @@ class UserService {
 
       await _client.from('profiles').update(data).eq('id', userId);
       return true;
-    } catch (e, st) {
-      developer.log(
-        '🔴 Rol güncelleme hatası',
-        name: 'UserService.updateUserRole',
-        error: e,
-        stackTrace: st,
+    } catch (error, stackTrace) {
+      _logger.error(
+        'update_user_role_failed',
+        data: {'userId': userId, 'newRole': newRole, 'partnerId': partnerId},
+        error: error,
+        stackTrace: stackTrace,
       );
       return false;
     }

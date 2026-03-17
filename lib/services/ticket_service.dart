@@ -1,330 +1,129 @@
 import 'dart:typed_data';
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart'; // kIsWeb için
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
+
 import 'package:file_picker/file_picker.dart';
-import 'notification_service.dart';
-import 'user_service.dart';
+
+import '../core/logging/app_logger.dart';
+import '../features/tickets/application/ticket_notification_coordinator.dart';
+import '../features/tickets/data/ticket_repository.dart';
 
 class TicketService {
-  final _supabase = Supabase.instance.client;
-  final _notificationService = NotificationService();
-  final _userService = UserService();
-
-  // --- TICKET İŞLEMLERİ ---
-
-  Future<Map<String, dynamic>?> getTicket(String ticketId) async {
-    // String ID'yi int'e çevirmeyi dene, olmazsa string kullan
-    dynamic queryId = int.tryParse(ticketId) ?? ticketId;
-
-    return await _supabase
-        .from('tickets')
-        .select('''
-          *,
-          customers (
-            id,
-            name,
-            address,
-            phone
-          )
-        ''')
-        .eq('id', queryId)
-        .maybeSingle();
+  factory TicketService({
+    TicketRepository? repository,
+    TicketNotificationCoordinator? notificationCoordinator,
+  }) {
+    final repo = repository ?? TicketRepository();
+    return TicketService._(
+      repository: repo,
+      notificationCoordinator:
+          notificationCoordinator ??
+          TicketNotificationCoordinator(repository: repo),
+    );
   }
 
-  Future<void> updateTicket(String ticketId, Map<String, dynamic> payload) async {
-    dynamic queryId = int.tryParse(ticketId) ?? ticketId;
-    
-    // Eski ticket bilgilerini al (bildirim için)
-    final oldTicket = await getTicket(ticketId);
-    
-    // Güncelleme yap
-    await _supabase.from('tickets').update(payload).eq('id', queryId);
-    
-    // Bildirim gönder (asenkron, hata olsa bile işlem devam etsin)
-    if (oldTicket != null) {
-      _sendUpdateNotifications(oldTicket, payload, ticketId).catchError((e) {
-        debugPrint('Bildirim gönderme hatası: $e');
-      });
-    }
+  TicketService._({
+    required TicketRepository repository,
+    required TicketNotificationCoordinator notificationCoordinator,
+  }) : _repository = repository,
+       _notificationCoordinator = notificationCoordinator;
+
+  static const AppLogger _logger = AppLogger('TicketService');
+  final TicketRepository _repository;
+  final TicketNotificationCoordinator _notificationCoordinator;
+
+  Future<Map<String, dynamic>?> getTicket(String ticketId) {
+    return _repository.getTicket(ticketId);
   }
-  
-  /// Ticket güncellemelerinde bildirim gönderir
-  Future<void> _sendUpdateNotifications(
-    Map<String, dynamic> oldTicket,
-    Map<String, dynamic> payload,
+
+  Future<void> updateTicket(
     String ticketId,
+    Map<String, dynamic> payload,
   ) async {
-    final ticketTitle = oldTicket['title'] as String? ?? 'İş Emri';
-    final jobCode = oldTicket['job_code'] as String?;
-    final currentUser = await _userService.getCurrentUserProfile();
-    final userName = currentUser?.fullName ?? 'Kullanıcı';
-    
-    // Durum değişikliği kontrolü
-    if (payload.containsKey('status')) {
-      final oldStatus = oldTicket['status'] as String? ?? 'open';
-      final newStatus = payload['status'] as String?;
-      if (newStatus != null && oldStatus != newStatus) {
-        // Eğer gizli durumdan (draft) aktif duruma geçiyorsa, "yeni iş emri" bildirimi gönder
-        final activeStatuses = ['open', 'in_progress', 'panel_done_stock', 'panel_done_sent'];
-        if (oldStatus == 'draft' && activeStatuses.contains(newStatus)) {
-          // Gizli durumdan aktif duruma geçiş: Yeni iş emri bildirimi gönder
-          await _notificationService.notifyTicketCreated(
+    final oldTicket = await _repository.getTicket(ticketId);
+    await _repository.updateTicket(ticketId, payload);
+
+    if (oldTicket != null) {
+      _notificationCoordinator
+          .handleTicketUpdated(
+            oldTicket: oldTicket,
+            payload: payload,
             ticketId: ticketId,
-            ticketTitle: ticketTitle,
-            jobCode: jobCode,
-            createdBy: userName,
+          )
+          .catchError((Object error, StackTrace stackTrace) {
+            _logger.error(
+              'ticket_update_notification_failed',
+              data: {'ticketId': ticketId},
+              error: error,
+              stackTrace: stackTrace,
+            );
+          });
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getNotes(String ticketId) {
+    return _repository.getNotes(ticketId);
+  }
+
+  Future<void> addNote(
+    String ticketId,
+    String note, [
+    List<String>? imageUrls,
+  ]) async {
+    await _repository.addNote(
+      ticketId: ticketId,
+      note: note,
+      noteType: 'service_note',
+      imageUrls: imageUrls,
+    );
+
+    _notificationCoordinator
+        .handleNoteAdded(ticketId: ticketId, isPartnerNote: false)
+        .catchError((Object error, StackTrace stackTrace) {
+          _logger.error(
+            'service_note_notification_failed',
+            data: {'ticketId': ticketId},
+            error: error,
+            stackTrace: stackTrace,
           );
-        } else {
-          // Normal durum değişikliği bildirimi
-          await _notificationService.notifyTicketStatusChanged(
-            ticketId: ticketId,
-            ticketTitle: ticketTitle,
-            oldStatus: oldStatus,
-            newStatus: newStatus,
-            changedBy: userName,
-            jobCode: jobCode,
+        });
+  }
+
+  Future<void> addPartnerNote(
+    String ticketId,
+    String note, [
+    List<String>? imageUrls,
+  ]) async {
+    await _repository.addNote(
+      ticketId: ticketId,
+      note: note,
+      noteType: 'partner_note',
+      imageUrls: imageUrls,
+    );
+
+    _notificationCoordinator
+        .handleNoteAdded(ticketId: ticketId, isPartnerNote: true)
+        .catchError((Object error, StackTrace stackTrace) {
+          _logger.error(
+            'partner_note_notification_failed',
+            data: {'ticketId': ticketId},
+            error: error,
+            stackTrace: stackTrace,
           );
-        }
-
-        // --- PARTNER BİLDİRİMİ ---
-        final partnerId = oldTicket['partner_id'] as int?;
-        if (partnerId != null && (newStatus == 'completed' || newStatus == 'service_required')) {
-          // Burada normalde Partner kullanıcılarını bulup onlara bildirim atarız.
-          // Şimdilik logluyoruz. Gerçek implementasyonda NotificationService'e 
-          // notifyPartnerUsers(partnerId, message) gibi bir metod eklenmeli.
-          debugPrint('Partner Bildirimi Tetiklendi! PartnerID: $partnerId, Yeni Durum: $newStatus');
-          
-          // Örnek: await _notificationService.notifyPartnerUsers(partnerId, ticketTitle, newStatus);
-        }
-      }
-    }
-    
-    // Öncelik değişikliği kontrolü
-    if (payload.containsKey('priority')) {
-      final oldPriority = oldTicket['priority'] as String? ?? 'normal';
-      final newPriority = payload['priority'] as String?;
-      if (newPriority != null && oldPriority != newPriority) {
-        await _notificationService.notifyPriorityChanged(
-          ticketId: ticketId,
-          ticketTitle: ticketTitle,
-          oldPriority: oldPriority,
-          newPriority: newPriority,
-          jobCode: jobCode,
-        );
-      }
-    }
+        });
   }
 
-  // --- NOT İŞLEMLERİ ---
-
-  Future<List<Map<String, dynamic>>> getNotes(String ticketId) async {
-    dynamic queryId = int.tryParse(ticketId) ?? ticketId;
-    
-    final response = await _supabase
-        .from('ticket_notes')
-        .select('*, profiles(full_name, role)')
-        .eq('ticket_id', queryId)
-        .order('created_at', ascending: true);
-        
-    return List<Map<String, dynamic>>.from(response);
+  Future<void> updateNote(int noteId, String note) {
+    return _repository.updateNote(noteId, note);
   }
 
-  Future<void> addNote(String ticketId, String note, [List<String>? imageUrls]) async {
-    dynamic queryId = int.tryParse(ticketId) ?? ticketId;
-    final user = _supabase.auth.currentUser;
-
-    final Map<String, dynamic> data = {
-      'ticket_id': queryId,
-      'note': note,
-      'user_id': user?.id,
-      'note_type': 'service_note', // Servis notu
-    };
-
-    if (imageUrls != null && imageUrls.isNotEmpty) {
-      data['image_urls'] = imageUrls;
-    }
-
-    await _supabase.from('ticket_notes').insert(data);
-    
-    // Bildirim gönder (asenkron, hata olsa bile işlem devam etsin)
-    _sendNoteNotification(ticketId).catchError((e) {
-      debugPrint('Bildirim gönderme hatası: $e');
-    });
+  Future<Uint8List?> compressImage(Uint8List bytes) {
+    return _repository.compressImage(bytes);
   }
 
-  /// Partner notu ekler (sadece partner kullanıcıları için)
-  Future<void> addPartnerNote(String ticketId, String note, [List<String>? imageUrls]) async {
-    dynamic queryId = int.tryParse(ticketId) ?? ticketId;
-    final user = _supabase.auth.currentUser;
-
-    final Map<String, dynamic> data = {
-      'ticket_id': queryId,
-      'note': note,
-      'user_id': user?.id,
-      'note_type': 'partner_note', // Partner notu
-    };
-
-    if (imageUrls != null && imageUrls.isNotEmpty) {
-      data['image_urls'] = imageUrls;
-    }
-
-    await _supabase.from('ticket_notes').insert(data);
-    
-    // Partner notu eklendiğinde admin ve manager'lara bildirim gönder
-    _sendPartnerNoteNotification(ticketId).catchError((e) {
-      debugPrint('Partner notu bildirimi gönderme hatası: $e');
-    });
+  Future<List<String>> uploadImages(String ticketId, List<PlatformFile> files) {
+    return _repository.uploadImages(ticketId, files);
   }
 
-  /// Not içeriğini günceller
-  Future<void> updateNote(int noteId, String note) async {
-    await _supabase
-        .from('ticket_notes')
-        .update({'note': note})
-        .eq('id', noteId);
-  }
-  
-  /// Not eklendiğinde bildirim gönderir
-  Future<void> _sendNoteNotification(String ticketId) async {
-    try {
-      final ticket = await getTicket(ticketId);
-      if (ticket == null) return;
-      
-      final ticketTitle = ticket['title'] as String? ?? 'İş Emri';
-      final jobCode = ticket['job_code'] as String?;
-      final currentUser = await _userService.getCurrentUserProfile();
-      final userName = currentUser?.fullName ?? 'Kullanıcı';
-      
-      await _notificationService.notifyNoteAdded(
-        ticketId: ticketId,
-        ticketTitle: ticketTitle,
-        noteAuthor: userName,
-        jobCode: jobCode,
-      );
-    } catch (e) {
-      debugPrint('Not bildirimi gönderme hatası: $e');
-    }
-  }
-
-  /// Partner notu eklendiğinde admin ve manager'lara bildirim gönderir
-  Future<void> _sendPartnerNoteNotification(String ticketId) async {
-    try {
-      final ticket = await getTicket(ticketId);
-      if (ticket == null) return;
-      
-      final ticketTitle = ticket['title'] as String? ?? 'İş Emri';
-      final jobCode = ticket['job_code'] as String?;
-      final currentUser = await _userService.getCurrentUserProfile();
-      final userName = currentUser?.fullName ?? 'Kullanıcı';
-      
-      await _notificationService.notifyPartnerNoteAdded(
-        ticketId: ticketId,
-        ticketTitle: ticketTitle,
-        noteAuthor: userName,
-        jobCode: jobCode,
-      );
-    } catch (e) {
-      debugPrint('Partner notu bildirimi gönderme hatası: $e');
-    }
-  }
-
-  // --- RESİM YÜKLEME VE SIKIŞTIRMA ---
-
-  Future<Uint8List?> compressImage(Uint8List list) async {
-    // --- WEB KONTROLÜ ---
-    // Web ortamında native sıkıştırma kütüphanesi çalışmadığı için
-    // sıkıştırmayı atlıyoruz.
-    if (kIsWeb) {
-      debugPrint("Web ortamı algılandı: Sıkıştırma atlanıyor.");
-      return list; 
-    }
-
-    try {
-      var result = await FlutterImageCompress.compressWithList(
-        list,
-        minHeight: 1024,
-        minWidth: 1024,
-        quality: 70,
-      );
-      return result;
-    } catch (e) {
-      debugPrint("Sıkıştırma hatası: $e");
-      return list; // Hata durumunda orjinal dosyayı döndür
-    }
-  }
-
-  Future<List<String>> uploadImages(String ticketId, List<PlatformFile> files) async {
-    List<String> uploadedUrls = [];
-
-    for (var file in files) {
-      if (file.bytes == null) continue;
-
-      try {
-        // 1. Uzantı ve İsim
-        String extension = file.extension ?? 'jpg';
-        String cleanName = file.name.replaceAll(RegExp(r'[^a-zA-Z0-9._]'), '');
-        
-        // Sıkıştırma öncesi bytes
-        Uint8List? imageBytes = file.bytes;
-        
-        // 2. Sıkıştırma (Web değilse, çıktı her zaman JPG olur)
-        if (!kIsWeb && imageBytes != null) {
-          imageBytes = await compressImage(imageBytes);
-          // Sıkıştırma yapıldıysa uzantıyı zorla jpg yap
-          extension = 'jpg';
-          // Dosya ismindeki uzantıyı da jpg ile değiştir
-          cleanName = cleanName.replaceAll(RegExp(r'\.[a-zA-Z0-9]+$'), '.jpg');
-        }
-
-        if (imageBytes == null) continue;
-
-        final fileName = '${DateTime.now().millisecondsSinceEpoch}_$cleanName';
-
-        // 3. Yükleme
-        final filePath = '$ticketId/$fileName';
-        await _supabase.storage.from('ticket-files').uploadBinary(
-          filePath,
-          imageBytes,
-          fileOptions: FileOptions(contentType: 'image/$extension', upsert: false),
-        );
-
-        // 4. URL Alma
-        final url = _supabase.storage.from('ticket-files').getPublicUrl(filePath);
-        uploadedUrls.add(url);
-      } catch (e) {
-        debugPrint('Yükleme hatası ($file.name): $e');
-      }
-    }
-    return uploadedUrls;
-  }
-
-  /// Herhangi bir dosyayı (PDF, EXE, ZIP vb.) Supabase Storage'a yükler
-  Future<String?> uploadFile(String ticketId, PlatformFile file) async {
-    if (file.bytes == null) return null;
-
-    try {
-      final cleanName = file.name.replaceAll(RegExp(r'[^a-zA-Z0-9._]'), '');
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}_$cleanName';
-      final filePath = '$ticketId/$fileName';
-
-      // Dosya tipini belirle
-      String contentType = 'application/octet-stream';
-      if (file.extension == 'pdf') contentType = 'application/pdf';
-      if (file.extension == 'jpg' || file.extension == 'jpeg') contentType = 'image/jpeg';
-      if (file.extension == 'png') contentType = 'image/png';
-
-      await _supabase.storage.from('ticket-files').uploadBinary(
-            filePath,
-            file.bytes!,
-            fileOptions: FileOptions(contentType: contentType, upsert: false),
-          );
-
-      return _supabase.storage.from('ticket-files').getPublicUrl(filePath);
-    } catch (e) {
-      debugPrint('Dosya yükleme hatası: $e');
-      return null;
-    }
+  Future<String?> uploadFile(String ticketId, PlatformFile file) {
+    return _repository.uploadFile(ticketId, file);
   }
 }

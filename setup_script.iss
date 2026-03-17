@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "Is Takip"
-#define MyAppVersion "1.0.2"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Alihan"
 #define MyAppExeName "istakip_app.exe"
 
@@ -16,7 +16,6 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
-; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
 OutputDir=installer
 OutputBaseFilename=IsTakip_Setup
@@ -35,11 +34,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 ; Ana exe dosyamız
 Source: "build\windows\x64\runner\Release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-; Gerekli DLL ve veri dosyaları (Tüm Release klasörünü alıyoruz)
+; Gerekli DLL ve veri dosyaları
 Source: "build\windows\x64\runner\Release\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\windows\x64\runner\Release\data\*"; DestDir: "{app}\data"; Flags: ignoreversion recursesubdirs createallsubdirs
-; .env dosyasını da eklemeyi unutmuyoruz!
-Source: ".env"; DestDir: "{app}"; Flags: ignoreversion
 ; Kısayol ikonunu garantiye almak için .ico dosyasını da kur
 Source: "windows\runner\resources\app_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -49,4 +46,3 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-

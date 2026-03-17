@@ -10,8 +10,14 @@ import 'stock_pdf_service.dart';
 
 class PdfExportService {
   /// Tekil iş emri PDF'i üretir
-  static Future<Uint8List> generateSingleTicketPdfBytes(String ticketId, {String? technicianSignature}) {
-    return TicketPdfService.generateSingleTicketPdfBytes(ticketId, technicianSignature: technicianSignature);
+  static Future<Uint8List> generateSingleTicketPdfBytes(
+    String ticketId, {
+    String? technicianSignature,
+  }) {
+    return TicketPdfService.generateSingleTicketPdfBytes(
+      ticketId,
+      technicianSignature: technicianSignature,
+    );
   }
 
   /// Güncel stok raporu PDF'i üretir
@@ -24,16 +30,20 @@ class PdfExportService {
     required List<Map<String, dynamic>> tickets,
     required String reportTitle,
     String? partnerName,
+    String? generatedBy,
   }) {
     return TicketPdfService.generateTicketListPdfBytesFromList(
       tickets: tickets,
       reportTitle: reportTitle,
       partnerName: partnerName,
+      generatedBy: generatedBy,
     );
   }
 
   /// Verilen stok listesinden sipariş listesi üretir
-  static Future<Uint8List> generateOrderListPdfBytesFromList(List<Map<String, dynamic>> items) {
+  static Future<Uint8List> generateOrderListPdfBytesFromList(
+    List<Map<String, dynamic>> items,
+  ) {
     return StockPdfService.generateOrderListPdfBytesFromList(items);
   }
 

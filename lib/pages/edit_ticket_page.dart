@@ -21,10 +21,10 @@ class EditTicketPage extends StatefulWidget {
 class _EditTicketPageState extends State<EditTicketPage> {
   // --- SABİTLER VE AYARLAR ---
   static const Color _corporateNavy = AppColors.corporateNavy;
-  static const Color _backgroundGrey = Color(0xFFF8FAFC);
-  static const Color _surfaceWhite = Colors.white;
-  static const Color _textDark = Color(0xFF1E293B);
-  static const Color _textLight = Color(0xFF64748B);
+  static const Color _backgroundGrey = AppColors.backgroundGrey;
+  static const Color _surfaceWhite = AppColors.surfaceWhite;
+  static const Color _textDark = AppColors.textDark;
+  static const Color _textLight = AppColors.textLight;
 
   final _formKey = GlobalKey<FormState>();
 
@@ -40,20 +40,21 @@ class _EditTicketPageState extends State<EditTicketPage> {
 
   String? _selectedDeviceModel;
   String? _selectedPlcModel;
-  
+
   String? _selectedHmiBrand;
   double? _selectedHmiSize;
-  
+
   String? _selectedAspiratorBrand;
   String? _selectedAspiratorModel; // Aspiratör için model
   double? _selectedAspiratorKw;
-  List<String> _availableAspiratorModels = []; // Aspiratör markasına göre modeller
-  
+  List<String> _availableAspiratorModels =
+      []; // Aspiratör markasına göre modeller
+
   String? _selectedVantBrand;
   String? _selectedVantModel; // Vantilatör için model
   double? _selectedVantKw;
   List<String> _availableVantModels = []; // Vantilatör markasına göre modeller
-  
+
   final StockService _stockService = StockService();
   List<String> _availableDriveBrands = []; // Veritabanından yüklenen markalar
 
@@ -77,7 +78,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
   DateTime? _plannedDate;
   PlatformFile? _selectedPdf; // Seçilen PDF dosyası
   bool _isUploading = false;
-  
+
   String _status = 'open';
   String _priority = 'normal';
   String? _customerId;
@@ -144,75 +145,86 @@ class _EditTicketPageState extends State<EditTicketPage> {
 
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Parça Ekle'),
-        content: StatefulBuilder(
-          builder: (context, setState) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<int>(
-                  isExpanded: true,
-                  hint: const Text('Ürün Seçiniz'),
-                  value: selectedInventoryId,
-                  items: _allInventory.map((item) {
-                    return DropdownMenuItem<int>(
-                      value: item['id'] as int,
-                      child: Text(
-                        '${item['name']} (Stok: ${item['quantity']})',
-                        style: TextStyle(
-                          color: (item['quantity'] as int) <= 0 ? Colors.red : Colors.black,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (val) => setState(() => selectedInventoryId = val),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Adet'),
-                  onChanged: (val) => quantity = int.tryParse(val) ?? 1,
-                ),
-              ],
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('İptal'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (selectedInventoryId == null) return;
-              try {
-                await _stockService.addPartToTicket(
-                  widget.ticketId,
-                  selectedInventoryId!,
-                  quantity,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Parça Ekle'),
+            content: StatefulBuilder(
+              builder: (context, setState) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<int>(
+                      isExpanded: true,
+                      hint: const Text('Ürün Seçiniz'),
+                      value: selectedInventoryId,
+                      items:
+                          _allInventory.map((item) {
+                            return DropdownMenuItem<int>(
+                              value: item['id'] as int,
+                              child: Text(
+                                '${item['name']} (Stok: ${item['quantity']})',
+                                style: TextStyle(
+                                  color:
+                                      (item['quantity'] as int) <= 0
+                                          ? Colors.red
+                                          : Colors.black,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                      onChanged:
+                          (val) => setState(() => selectedInventoryId = val),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Adet'),
+                      onChanged: (val) => quantity = int.tryParse(val) ?? 1,
+                    ),
+                  ],
                 );
-                if (mounted) {
-                  Navigator.pop(ctx);
-                  _loadUsedParts();
-                  _loadInventory(); // Stok güncellendiği için yenile
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Parça eklendi ve stoktan düşüldü.')),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
-            },
-            child: const Text('Ekle'),
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('İptal'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (selectedInventoryId == null) return;
+                  try {
+                    await _stockService.addPartToTicket(
+                      widget.ticketId,
+                      selectedInventoryId!,
+                      quantity,
+                    );
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      _loadUsedParts();
+                      _loadInventory(); // Stok güncellendiği için yenile
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Parça eklendi ve stoktan düşüldü.'),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Hata: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Ekle'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -234,12 +246,12 @@ class _EditTicketPageState extends State<EditTicketPage> {
       }
     }
   }
-  
+
   Future<void> _loadPartners() async {
     try {
       final userService = UserService();
       final profile = await userService.getCurrentUserProfile();
-      
+
       // Sadece Admin ve Yöneticiler partner atayabilir
       if (profile != null && (profile.isAdmin || profile.isManager)) {
         final partners = await _partnerService.getAllPartners();
@@ -254,17 +266,18 @@ class _EditTicketPageState extends State<EditTicketPage> {
       debugPrint('Partner yükleme hatası: $e');
     }
   }
-  
+
   Future<void> _loadUserRole() async {
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
     if (user != null) {
       try {
-        final profile = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle();
+        final profile =
+            await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', user.id)
+                .maybeSingle();
         if (mounted) {
           setState(() {
             _userRole = profile != null ? profile['role'] as String? : null;
@@ -275,7 +288,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
       }
     }
   }
-  
+
   Future<void> _loadDriveBrands() async {
     try {
       final brands = await _stockService.getBrandsByCategory('Sürücü');
@@ -295,7 +308,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
       }
     }
   }
-  
+
   Future<void> _loadModelsForBrand(String brand, bool isAspirator) async {
     if (brand.isEmpty || brand == 'Diğer') {
       if (mounted) {
@@ -311,7 +324,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
       }
       return;
     }
-    
+
     try {
       final models = await _stockService.getBrandModels(brand, 'Sürücü');
       if (mounted) {
@@ -354,9 +367,10 @@ class _EditTicketPageState extends State<EditTicketPage> {
     final supabase = Supabase.instance.client;
 
     try {
-      final response = await supabase
-          .from('tickets')
-          .select('''
+      final response =
+          await supabase
+              .from('tickets')
+              .select('''
             *,
             customers (
               id,
@@ -365,8 +379,8 @@ class _EditTicketPageState extends State<EditTicketPage> {
               phone
             )
           ''')
-          .eq('id', _ticketIdQueryValue)
-          .maybeSingle();
+              .eq('id', _ticketIdQueryValue)
+              .maybeSingle();
 
       if (response == null) {
         if (mounted) {
@@ -393,9 +407,9 @@ class _EditTicketPageState extends State<EditTicketPage> {
           if (!validStatuses.contains(_status)) {
             _status = 'open';
           }
-          
+
           _priority = ticket['priority'] ?? 'normal';
-          
+
           if (ticket['planned_date'] != null) {
             _plannedDate = DateTime.tryParse(ticket['planned_date'] as String);
           }
@@ -408,28 +422,34 @@ class _EditTicketPageState extends State<EditTicketPage> {
           _selectedAspiratorBrand = ticket['aspirator_brand'];
           _selectedAspiratorKw = (ticket['aspirator_kw'] as num?)?.toDouble();
           _selectedAspiratorModel = ticket['aspirator_model'];
-          
+
           _selectedVantBrand = ticket['vant_brand'];
           _selectedVantKw = (ticket['vant_kw'] as num?)?.toDouble();
           _selectedVantModel = ticket['vant_model'];
-          
-          _kompresor1KwController.text = ticket['kompresor_kw_1']?.toString() ?? '';
-          _kompresor2KwController.text = ticket['kompresor_kw_2']?.toString() ?? '';
-          
+
+          _kompresor1KwController.text =
+              ticket['kompresor_kw_1']?.toString() ?? '';
+          _kompresor2KwController.text =
+              ticket['kompresor_kw_2']?.toString() ?? '';
+
           _selectedTandem = ticket['tandem'] ?? 'yok';
-          
+
           // Isıtıcı Bilgileri
           final isiticiKw = ticket['isitici_kw'];
           final isiticiKademe = ticket['isitici_kademe'] ?? 'yok';
-          _heaterExists = (isiticiKw != null || (isiticiKademe != null && isiticiKademe != 'yok')) ? 'Var' : 'Yok';
+          _heaterExists =
+              (isiticiKw != null ||
+                      (isiticiKademe != null && isiticiKademe != 'yok'))
+                  ? 'Var'
+                  : 'Yok';
           _selectedIsiticiKademe = isiticiKademe;
           if (isiticiKw != null) {
             _heaterKwController.text = isiticiKw.toString();
           }
-          
+
           // Partner Bilgileri
           _selectedPartnerId = ticket['partner_id'] as int?;
-          
+
           _dx = ticket['dx'] ?? false;
           _suluBatarya = ticket['sulu_batarya'] ?? false;
           _karisimDamper = ticket['karisim_damper'] ?? false;
@@ -439,9 +459,10 @@ class _EditTicketPageState extends State<EditTicketPage> {
 
           // Müşteri Bilgileri
           if (customer != null) {
-            _customerId = customer['id'] as String?; // String veya int olabilir, dikkat
+            _customerId =
+                customer['id'] as String?; // String veya int olabilir, dikkat
             if (customer['id'] is int) _customerId = customer['id'].toString();
-            
+
             _customerNameController.text = customer['name'] ?? '';
             _customerAddressController.text = customer['address'] ?? '';
             _customerPhoneController.text = customer['phone'] ?? '';
@@ -452,7 +473,8 @@ class _EditTicketPageState extends State<EditTicketPage> {
       }
 
       // Markalar yüklendikten sonra modelleri yükle (setState dışında)
-      if (_selectedAspiratorBrand != null && _selectedAspiratorBrand != 'Diğer') {
+      if (_selectedAspiratorBrand != null &&
+          _selectedAspiratorBrand != 'Diğer') {
         await _loadModelsForBrand(_selectedAspiratorBrand!, true);
       }
       if (_selectedVantBrand != null && _selectedVantBrand != 'Diğer') {
@@ -541,7 +563,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
     try {
       // 4. Adım: Stok Değişikliği Kontrolü (OTOMATİK STOK DÜŞME KALDIRILDI)
       // Artık manuel parça ekleme kullanılıyor.
-      
+
       final String? missingPartsString = null;
 
       // Müşteri bilgilerini güncelle
@@ -560,25 +582,36 @@ class _EditTicketPageState extends State<EditTicketPage> {
       // Isıtıcı verilerini hazırla
       final komp1Kw = _parseDouble(_kompresor1KwController.text);
       final komp2Kw = _parseDouble(_kompresor2KwController.text);
-      final heaterKw = (_heaterExists == 'Var') ? _parseDouble(_heaterKwController.text) : null;
-      final heaterStage = (_heaterExists == 'Var') ? _selectedIsiticiKademe : 'yok';
+      final heaterKw =
+          (_heaterExists == 'Var')
+              ? _parseDouble(_heaterKwController.text)
+              : null;
+      final heaterStage =
+          (_heaterExists == 'Var') ? _selectedIsiticiKademe : 'yok';
 
       // PDF Yükleme İşlemi
       String? pdfUrl;
       if (_selectedPdf != null) {
         try {
           final fileBytes = _selectedPdf!.bytes;
-          final fileName = '${DateTime.now().millisecondsSinceEpoch}_${_selectedPdf!.name}';
-          
+          final fileName =
+              '${DateTime.now().millisecondsSinceEpoch}_${_selectedPdf!.name}';
+
           if (fileBytes != null) {
-            await supabase.storage.from('ticket-files').uploadBinary(
-              fileName,
-              fileBytes,
-              fileOptions: const FileOptions(contentType: 'application/pdf'),
-            );
-            
+            await supabase.storage
+                .from('ticket-files')
+                .uploadBinary(
+                  fileName,
+                  fileBytes,
+                  fileOptions: const FileOptions(
+                    contentType: 'application/pdf',
+                  ),
+                );
+
             // Public URL al
-            pdfUrl = supabase.storage.from('ticket-files').getPublicUrl(fileName);
+            pdfUrl = supabase.storage
+                .from('ticket-files')
+                .getPublicUrl(fileName);
           }
         } catch (e) {
           debugPrint('PDF yükleme hatası: $e');
@@ -602,9 +635,10 @@ class _EditTicketPageState extends State<EditTicketPage> {
             'priority': _priority,
             'partner_id': _selectedPartnerId,
             'planned_date': _plannedDate?.toIso8601String(),
-            'job_code': _jobCodeController.text.trim().isEmpty
-                ? null
-                : _jobCodeController.text.trim(),
+            'job_code':
+                _jobCodeController.text.trim().isEmpty
+                    ? null
+                    : _jobCodeController.text.trim(),
             'device_model': _selectedDeviceModel,
             'plc_model': _selectedPlcModel,
             'hmi_brand': _selectedHmiBrand,
@@ -674,271 +708,440 @@ class _EditTicketPageState extends State<EditTicketPage> {
         ),
         centerTitle: true,
       ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: _corporateNavy))
-        : SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1000),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_errorMessage != null)
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 24),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            border: Border.all(color: Colors.red.shade200),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
-                        ),
-
-                      Row(
+      body:
+          _isLoading
+              ? const Center(
+                child: CircularProgressIndicator(color: _corporateNavy),
+              )
+              : SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1000),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            flex: isWide ? 3 : 1,
-                            child: Column(
-                              children: [
-                                _buildContentCard(
-                                  title: 'İŞ BİLGİLERİ',
-                                  icon: Icons.work_outline,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(flex: 2, child: _buildTextField(controller: _titleController, label: 'İş Başlığı', isRequired: true)),
-                                        const SizedBox(width: 16),
-                                        Expanded(flex: 1, child: _buildTextField(controller: _jobCodeController, label: 'İş Kodu')),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _buildTextField(controller: _descriptionController, label: 'İş Açıklaması', maxLines: 3),
-                                    const SizedBox(height: 16),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: DropdownButtonFormField<String>(
-                                            isExpanded: true,
-                                            value: _status,
-                                            decoration: _inputDecoration('Durum'),
-                                            items: [
-                                              // Admin ve manager'lar için draft seçeneği
-                                              if (_userRole == 'admin' || _userRole == 'manager')
-                                                const DropdownMenuItem(value: 'draft', child: Text('Taslak (Gizli)')),
-                                              const DropdownMenuItem(value: 'open', child: Text('Açık')),
-                                              const DropdownMenuItem(value: 'done', child: Text('Bitti')),
-                                            ],
-                                            onChanged: (val) => setState(() => _status = val!),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 16),
-                                        Expanded(
-                                          child: DropdownButtonFormField<String>(
-                                            isExpanded: true,
-                                            value: _priority,
-                                            decoration: _inputDecoration('Öncelik'),
-                                            items: const [
-                                              DropdownMenuItem(value: 'low', child: Text('Düşük')),
-                                              DropdownMenuItem(value: 'normal', child: Text('Normal')),
-                                              DropdownMenuItem(value: 'high', child: Text('Yüksek')),
-                                            ],
-                                            onChanged: (val) => setState(() => _priority = val!),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _buildDatePicker(),
-                                    const SizedBox(height: 16),
-                                    // PDF Seçici
-                                    InkWell(
-                                      onTap: _pickPdf,
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                        decoration: BoxDecoration(
-                                          border: Border.all(color: Colors.grey.shade300),
-                                          borderRadius: BorderRadius.circular(8),
-                                          color: _backgroundGrey.withOpacity(0.5),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            const Icon(Icons.picture_as_pdf, color: Colors.red, size: 20),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  const Text(
-                                                    'Ek Döküman (PDF)',
-                                                    style: TextStyle(fontSize: 11, color: _textLight),
-                                                  ),
-                                                  const SizedBox(height: 2),
-                                                  Text(
-                                                    _selectedPdf != null ? _selectedPdf!.name : 'Dosya seçilmedi',
-                                                    style: TextStyle(
-                                                      color: _selectedPdf != null ? _textDark : _textLight,
-                                                      fontWeight: FontWeight.w600,
-                                                      fontSize: 14,
-                                                    ),
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            if (_selectedPdf != null)
-                                              IconButton(
-                                                icon: const Icon(Icons.close, color: Colors.red),
-                                                onPressed: () => setState(() => _selectedPdf = null),
-                                              )
-                                            else
-                                              const Icon(Icons.attach_file, color: _textLight),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 24),
-                                _buildContentCard(
-                                  title: 'MÜŞTERİ BİLGİLERİ',
-                                  icon: Icons.person_outline,
-                                  children: [
-                                    // --- PARTNER FİRMA SEÇİMİ (Sadece Yetkililer İçin) ---
-                                    if (_canAssignPartner && _partners.isNotEmpty) ...[
-                                      _buildDropdown<int?>(
-                                        label: 'Partner Firma Ataması (Opsiyonel)',
-                                        value: _selectedPartnerId,
-                                        items: [null, ..._partners.map((p) => p.id)],
-                                        itemLabelBuilder: (val) {
-                                          if (val == null) return 'Atama Yapılmayacak (Doğrudan Müşteri)';
-                                          final p = _partners.firstWhere(
-                                            (element) => element.id == val,
-                                            orElse: () => Partner(id: -1, name: 'Bilinmeyen')
-                                          );
-                                          return p.name;
-                                        },
-                                        onChanged: (val) {
-                                          setState(() {
-                                            _selectedPartnerId = val;
-                                          });
-                                        },
-                                      ),
-                                      const SizedBox(height: 16),
-                                      const Divider(),
-                                      const SizedBox(height: 16),
-                                    ],
-
-                                    Row(
-                                      children: [
-                                        Expanded(child: _buildTextField(controller: _customerNameController, label: 'Müşteri Adı / Firma', icon: Icons.business, isRequired: true)),
-                                        const SizedBox(width: 16),
-                                        Expanded(child: _buildTextField(controller: _customerPhoneController, label: 'Telefon', icon: Icons.phone, keyboardType: TextInputType.phone)),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _buildTextField(controller: _customerAddressController, label: 'Adres', icon: Icons.location_on_outlined, maxLines: 2),
-                                  ],
-                                ),
-                                const SizedBox(height: 24),
-                                // --- KULLANILAN MALZEMELER (YENİ) ---
-                                _buildContentCard(
-                                  title: 'KULLANILAN MALZEMELER',
-                                  icon: Icons.inventory_2_outlined,
-                                  children: [
-                                    if (_isLoadingParts)
-                                      const Center(child: CircularProgressIndicator())
-                                    else if (_usedParts.isEmpty)
-                                      const Center(child: Text('Henüz malzeme eklenmemiş.', style: TextStyle(color: Colors.grey)))
-                                    else
-                                      ListView.separated(
-                                        shrinkWrap: true,
-                                        physics: const NeverScrollableScrollPhysics(),
-                                        itemCount: _usedParts.length,
-                                        separatorBuilder: (_, __) => const Divider(),
-                                        itemBuilder: (context, index) {
-                                          final part = _usedParts[index];
-                                          return ListTile(
-                                            contentPadding: EdgeInsets.zero,
-                                            title: Text(part.inventoryName ?? 'Bilinmeyen Ürün', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                            subtitle: Text('${part.quantity} Adet', style: const TextStyle(color: Colors.blue)),
-                                            trailing: IconButton(
-                                              icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                              onPressed: () => _removePart(part.id),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    const SizedBox(height: 16),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: OutlinedButton.icon(
-                                        onPressed: _addPartDialog,
-                                        icon: const Icon(Icons.add),
-                                        label: const Text('Parça Ekle'),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          
-                          if (isWide) const SizedBox(width: 24),
-                          
-                          if (isWide)
-                            Expanded(
-                              flex: 2,
-                              child: Column(
-                                children: [
-                                  _buildTechnicalInfoCard(),
-                                  const SizedBox(height: 24),
-                                  _buildHeaterInfoCard(),
-                                  const SizedBox(height: 24),
-                                  _buildHardwareFeaturesCard(),
-                                ],
+                          if (_errorMessage != null)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 24),
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                border: Border.all(color: Colors.red.shade200),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                _errorMessage!,
+                                style: const TextStyle(color: Colors.red),
                               ),
                             ),
+
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: isWide ? 3 : 1,
+                                child: Column(
+                                  children: [
+                                    _buildContentCard(
+                                      title: 'İŞ BİLGİLERİ',
+                                      icon: Icons.work_outline,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              flex: 2,
+                                              child: _buildTextField(
+                                                controller: _titleController,
+                                                label: 'İş Başlığı',
+                                                isRequired: true,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            Expanded(
+                                              flex: 1,
+                                              child: _buildTextField(
+                                                controller: _jobCodeController,
+                                                label: 'İş Kodu',
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildTextField(
+                                          controller: _descriptionController,
+                                          label: 'İş Açıklaması',
+                                          maxLines: 3,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: DropdownButtonFormField<
+                                                String
+                                              >(
+                                                isExpanded: true,
+                                                value: _status,
+                                                decoration: _inputDecoration(
+                                                  'Durum',
+                                                ),
+                                                items: [
+                                                  // Admin ve manager'lar için draft seçeneği
+                                                  if (_userRole == 'admin' ||
+                                                      _userRole == 'manager')
+                                                    const DropdownMenuItem(
+                                                      value: 'draft',
+                                                      child: Text(
+                                                        'Taslak (Gizli)',
+                                                      ),
+                                                    ),
+                                                  const DropdownMenuItem(
+                                                    value: 'open',
+                                                    child: Text('Açık'),
+                                                  ),
+                                                  const DropdownMenuItem(
+                                                    value: 'done',
+                                                    child: Text('Bitti'),
+                                                  ),
+                                                ],
+                                                onChanged:
+                                                    (val) => setState(
+                                                      () => _status = val!,
+                                                    ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            Expanded(
+                                              child: DropdownButtonFormField<
+                                                String
+                                              >(
+                                                isExpanded: true,
+                                                value: _priority,
+                                                decoration: _inputDecoration(
+                                                  'Öncelik',
+                                                ),
+                                                items: const [
+                                                  DropdownMenuItem(
+                                                    value: 'low',
+                                                    child: Text('Düşük'),
+                                                  ),
+                                                  DropdownMenuItem(
+                                                    value: 'normal',
+                                                    child: Text('Normal'),
+                                                  ),
+                                                  DropdownMenuItem(
+                                                    value: 'high',
+                                                    child: Text('Yüksek'),
+                                                  ),
+                                                ],
+                                                onChanged:
+                                                    (val) => setState(
+                                                      () => _priority = val!,
+                                                    ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildDatePicker(),
+                                        const SizedBox(height: 16),
+                                        // PDF Seçici
+                                        InkWell(
+                                          onTap: _pickPdf,
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 16,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              border: Border.all(
+                                                color: Colors.grey.shade300,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              color: _backgroundGrey
+                                                  .withOpacity(0.5),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.picture_as_pdf,
+                                                  color: Colors.red,
+                                                  size: 20,
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      const Text(
+                                                        'Ek Döküman (PDF)',
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: _textLight,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        _selectedPdf != null
+                                                            ? _selectedPdf!.name
+                                                            : 'Dosya seçilmedi',
+                                                        style: TextStyle(
+                                                          color:
+                                                              _selectedPdf !=
+                                                                      null
+                                                                  ? _textDark
+                                                                  : _textLight,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          fontSize: 14,
+                                                        ),
+                                                        overflow:
+                                                            TextOverflow
+                                                                .ellipsis,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                if (_selectedPdf != null)
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                      Icons.close,
+                                                      color: Colors.red,
+                                                    ),
+                                                    onPressed:
+                                                        () => setState(
+                                                          () =>
+                                                              _selectedPdf =
+                                                                  null,
+                                                        ),
+                                                  )
+                                                else
+                                                  const Icon(
+                                                    Icons.attach_file,
+                                                    color: _textLight,
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 24),
+                                    _buildContentCard(
+                                      title: 'MÜŞTERİ BİLGİLERİ',
+                                      icon: Icons.person_outline,
+                                      children: [
+                                        // --- PARTNER FİRMA SEÇİMİ (Sadece Yetkililer İçin) ---
+                                        if (_canAssignPartner &&
+                                            _partners.isNotEmpty) ...[
+                                          _buildDropdown<int?>(
+                                            label:
+                                                'Partner Firma Ataması (Opsiyonel)',
+                                            value: _selectedPartnerId,
+                                            items: [
+                                              null,
+                                              ..._partners.map((p) => p.id),
+                                            ],
+                                            itemLabelBuilder: (val) {
+                                              if (val == null)
+                                                return 'Atama Yapılmayacak (Doğrudan Müşteri)';
+                                              final p = _partners.firstWhere(
+                                                (element) => element.id == val,
+                                                orElse:
+                                                    () => Partner(
+                                                      id: -1,
+                                                      name: 'Bilinmeyen',
+                                                    ),
+                                              );
+                                              return p.name;
+                                            },
+                                            onChanged: (val) {
+                                              setState(() {
+                                                _selectedPartnerId = val;
+                                              });
+                                            },
+                                          ),
+                                          const SizedBox(height: 16),
+                                          const Divider(),
+                                          const SizedBox(height: 16),
+                                        ],
+
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: _buildTextField(
+                                                controller:
+                                                    _customerNameController,
+                                                label: 'Müşteri Adı / Firma',
+                                                icon: Icons.business,
+                                                isRequired: true,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            Expanded(
+                                              child: _buildTextField(
+                                                controller:
+                                                    _customerPhoneController,
+                                                label: 'Telefon',
+                                                icon: Icons.phone,
+                                                keyboardType:
+                                                    TextInputType.phone,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildTextField(
+                                          controller:
+                                              _customerAddressController,
+                                          label: 'Adres',
+                                          icon: Icons.location_on_outlined,
+                                          maxLines: 2,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 24),
+                                    // --- KULLANILAN MALZEMELER (YENİ) ---
+                                    _buildContentCard(
+                                      title: 'KULLANILAN MALZEMELER',
+                                      icon: Icons.inventory_2_outlined,
+                                      children: [
+                                        if (_isLoadingParts)
+                                          const Center(
+                                            child: CircularProgressIndicator(),
+                                          )
+                                        else if (_usedParts.isEmpty)
+                                          const Center(
+                                            child: Text(
+                                              'Henüz malzeme eklenmemiş.',
+                                              style: TextStyle(
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                          )
+                                        else
+                                          ListView.separated(
+                                            shrinkWrap: true,
+                                            physics:
+                                                const NeverScrollableScrollPhysics(),
+                                            itemCount: _usedParts.length,
+                                            separatorBuilder:
+                                                (_, __) => const Divider(),
+                                            itemBuilder: (context, index) {
+                                              final part = _usedParts[index];
+                                              return ListTile(
+                                                contentPadding: EdgeInsets.zero,
+                                                title: Text(
+                                                  part.inventoryName ??
+                                                      'Bilinmeyen Ürün',
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                                subtitle: Text(
+                                                  '${part.quantity} Adet',
+                                                  style: const TextStyle(
+                                                    color: Colors.blue,
+                                                  ),
+                                                ),
+                                                trailing: IconButton(
+                                                  icon: const Icon(
+                                                    Icons.delete_outline,
+                                                    color: Colors.red,
+                                                  ),
+                                                  onPressed:
+                                                      () =>
+                                                          _removePart(part.id),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        const SizedBox(height: 16),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: OutlinedButton.icon(
+                                            onPressed: _addPartDialog,
+                                            icon: const Icon(Icons.add),
+                                            label: const Text('Parça Ekle'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              if (isWide) const SizedBox(width: 24),
+
+                              if (isWide)
+                                Expanded(
+                                  flex: 2,
+                                  child: Column(
+                                    children: [
+                                      _buildTechnicalInfoCard(),
+                                      const SizedBox(height: 24),
+                                      _buildHeaterInfoCard(),
+                                      const SizedBox(height: 24),
+                                      _buildHardwareFeaturesCard(),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+
+                          if (!isWide) ...[
+                            const SizedBox(height: 24),
+                            _buildTechnicalInfoCard(),
+                            const SizedBox(height: 24),
+                            _buildHeaterInfoCard(),
+                            const SizedBox(height: 24),
+                            _buildHardwareFeaturesCard(),
+                          ],
+
+                          const SizedBox(height: 40),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: _isSaving ? null : _save,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _corporateNavy,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child:
+                                  _isSaving
+                                      ? const CircularProgressIndicator(
+                                        color: Colors.white,
+                                      )
+                                      : const Text(
+                                        'KAYDET',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 1,
+                                        ),
+                                      ),
+                            ),
+                          ),
+                          const SizedBox(height: 50),
                         ],
                       ),
-
-                      if (!isWide) ...[
-                        const SizedBox(height: 24),
-                        _buildTechnicalInfoCard(),
-                        const SizedBox(height: 24),
-                        _buildHeaterInfoCard(),
-                        const SizedBox(height: 24),
-                        _buildHardwareFeaturesCard(),
-                      ],
-
-                      const SizedBox(height: 40),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: _isSaving ? null : _save,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _corporateNavy,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: _isSaving
-                              ? const CircularProgressIndicator(color: Colors.white)
-                              : const Text('KAYDET', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                        ),
-                      ),
-                      const SizedBox(height: 50),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
     );
   }
 
@@ -975,14 +1178,27 @@ class _EditTicketPageState extends State<EditTicketPage> {
               child: _buildDropdown(
                 label: 'PLC Marka/Model',
                 value: _selectedPlcModel,
-                items: const ['Havkon Cpx.139', 'Havkon Cpx.119', 'ABB FBX', 'ABB CBX', 'ABB CBT'],
+                items: const [
+                  'Havkon Cpx.139',
+                  'Havkon Cpx.119',
+                  'ABB FBX',
+                  'ABB CBX',
+                  'ABB CBT',
+                ],
                 onChanged: (val) => setState(() => _selectedPlcModel = val),
               ),
             ),
           ],
         ),
         const SizedBox(height: 24),
-        const Text('HMI Ekran Bilgileri', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _textLight)),
+        const Text(
+          'HMI Ekran Bilgileri',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: _textLight,
+          ),
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -1007,7 +1223,14 @@ class _EditTicketPageState extends State<EditTicketPage> {
           ],
         ),
         const SizedBox(height: 16),
-        const Text('Aspiratör Sürücü Bilgileri', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _textLight)),
+        const Text(
+          'Aspiratör Sürücü Bilgileri',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: _textLight,
+          ),
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -1019,7 +1242,8 @@ class _EditTicketPageState extends State<EditTicketPage> {
                 onChanged: (val) async {
                   setState(() {
                     _selectedAspiratorBrand = val;
-                    _selectedAspiratorModel = null; // Marka değişince modeli sıfırla
+                    _selectedAspiratorModel =
+                        null; // Marka değişince modeli sıfırla
                   });
                   await _loadModelsForBrand(val ?? '', true);
                 },
@@ -1027,16 +1251,21 @@ class _EditTicketPageState extends State<EditTicketPage> {
             ),
             const SizedBox(width: 12),
             // Model seçimi (sadece modeller varsa göster)
-            if (_selectedAspiratorBrand != null && _selectedAspiratorBrand != 'Diğer' && _availableAspiratorModels.isNotEmpty)
+            if (_selectedAspiratorBrand != null &&
+                _selectedAspiratorBrand != 'Diğer' &&
+                _availableAspiratorModels.isNotEmpty)
               Expanded(
                 child: _buildDropdown(
                   label: 'Model',
                   value: _selectedAspiratorModel,
                   items: _availableAspiratorModels,
-                  onChanged: (val) => setState(() => _selectedAspiratorModel = val),
+                  onChanged:
+                      (val) => setState(() => _selectedAspiratorModel = val),
                 ),
               ),
-            if (_selectedAspiratorBrand != null && _selectedAspiratorBrand != 'Diğer' && _availableAspiratorModels.isNotEmpty)
+            if (_selectedAspiratorBrand != null &&
+                _selectedAspiratorBrand != 'Diğer' &&
+                _availableAspiratorModels.isNotEmpty)
               const SizedBox(width: 12),
             Expanded(
               child: _buildDropdown<dynamic>(
@@ -1050,7 +1279,14 @@ class _EditTicketPageState extends State<EditTicketPage> {
           ],
         ),
         const SizedBox(height: 16),
-        const Text('Vantilatör Sürücü Bilgileri', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _textLight)),
+        const Text(
+          'Vantilatör Sürücü Bilgileri',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: _textLight,
+          ),
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -1070,7 +1306,9 @@ class _EditTicketPageState extends State<EditTicketPage> {
             ),
             const SizedBox(width: 12),
             // Model seçimi (sadece modeller varsa göster)
-            if (_selectedVantBrand != null && _selectedVantBrand != 'Diğer' && _availableVantModels.isNotEmpty)
+            if (_selectedVantBrand != null &&
+                _selectedVantBrand != 'Diğer' &&
+                _availableVantModels.isNotEmpty)
               Expanded(
                 child: _buildDropdown(
                   label: 'Model',
@@ -1079,7 +1317,9 @@ class _EditTicketPageState extends State<EditTicketPage> {
                   onChanged: (val) => setState(() => _selectedVantModel = val),
                 ),
               ),
-            if (_selectedVantBrand != null && _selectedVantBrand != 'Diğer' && _availableVantModels.isNotEmpty)
+            if (_selectedVantBrand != null &&
+                _selectedVantBrand != 'Diğer' &&
+                _availableVantModels.isNotEmpty)
               const SizedBox(width: 12),
             Expanded(
               child: _buildDropdown<dynamic>(
@@ -1095,13 +1335,34 @@ class _EditTicketPageState extends State<EditTicketPage> {
         const SizedBox(height: 24),
         const Divider(),
         const SizedBox(height: 16),
-        const Text('Kompresör Güçleri', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _textLight)),
+        const Text(
+          'Kompresör Güçleri',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: _textLight,
+          ),
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
-            Expanded(child: _buildTextField(controller: _kompresor1KwController, label: 'Komp. 1', isNumeric: true, suffixText: 'kW')),
+            Expanded(
+              child: _buildTextField(
+                controller: _kompresor1KwController,
+                label: 'Komp. 1',
+                isNumeric: true,
+                suffixText: 'kW',
+              ),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: _buildTextField(controller: _kompresor2KwController, label: 'Komp. 2', isNumeric: true, suffixText: 'kW')),
+            Expanded(
+              child: _buildTextField(
+                controller: _kompresor2KwController,
+                label: 'Komp. 2',
+                isNumeric: true,
+                suffixText: 'kW',
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -1112,7 +1373,11 @@ class _EditTicketPageState extends State<EditTicketPage> {
                 label: 'Tandem',
                 value: _selectedTandem,
                 items: const ['yok', '1', '2'],
-                itemLabels: const {'yok': 'Yok', '1': '1 Tandem', '2': '2 Tandem'},
+                itemLabels: const {
+                  'yok': 'Yok',
+                  '1': '1 Tandem',
+                  '2': '2 Tandem',
+                },
                 onChanged: (val) => setState(() => _selectedTandem = val!),
               ),
             ),
@@ -1132,11 +1397,31 @@ class _EditTicketPageState extends State<EditTicketPage> {
           runSpacing: 12,
           children: [
             _buildFeatureChip('DX', _dx, (val) => setState(() => _dx = val)),
-            _buildFeatureChip('Sulu Batarya', _suluBatarya, (val) => setState(() => _suluBatarya = val)),
-            _buildFeatureChip('Karışım Damper', _karisimDamper, (val) => setState(() => _karisimDamper = val)),
-            _buildFeatureChip('Nemlendirici', _nemlendirici, (val) => setState(() => _nemlendirici = val)),
-            _buildFeatureChip('Rotor', _rotor, (val) => setState(() => _rotor = val)),
-            _buildFeatureChip('Brülör', _brulor, (val) => setState(() => _brulor = val)),
+            _buildFeatureChip(
+              'Sulu Batarya',
+              _suluBatarya,
+              (val) => setState(() => _suluBatarya = val),
+            ),
+            _buildFeatureChip(
+              'Karışım Damper',
+              _karisimDamper,
+              (val) => setState(() => _karisimDamper = val),
+            ),
+            _buildFeatureChip(
+              'Nemlendirici',
+              _nemlendirici,
+              (val) => setState(() => _nemlendirici = val),
+            ),
+            _buildFeatureChip(
+              'Rotor',
+              _rotor,
+              (val) => setState(() => _rotor = val),
+            ),
+            _buildFeatureChip(
+              'Brülör',
+              _brulor,
+              (val) => setState(() => _brulor = val),
+            ),
           ],
         ),
       ],
@@ -1185,9 +1470,10 @@ class _EditTicketPageState extends State<EditTicketPage> {
                     '3': '3 Kademe',
                     '4': '4 Kademe',
                     '5': '5 Kademe',
-                    '6': '6 Kademe'
+                    '6': '6 Kademe',
                   },
-                  onChanged: (val) => setState(() => _selectedIsiticiKademe = val!),
+                  onChanged:
+                      (val) => setState(() => _selectedIsiticiKademe = val!),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1206,7 +1492,11 @@ class _EditTicketPageState extends State<EditTicketPage> {
     );
   }
 
-  Widget _buildContentCard({required String title, required IconData icon, required List<Widget> children}) {
+  Widget _buildContentCard({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
     // Tema kontrolü
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF1E293B) : _surfaceWhite;
@@ -1219,7 +1509,11 @@ class _EditTicketPageState extends State<EditTicketPage> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -1244,13 +1538,24 @@ class _EditTicketPageState extends State<EditTicketPage> {
             ),
           ),
           const Divider(height: 1),
-          Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children)),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: children,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  InputDecoration _inputDecoration(String label, {String? hint, IconData? icon, String? suffixText}) {
+  InputDecoration _inputDecoration(
+    String label, {
+    String? hint,
+    IconData? icon,
+    String? suffixText,
+  }) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
@@ -1259,24 +1564,48 @@ class _EditTicketPageState extends State<EditTicketPage> {
       hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
       prefixIcon: icon != null ? Icon(icon, size: 20, color: _textLight) : null,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _corporateNavy, width: 1.5)),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _corporateNavy, width: 1.5),
+      ),
       filled: true,
       fillColor: _backgroundGrey.withOpacity(0.5),
     );
   }
 
-  Widget _buildTextField({required TextEditingController controller, required String label, String? hint, IconData? icon, bool isRequired = false, int maxLines = 1, bool isNumeric = false, String? suffixText, TextInputType? keyboardType}) {
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    String? hint,
+    IconData? icon,
+    bool isRequired = false,
+    int maxLines = 1,
+    bool isNumeric = false,
+    String? suffixText,
+    TextInputType? keyboardType,
+  }) {
     // Tema kontrolü
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fillColor = isDark ? const Color(0xFF334155) : _backgroundGrey.withOpacity(0.5);
+    final fillColor =
+        isDark ? const Color(0xFF334155) : _backgroundGrey.withOpacity(0.5);
     final textColor = isDark ? Colors.white : _textDark;
 
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
-      keyboardType: keyboardType ?? (isNumeric ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text),
+      keyboardType:
+          keyboardType ??
+          (isNumeric
+              ? const TextInputType.numberWithOptions(decimal: true)
+              : TextInputType.text),
       style: TextStyle(color: textColor, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
@@ -1284,8 +1613,12 @@ class _EditTicketPageState extends State<EditTicketPage> {
         suffixText: suffixText,
         labelStyle: const TextStyle(color: _textLight, fontSize: 13),
         hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-        prefixIcon: icon != null ? Icon(icon, size: 20, color: _textLight) : null,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        prefixIcon:
+            icon != null ? Icon(icon, size: 20, color: _textLight) : null,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: Colors.grey.shade300),
@@ -1301,11 +1634,25 @@ class _EditTicketPageState extends State<EditTicketPage> {
         filled: true,
         fillColor: fillColor,
       ),
-      validator: isRequired ? (val) => (val == null || val.trim().isEmpty) ? '$label zorunludur.' : null : null,
+      validator:
+          isRequired
+              ? (val) =>
+                  (val == null || val.trim().isEmpty)
+                      ? '$label zorunludur.'
+                      : null
+              : null,
     );
   }
 
-  Widget _buildDropdown<T>({required String label, required T? value, required List<T> items, Map<T, String>? itemLabels, String Function(T)? itemLabelBuilder, required Function(T?) onChanged, bool isRequired = false}) {
+  Widget _buildDropdown<T>({
+    required String label,
+    required T? value,
+    required List<T> items,
+    Map<T, String>? itemLabels,
+    String Function(T)? itemLabelBuilder,
+    required Function(T?) onChanged,
+    bool isRequired = false,
+  }) {
     // Eğer gelen değer listede yoksa null yap (Hata vermemesi için)
     T? safeValue;
     if (value != null) {
@@ -1320,7 +1667,8 @@ class _EditTicketPageState extends State<EditTicketPage> {
     // Tema kontrolü - Dark mode uyumluluğu için
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dropdownColor = isDark ? const Color(0xFF1E293B) : _surfaceWhite;
-    final fillColor = isDark ? const Color(0xFF334155) : _backgroundGrey.withOpacity(0.5);
+    final fillColor =
+        isDark ? const Color(0xFF334155) : _backgroundGrey.withOpacity(0.5);
     final textColor = isDark ? Colors.white : Colors.black;
 
     return DropdownButtonFormField<T>(
@@ -1330,7 +1678,10 @@ class _EditTicketPageState extends State<EditTicketPage> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(color: _textLight, fontSize: 13),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: Colors.grey.shade300),
@@ -1346,32 +1697,35 @@ class _EditTicketPageState extends State<EditTicketPage> {
         filled: true,
         fillColor: fillColor,
       ),
-      items: items.toSet().map((item) {
-        String text;
-        if (itemLabels != null) {
-          text = itemLabels[item] ?? item.toString();
-        } else if (itemLabelBuilder != null) {
-          text = itemLabelBuilder(item);
-        } else {
-          text = item.toString();
-        }
-        return DropdownMenuItem<T>(
-          value: item,
-          child: Text(
-            text,
-            style: TextStyle(color: textColor),
-          ),
-        );
-      }).toList(),
-      onChanged: onChanged,
-      validator: isRequired
-          ? (val) {
-              if (val == null) return '$label seçilmelidir.';
-              if (val is String && val.isEmpty) return '$label seçilmelidir.';
-              return null;
+      items:
+          items.toSet().map((item) {
+            String text;
+            if (itemLabels != null) {
+              text = itemLabels[item] ?? item.toString();
+            } else if (itemLabelBuilder != null) {
+              text = itemLabelBuilder(item);
+            } else {
+              text = item.toString();
             }
-          : null,
-      style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w500),
+            return DropdownMenuItem<T>(
+              value: item,
+              child: Text(text, style: TextStyle(color: textColor)),
+            );
+          }).toList(),
+      onChanged: onChanged,
+      validator:
+          isRequired
+              ? (val) {
+                if (val == null) return '$label seçilmelidir.';
+                if (val is String && val.isEmpty) return '$label seçilmelidir.';
+                return null;
+              }
+              : null,
+      style: TextStyle(
+        color: textColor,
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+      ),
     );
   }
 
@@ -1383,15 +1737,28 @@ class _EditTicketPageState extends State<EditTicketPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           color: value ? _corporateNavy : Colors.transparent,
-          border: Border.all(color: value ? _corporateNavy : Colors.grey.shade300),
+          border: Border.all(
+            color: value ? _corporateNavy : Colors.grey.shade300,
+          ),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(value ? Icons.check : Icons.add, size: 16, color: value ? Colors.white : _textLight),
+            Icon(
+              value ? Icons.check : Icons.add,
+              size: 16,
+              color: value ? Colors.white : _textLight,
+            ),
             const SizedBox(width: 8),
-            Text(label, style: TextStyle(color: value ? Colors.white : _textLight, fontWeight: value ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
+            Text(
+              label,
+              style: TextStyle(
+                color: value ? Colors.white : _textLight,
+                fontWeight: value ? FontWeight.bold : FontWeight.normal,
+                fontSize: 13,
+              ),
+            ),
           ],
         ),
       ),
@@ -1399,23 +1766,44 @@ class _EditTicketPageState extends State<EditTicketPage> {
   }
 
   Widget _buildDatePicker() {
-    final dateText = _plannedDate == null ? 'Tarih seçilmedi' : '${_plannedDate!.day}.${_plannedDate!.month}.${_plannedDate!.year}';
+    final dateText =
+        _plannedDate == null
+            ? 'Tarih seçilmedi'
+            : '${_plannedDate!.day}.${_plannedDate!.month}.${_plannedDate!.year}';
     return InkWell(
       onTap: _pickDate,
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8), color: _backgroundGrey.withOpacity(0.5)),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(8),
+          color: _backgroundGrey.withOpacity(0.5),
+        ),
         child: Row(
           children: [
-            const Icon(Icons.calendar_today_outlined, color: _textLight, size: 20),
+            const Icon(
+              Icons.calendar_today_outlined,
+              color: _textLight,
+              size: 20,
+            ),
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Planlanan Tarih', style: TextStyle(fontSize: 11, color: _textLight)),
+                const Text(
+                  'Planlanan Tarih',
+                  style: TextStyle(fontSize: 11, color: _textLight),
+                ),
                 const SizedBox(height: 2),
-                Text(dateText, style: TextStyle(color: _plannedDate == null ? _textLight : _textDark, fontWeight: FontWeight.w600, fontSize: 14)),
+                Text(
+                  dateText,
+                  style: TextStyle(
+                    color: _plannedDate == null ? _textLight : _textDark,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
               ],
             ),
             const Spacer(),

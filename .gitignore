@@ -64,6 +64,7 @@ windows/CMakeFiles/
 windows/**/CMakeFiles/
 windows/**/cmake_install.cmake
 windows/**/CMakeCache.txt
+windows/runner/RC*
 
 # Installer outputs
 installer/

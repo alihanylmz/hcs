@@ -4,8 +4,10 @@ import 'ticket_list_page.dart';
 import 'ticket_detail_page.dart';
 import 'partner_management_page.dart';
 import 'user_management_page.dart';
+import '../features/admin/application/admin_access_controller.dart';
+import '../widgets/access_denied_view.dart';
 import '../widgets/sidebar/app_layout.dart';
-import '../services/user_service.dart';
+import '../services/permission_service.dart';
 import '../services/partner_service.dart';
 import '../models/user_profile.dart';
 import '../theme/app_colors.dart';
@@ -19,7 +21,7 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   final _supabase = Supabase.instance.client;
-  final _userService = UserService();
+  final _adminAccessController = AdminAccessController();
   final PartnerService _partnerService = PartnerService();
   
   // User Profile - Loaded first
@@ -52,11 +54,21 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _initDashboard() async {
     try {
       // Step 1: Load user profile first (CRITICAL)
-      final profile = await _userService.getCurrentUserProfile();
+      final accessState = await _adminAccessController.load();
+      final profile = accessState.profile;
       
       if (!mounted) return;
+
+      if (accessState.profile == null) {
+        setState(() {
+          _errorMessage =
+              accessState.errorMessage ?? 'Kullanici profili bulunamadi.';
+          _isLoading = false;
+        });
+        return;
+      }
       
-      if (profile == null) {
+      if (!accessState.hasAccess) {
         setState(() {
           _errorMessage = 'Kullanıcı profili bulunamadı.';
           _isLoading = false;
@@ -233,8 +245,8 @@ class _DashboardPageState extends State<DashboardPage> {
       if (mounted) {
         setState(() {
           // Extract counts from Supabase count responses
-          _monthlyTicketCount = monthlyTicketsCount.count ?? 0;
-          _openTicketCount = openTicketsCount.count ?? 0;
+          _monthlyTicketCount = monthlyTicketsCount.count;
+          _openTicketCount = openTicketsCount.count;
           _recentOpenCount = recentOpen;
           _recentInProgressCount = recentInProgress;
           _recentPanelStockCount = recentPanelStock;
@@ -294,6 +306,18 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 900;
+
+    if (!_isLoading && !PermissionService.canAccessAdminArea(_currentUser)) {
+      return AppLayout(
+        currentPage: AppPage.dashboard,
+        userName: _currentUser?.displayName,
+        userRole: _currentUser?.role,
+        title: 'Yetkisiz Erişim',
+        child: const AccessDeniedView(
+          message: 'Yonetici panelini yalnizca admin ve manager kullanicilar acabilir.',
+        ),
+      );
+    }
 
     return AppLayout(
       currentPage: AppPage.dashboard,

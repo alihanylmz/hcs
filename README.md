@@ -1,16 +1,28 @@
 # istakip_app
 
-A new Flutter project.
+Flutter tabanli is takip, servis operasyonu, partner yonetimi ve takim/Kanban uygulamasi.
 
-## Getting Started
+## Local Run
 
-This project is a starting point for a Flutter application.
+Use the local wrapper instead of raw `flutter run`:
 
-A few resources to get you started if this is your first Flutter project:
+```powershell
+.\run_local.bat
+.\run_local.bat test
+.\run_local.bat build-web
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+The wrapper reads `env.txt` locally and injects the required `--dart-define` values.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Core Docs
+
+- [Permission Matrix](docs/permission-matrix.md)
+- [Ticket Lifecycle](docs/ticket-lifecycle.md)
+- [Technical Overview](docs/technical-overview.md)
+- [Release Process](docs/release-process.md)
+
+## CI
+
+GitHub Actions runs dependency install, analyze, test, and build checks from:
+
+- [flutter_ci.yml](.github/workflows/flutter_ci.yml)

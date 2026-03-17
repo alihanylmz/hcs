@@ -1,0 +1,57 @@
+name: Flutter CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test test/widget_test.dart
+
+      - name: Build web
+        run: >
+          flutter build web
+          --dart-define=SUPABASE_URL=https://example.supabase.co
+          --dart-define=SUPABASE_ANON_KEY=ci-anon-key
+
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build windows
+        run: >
+          flutter build windows
+          --dart-define=SUPABASE_URL=https://example.supabase.co
+          --dart-define=SUPABASE_ANON_KEY=ci-anon-key

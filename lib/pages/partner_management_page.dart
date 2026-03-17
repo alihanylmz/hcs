@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../features/admin/application/admin_access_controller.dart';
 import '../services/partner_service.dart';
 import '../models/partner.dart';
 import '../theme/app_colors.dart';
+import '../widgets/access_denied_view.dart';
 import '../widgets/custom_header.dart';
 
 class PartnerManagementPage extends StatefulWidget {
@@ -12,8 +14,10 @@ class PartnerManagementPage extends StatefulWidget {
 }
 
 class _PartnerManagementPageState extends State<PartnerManagementPage> {
+  final AdminAccessController _adminAccessController = AdminAccessController();
   final PartnerService _partnerService = PartnerService();
   List<Partner> _partners = [];
+  bool _hasAccess = false;
   bool _isLoading = true;
 
   @override
@@ -25,9 +29,22 @@ class _PartnerManagementPageState extends State<PartnerManagementPage> {
   Future<void> _loadPartners() async {
     setState(() => _isLoading = true);
     try {
+      final accessState = await _adminAccessController.load();
+
+      if (!accessState.hasAccess) {
+        if (mounted) {
+          setState(() {
+            _hasAccess = false;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
       final list = await _partnerService.getAllPartners();
       if (mounted) {
         setState(() {
+          _hasAccess = true;
           _partners = list;
           _isLoading = false;
         });
@@ -83,14 +100,16 @@ class _PartnerManagementPageState extends State<PartnerManagementPage> {
                     contactInfo: contactController.text.trim(),
                   );
                 }
-                if (mounted) {
+                if (!mounted) return;
+                if (ctx.mounted) {
                   Navigator.pop(ctx);
-                  _loadPartners();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Kaydedildi'), backgroundColor: Colors.green),
-                  );
                 }
+                _loadPartners();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Kaydedildi'), backgroundColor: Colors.green),
+                );
               } catch (e) {
+                if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Hata: $e')),
                 );
@@ -138,6 +157,26 @@ class _PartnerManagementPageState extends State<PartnerManagementPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
+
+    if (!_isLoading && !_hasAccess) {
+      return Scaffold(
+        backgroundColor: bgColor,
+        body: const Column(
+          children: [
+            CustomHeader(
+              title: 'Partner Firmalar',
+              subtitle: 'Bu alan yönetici yetkisi gerektirir',
+              showBackArrow: true,
+            ),
+            Expanded(
+              child: AccessDeniedView(
+                message: 'Partner firma yönetimi yalnızca admin ve manager kullanıcılar için açıktır.',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: bgColor,

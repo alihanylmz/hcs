@@ -1,12 +1,14 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/app_notification.dart';
-import 'dart:developer' as developer;
+
+import '../core/logging/app_logger.dart';
+import '../models/notification_item.dart';
 
 class NotificationServiceKanban {
+  static const AppLogger _logger = AppLogger('NotificationServiceKanban');
+
   final SupabaseClient _client = Supabase.instance.client;
 
-  /// Kullanıcının tüm bildirimlerini getirir
-  Future<List<AppNotification>> getNotifications({int limit = 50}) async {
+  Future<List<NotificationItem>> getNotifications({int limit = 50}) async {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return [];
@@ -19,20 +21,20 @@ class NotificationServiceKanban {
           .limit(limit);
 
       return (response as List)
-          .map((json) => AppNotification.fromJson(json as Map<String, dynamic>))
+          .map(
+            (json) => NotificationItem.fromJson(json as Map<String, dynamic>),
+          )
           .toList();
-    } catch (e, st) {
-      developer.log(
-        '🔴 Bildirimler yüklenirken hata',
-        name: 'NotificationServiceKanban.getNotifications',
-        error: e,
-        stackTrace: st,
+    } catch (error, stackTrace) {
+      _logger.error(
+        'get_notifications_failed',
+        error: error,
+        stackTrace: stackTrace,
       );
       return [];
     }
   }
 
-  /// Okunmamış bildirim sayısı
   Future<int> getUnreadCount() async {
     try {
       final userId = _client.auth.currentUser?.id;
@@ -45,29 +47,32 @@ class NotificationServiceKanban {
           .eq('is_read', false);
 
       return (response as List).length;
-    } catch (e) {
+    } catch (error, stackTrace) {
+      _logger.error(
+        'get_unread_count_failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
       return 0;
     }
   }
 
-  /// Bildirimi okundu olarak işaretle
-  Future<void> markAsRead(String notificationId) async {
+  Future<void> markAsRead(int notificationId) async {
     try {
       await _client
           .from('notifications')
           .update({'is_read': true})
           .eq('id', notificationId);
-    } catch (e, st) {
-      developer.log(
-        '🔴 Bildirim güncelleme hatası',
-        name: 'NotificationServiceKanban.markAsRead',
-        error: e,
-        stackTrace: st,
+    } catch (error, stackTrace) {
+      _logger.error(
+        'mark_notification_as_read_failed',
+        data: {'notificationId': notificationId},
+        error: error,
+        stackTrace: stackTrace,
       );
     }
   }
 
-  /// Tüm bildirimleri okundu işaretle
   Future<void> markAllAsRead() async {
     try {
       final userId = _client.auth.currentUser?.id;
@@ -78,34 +83,28 @@ class NotificationServiceKanban {
           .update({'is_read': true})
           .eq('user_id', userId)
           .eq('is_read', false);
-    } catch (e, st) {
-      developer.log(
-        '🔴 Toplu bildirim güncelleme hatası',
-        name: 'NotificationServiceKanban.markAllAsRead',
-        error: e,
-        stackTrace: st,
+    } catch (error, stackTrace) {
+      _logger.error(
+        'mark_all_notifications_as_read_failed',
+        error: error,
+        stackTrace: stackTrace,
       );
     }
   }
 
-  /// Bildirimi sil
-  Future<void> deleteNotification(String notificationId) async {
+  Future<void> deleteNotification(int notificationId) async {
     try {
-      await _client
-          .from('notifications')
-          .delete()
-          .eq('id', notificationId);
-    } catch (e, st) {
-      developer.log(
-        '🔴 Bildirim silme hatası',
-        name: 'NotificationServiceKanban.deleteNotification',
-        error: e,
-        stackTrace: st,
+      await _client.from('notifications').delete().eq('id', notificationId);
+    } catch (error, stackTrace) {
+      _logger.error(
+        'delete_notification_failed',
+        data: {'notificationId': notificationId},
+        error: error,
+        stackTrace: stackTrace,
       );
     }
   }
 
-  /// OneSignal Player ID kaydet
   Future<void> savePlayerID(String playerId, String deviceType) async {
     try {
       final userId = _client.auth.currentUser?.id;
@@ -117,20 +116,21 @@ class NotificationServiceKanban {
         'device_type': deviceType,
         'updated_at': DateTime.now().toIso8601String(),
       });
-    } catch (e, st) {
-      developer.log(
-        '🔴 Player ID kaydetme hatası',
-        name: 'NotificationServiceKanban.savePlayerID',
-        error: e,
-        stackTrace: st,
+    } catch (error, stackTrace) {
+      _logger.error(
+        'save_player_id_failed',
+        data: {'deviceType': deviceType},
+        error: error,
+        stackTrace: stackTrace,
       );
     }
   }
 
-  /// Realtime subscription (yeni bildirimler geldiğinde)
-  RealtimeChannel subscribeToNotifications(Function(AppNotification) onNewNotification) {
+  RealtimeChannel subscribeToNotifications(
+    Function(NotificationItem) onNewNotification,
+  ) {
     final userId = _client.auth.currentUser?.id;
-    if (userId == null) throw Exception('Kullanıcı oturumu kapalı');
+    if (userId == null) throw Exception('Kullanici oturumu kapali');
 
     return _client
         .channel('notifications:$userId')
@@ -144,9 +144,7 @@ class NotificationServiceKanban {
             value: userId,
           ),
           callback: (payload) {
-            final notification = AppNotification.fromJson(
-              payload.newRecord as Map<String, dynamic>,
-            );
+            final notification = NotificationItem.fromJson(payload.newRecord);
             onNewNotification(notification);
           },
         )

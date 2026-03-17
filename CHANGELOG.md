@@ -1,5 +1,17 @@
 # Günlük ve Güncelleme Notları
 
+## [1.1.0+5] - 2026-03-18
+
+### Mimari, Guvenlik ve Surec Iyilestirmeleri
+- Secret yonetimi `dart-define` tabanina tasindi ve yerel calistirma scriptleri eklendi.
+- Bildirim akisi, yetki kontrolleri, ticket yasam dongusu ve merkezi loglama yapisi duzenlendi.
+- CI ve teknik dokumantasyon altyapisi guclendirildi.
+
+### Arayuz ve PDF Iyilestirmeleri
+- Is listesi, biten isler ve is detayi ekranlarinda kullanilabilirlik odakli duzenlemeler yapildi.
+- PDF ciktilari daha sade, daha kurumsal ve daha okunabilir hale getirildi.
+- Acik/koyu tema, ortak UI bilesenleri ve genel uygulama kabugu modernlestirildi.
+
 ## [1.0.2+3] - 2024-12-24
 
 ### ✅ PDF Geliştirmeleri & Hata Düzeltmeleri

@@ -281,7 +281,7 @@ jobs:
               Uri="$stableMsixUrl" />
             <UpdateSettings>
               <OnLaunch HoursBetweenUpdateChecks="0" ShowPrompt="true" UpdateBlocksActivation="false" />
-              <AutomaticBackgroundTask />
+              <s4:AutomaticBackgroundTask />
               <s4:ForceUpdateFromAnyVersion>true</s4:ForceUpdateFromAnyVersion>
             </UpdateSettings>
           </AppInstaller>

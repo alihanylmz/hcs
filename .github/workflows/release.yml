@@ -1,4 +1,4 @@
-﻿name: Release Builds
+name: Release Builds
 
 on:
   push:
@@ -152,6 +152,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Install MSIX tooling
+        shell: pwsh
+        run: |
+          dart pub global activate msix
+          "$env:LOCALAPPDATA\Pub\Cache\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Build Windows release
         shell: pwsh
         run: |
@@ -161,44 +167,145 @@ jobs:
             --dart-define=SUPABASE_KEY=$env:SUPABASE_KEY `
             --dart-define=ONESIGNAL_APP_ID=$env:ONESIGNAL_APP_ID
 
+      - name: Prepare Windows certificates
+        id: windows_cert
+        shell: pwsh
+        run: |
+          $publisher = $null
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'windows-msix-signing.pfx'
+          $cerPath = Join-Path $env:RUNNER_TEMP 'windows-msix-signing.cer'
+          $pfxPassword = $null
+
+          if (-not [string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_BASE64) -and -not [string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_PASSWORD)) {
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+            $pfxPassword = $env:WINDOWS_PFX_PASSWORD
+            $cert = Get-PfxCertificate -FilePath $pfxPath
+            $publisher = $cert.Subject
+            [IO.File]::WriteAllBytes(
+              $cerPath,
+              $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
+            )
+          } else {
+            $publisher = 'CN=IsTakip Dev, O=HCS, C=TR'
+            $pfxPassword = [Guid]::NewGuid().ToString('N')
+            $securePassword = ConvertTo-SecureString -String $pfxPassword -AsPlainText -Force
+            $cert = New-SelfSignedCertificate `
+              -Type CodeSigningCert `
+              -Subject $publisher `
+              -FriendlyName 'IsTakip Dev' `
+              -CertStoreLocation 'Cert:\CurrentUser\My'
+            Export-PfxCertificate `
+              -Cert "Cert:\CurrentUser\My\$($cert.Thumbprint)" `
+              -FilePath $pfxPath `
+              -Password $securePassword | Out-Null
+            Export-Certificate `
+              -Cert "Cert:\CurrentUser\My\$($cert.Thumbprint)" `
+              -FilePath $cerPath | Out-Null
+          }
+
+          "publisher=$publisher" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "pfx_path=$pfxPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "pfx_password=$pfxPassword" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "cer_path=$cerPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Sign Windows executable
         shell: pwsh
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_PASSWORD)) {
-            Write-Host "Windows signing skipped because certificate secrets are not configured."
-            exit 0
-          }
-
-          $pfxPath = Join-Path $env:RUNNER_TEMP 'windows-signing.pfx'
-          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
-
           $signtool = (Get-Command signtool.exe -ErrorAction Stop).Source
           & $signtool sign `
             /fd SHA256 `
             /tr http://timestamp.digicert.com `
             /td SHA256 `
-            /f $pfxPath `
-            /p $env:WINDOWS_PFX_PASSWORD `
+            /f "${{ steps.windows_cert.outputs.pfx_path }}" `
+            /p "${{ steps.windows_cert.outputs.pfx_password }}" `
             "build\windows\x64\runner\Release\istakip_app.exe"
 
-      - name: Package Windows artifact
+      - name: Create MSIX package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           $artifactName = "istakip-windows-v${{ needs.prepare.outputs.version_name }}+${{ needs.prepare.outputs.build_number }}"
-          $stagingPath = Join-Path $env:RUNNER_TEMP $artifactName
+          dart pub global run msix:create `
+            --release `
+            --build-windows false `
+            --install-certificate false `
+            --display-name "IsTakip" `
+            --publisher-display-name "HCS" `
+            --identity-name "com.hcs.istakip" `
+            --version "${{ needs.prepare.outputs.version_name }}.${{ needs.prepare.outputs.build_number }}" `
+            --logo-path "assets/icon/icon.png" `
+            --capabilities "internetClient" `
+            --os-min-version "10.0.17763.0" `
+            --certificate-path "${{ steps.windows_cert.outputs.pfx_path }}" `
+            --certificate-password "${{ steps.windows_cert.outputs.pfx_password }}" `
+            --publisher "${{ steps.windows_cert.outputs.publisher }}" `
+            --output-path dist `
+            --output-name $artifactName
+
+      - name: Create App Installer files
+        shell: pwsh
+        run: |
+          $versionName = '${{ needs.prepare.outputs.version_name }}'
+          $buildNumber = '${{ needs.prepare.outputs.build_number }}'
+          $msixVersion = "$versionName.$buildNumber"
+          $versionedName = "istakip-windows-v$versionName+$buildNumber"
+          $stableMsixName = 'istakip-windows.msix'
+          $stableAppInstallerName = 'istakip-windows.appinstaller'
+          $stableCertName = 'istakip-windows.cer'
+          $repoBaseUrl = 'https://github.com/${{ github.repository }}/releases/latest/download'
+          $stableMsixUrl = "$repoBaseUrl/$stableMsixName"
+          $stableAppInstallerUrl = "$repoBaseUrl/$stableAppInstallerName"
+          $publisher = '${{ steps.windows_cert.outputs.publisher }}'
+
+          Copy-Item "dist\$versionedName.msix" "dist\$stableMsixName" -Force
+          Copy-Item "${{ steps.windows_cert.outputs.cer_path }}" "dist\$stableCertName" -Force
+          Copy-Item "${{ steps.windows_cert.outputs.cer_path }}" "dist\$versionedName.cer" -Force
+
+          $appInstaller = @"
+<?xml version="1.0" encoding="utf-8"?>
+<AppInstaller
+  xmlns="http://schemas.microsoft.com/appx/appinstaller/2017/2"
+  xmlns:s4="http://schemas.microsoft.com/appx/appinstaller/2021"
+  Uri="$stableAppInstallerUrl"
+  Version="$msixVersion">
+  <MainPackage
+    Name="com.hcs.istakip"
+    Publisher="$publisher"
+    Version="$msixVersion"
+    ProcessorArchitecture="x64"
+    Uri="$stableMsixUrl" />
+  <UpdateSettings>
+    <OnLaunch HoursBetweenUpdateChecks="0" ShowPrompt="true" UpdateBlocksActivation="false" />
+    <AutomaticBackgroundTask />
+    <s4:ForceUpdateFromAnyVersion>true</s4:ForceUpdateFromAnyVersion>
+  </UpdateSettings>
+</AppInstaller>
+"@
+
+          Set-Content -Path "dist\$stableAppInstallerName" -Value $appInstaller -Encoding utf8
+          Set-Content -Path "dist\$versionedName.appinstaller" -Value $appInstaller -Encoding utf8
+
+      - name: Package Windows ZIP bundle
+        shell: pwsh
+        run: |
+          $versionedName = "istakip-windows-v${{ needs.prepare.outputs.version_name }}+${{ needs.prepare.outputs.build_number }}"
+          $stagingPath = Join-Path $env:RUNNER_TEMP $versionedName
           if (Test-Path $stagingPath) {
             Remove-Item -LiteralPath $stagingPath -Recurse -Force
           }
           New-Item -ItemType Directory -Force -Path $stagingPath | Out-Null
           Copy-Item "build\windows\x64\runner\Release\*" $stagingPath -Recurse -Force
-          Compress-Archive -Path $stagingPath -DestinationPath "dist\$artifactName.zip" -Force
+          Compress-Archive -Path $stagingPath -DestinationPath "dist\$versionedName.zip" -Force
 
-      - name: Upload Windows artifact
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-release
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*.msix
+            dist/*.appinstaller
+            dist/*.cer
 
   publish-release:
     needs:
@@ -227,6 +334,7 @@ jobs:
           files: |
             release-assets/android/*.apk
             release-assets/windows/*.zip
+            release-assets/windows/*.msix
+            release-assets/windows/*.appinstaller
+            release-assets/windows/*.cer
           generate_release_notes: true
-
-

@@ -125,6 +125,22 @@ class UpdateService {
             error.code == '42703');
   }
 
+  bool _shouldUseWindowsAppInstaller(String url) {
+    if (kIsWeb) {
+      return false;
+    }
+
+    return defaultTargetPlatform == TargetPlatform.windows &&
+        url.trim().toLowerCase().endsWith('.appinstaller');
+  }
+
+  String _downloadActionLabel(String downloadUrl) {
+    if (_shouldUseWindowsAppInstaller(downloadUrl)) {
+      return 'Windows Yukleyiciyi Ac';
+    }
+    return 'Indir ve Guncelle';
+  }
+
   void _showUpdateDialog(
     BuildContext context, {
     required bool isMandatory,
@@ -186,8 +202,12 @@ class UpdateService {
                   ),
                 ElevatedButton.icon(
                   onPressed: () => _launchDownloadUrl(downloadUrl),
-                  icon: const Icon(Icons.download),
-                  label: const Text('Indir ve Guncelle'),
+                  icon: Icon(
+                    _shouldUseWindowsAppInstaller(downloadUrl)
+                        ? Icons.system_update_alt
+                        : Icons.download,
+                  ),
+                  label: Text(_downloadActionLabel(downloadUrl)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.corporateNavy,
                     foregroundColor: Colors.white,
@@ -203,6 +223,29 @@ class UpdateService {
     var finalUrl = url.trim();
     if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
       finalUrl = 'https://$finalUrl';
+    }
+
+    if (_shouldUseWindowsAppInstaller(finalUrl)) {
+      final appInstallerUri = Uri.parse(
+        'ms-appinstaller:?source=${Uri.encodeComponent(finalUrl)}',
+      );
+
+      try {
+        final launched = await launchUrl(
+          appInstallerUri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (launched) {
+          return;
+        }
+      } catch (error, stackTrace) {
+        _logger.warning(
+          'launch_windows_appinstaller_fallback',
+          data: {'url': finalUrl},
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
     }
 
     final uri = Uri.parse(finalUrl);

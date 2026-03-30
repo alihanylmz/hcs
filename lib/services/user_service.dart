@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/logging/app_logger.dart';
 import '../models/user_profile.dart';
+import 'permission_service.dart';
 
 class UserService {
   UserService({SupabaseClient? client})
@@ -39,8 +40,7 @@ class UserService {
   }
 
   bool canDeleteStock(UserProfile? profile) {
-    if (profile == null) return false;
-    return profile.isAdmin == true || profile.isManager == true;
+    return PermissionService.canDeleteStock(profile);
   }
 
   Future<void> createProfile(
@@ -49,7 +49,7 @@ class UserService {
     String? fullName,
   ) async {
     try {
-      await _client.from('profiles').insert({
+      await _client.from('profiles').upsert({
         'id': userId,
         'email': email,
         'full_name': fullName,
@@ -127,7 +127,23 @@ class UserService {
     }
   }
 
-  Future<bool> updateUserRole(
+  String _describeError(Object error) {
+    final rawMessage = error.toString();
+    if (rawMessage.contains('Failed to fetch') &&
+        rawMessage.contains('approve-user')) {
+      return 'approve-user Edge Function endpointine ulasilamiyor. '
+          'Fonksiyon deploy edilmemis veya proje baglantisi eksik olabilir.';
+    }
+    if (error is PostgrestException) {
+      return error.message;
+    }
+    if (error is AuthException) {
+      return error.message;
+    }
+    return error.toString();
+  }
+
+  Future<void> updateUserRole(
     String userId,
     String newRole, {
     int? partnerId,
@@ -139,7 +155,6 @@ class UserService {
       };
 
       await _client.from('profiles').update(data).eq('id', userId);
-      return true;
     } catch (error, stackTrace) {
       _logger.error(
         'update_user_role_failed',
@@ -147,7 +162,50 @@ class UserService {
         error: error,
         stackTrace: stackTrace,
       );
-      return false;
+      throw Exception(_describeError(error));
+    }
+  }
+
+  Future<void> approveUserAccount(
+    String userId,
+    String newRole, {
+    int? partnerId,
+  }) async {
+    try {
+      final response = await _client.functions.invoke(
+        'approve-user',
+        body: {'userId': userId, 'role': newRole, 'partnerId': partnerId},
+      );
+
+      if (response.status < 200 || response.status >= 300) {
+        final data = response.data;
+        if (data is Map<String, dynamic> && data['error'] != null) {
+          throw Exception(data['error'].toString());
+        }
+        throw Exception('Onay islemi basarisiz oldu.');
+      }
+    } catch (error, stackTrace) {
+      final rawMessage = error.toString();
+      final isFunctionUnavailable =
+          rawMessage.contains('Failed to fetch') &&
+          rawMessage.contains('approve-user');
+
+      if (isFunctionUnavailable) {
+        _logger.warning(
+          'approve_user_account_function_unavailable_fallback',
+          data: {'userId': userId, 'newRole': newRole, 'partnerId': partnerId},
+        );
+        await updateUserRole(userId, newRole, partnerId: partnerId);
+        return;
+      }
+
+      _logger.error(
+        'approve_user_account_failed',
+        data: {'userId': userId, 'newRole': newRole, 'partnerId': partnerId},
+        error: error,
+        stackTrace: stackTrace,
+      );
+      throw Exception(_describeError(error));
     }
   }
 }

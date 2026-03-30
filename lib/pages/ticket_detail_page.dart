@@ -4,14 +4,20 @@ import 'package:file_picker/file_picker.dart';
 
 // Yeni oluşturduğumuz modülleri import ediyoruz
 import '../services/pdf_export_service.dart';
+import '../services/card_service.dart';
+import '../services/permission_service.dart';
 import '../services/user_service.dart';
 import '../services/ticket_service.dart'; // <--- Yeni Service
 import '../services/stock_service.dart'; // <--- Stock Service
+import '../models/card.dart';
 import '../models/structured_ticket_note.dart';
+import '../models/ticket_linked_team_card.dart';
 import '../models/user_profile.dart';
 import '../models/ticket_part.dart';
 import '../models/ticket_status.dart';
+import 'card_detail_page.dart';
 import '../pages/edit_ticket_page.dart';
+import 'team_home_page.dart';
 import 'signature_page.dart';
 import 'pdf_viewer_page.dart';
 import 'profile_page.dart'; // <--- Eklendi
@@ -31,6 +37,7 @@ class TicketDetailPage extends StatefulWidget {
 class _TicketDetailPageState extends State<TicketDetailPage>
     with SingleTickerProviderStateMixin {
   final _ticketService = TicketService();
+  final _cardService = CardService();
   final _stockService = StockService(); // Stock Service Eklendi
 
   Map<String, dynamic>? _ticket;
@@ -41,6 +48,24 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   bool _isHeaderExpanded = false;
   String? _error;
 
+  bool get _canEditTicket =>
+      PermissionService.hasPermission(_userProfile, AppPermission.editTicket);
+
+  bool get _canManageWorkflow => PermissionService.hasPermission(
+    _userProfile,
+    AppPermission.updateTicketWorkflow,
+  );
+
+  bool get _canManageTicketSignatures => PermissionService.hasPermission(
+    _userProfile,
+    AppPermission.manageTicketSignatures,
+  );
+
+  bool get _canModerateTicketNotes => PermissionService.hasPermission(
+    _userProfile,
+    AppPermission.moderateTicketNotes,
+  );
+
   // Teknisyen notları için state
   List<Map<String, dynamic>> _notes = [];
   bool _notesLoading = false;
@@ -48,6 +73,9 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   // Kullanılan Parçalar için state
   List<TicketPart> _parts = [];
   bool _partsLoading = false;
+  List<TicketLinkedTeamCard> _linkedTeamCards = [];
+  bool _linkedTeamCardsLoading = false;
+  bool _supportsLinkedTeamCards = true;
 
   // Tab controller
   late TabController _tabController;
@@ -71,31 +99,33 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   };
 
   bool _isDark(BuildContext context) {
-    return false;
+    return Theme.of(context).brightness == Brightness.dark;
   }
 
   Color _pageBackgroundColor(BuildContext context) {
-    return AppColors.backgroundGrey;
+    return Theme.of(context).scaffoldBackgroundColor;
   }
 
   Color _surfaceColor(BuildContext context) {
-    return AppColors.surfaceWhite;
+    return Theme.of(context).cardColor;
   }
 
   Color _surfaceMutedColor(BuildContext context) {
-    return AppColors.surfaceSoft;
+    return _isDark(context)
+        ? AppColors.surfaceDarkMuted
+        : AppColors.surfaceSoft;
   }
 
   Color _borderColor(BuildContext context) {
-    return AppColors.borderSubtle;
+    return _isDark(context) ? AppColors.borderDark : AppColors.borderSubtle;
   }
 
   Color _primaryTextColor(BuildContext context) {
-    return AppColors.textDark;
+    return Theme.of(context).colorScheme.onSurface;
   }
 
   Color _secondaryTextColor(BuildContext context) {
-    return AppColors.textLight;
+    return _isDark(context) ? AppColors.textOnDarkMuted : AppColors.textLight;
   }
 
   Color _actionBackgroundColor(BuildContext context, {required bool enabled}) {
@@ -106,11 +136,13 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   }
 
   Color _corporatePanelColor(BuildContext context) {
-    return AppColors.surfaceAccent;
+    return _isDark(context)
+        ? AppColors.surfaceDarkMuted
+        : AppColors.surfaceAccent;
   }
 
   Color _pageAccentColor(BuildContext context) {
-    return AppColors.corporateBlue;
+    return Theme.of(context).colorScheme.primary;
   }
 
   @override
@@ -154,6 +186,10 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       if (data != null) {
         _loadNotes();
         _loadParts(); // Parçaları yükle
+      }
+
+      if (data != null) {
+        _loadLinkedTeamCards();
       }
     } catch (e) {
       if (!mounted) return;
@@ -200,6 +236,92 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     } catch (e) {
       debugPrint('Parçalar yüklenirken hata: $e');
       if (mounted) setState(() => _partsLoading = false);
+    }
+  }
+
+  Future<void> _loadLinkedTeamCards() async {
+    setState(() => _linkedTeamCardsLoading = true);
+    try {
+      final supports = await _cardService.supportsLinkedTicketing();
+      if (!supports) {
+        if (!mounted) return;
+        setState(() {
+          _supportsLinkedTeamCards = false;
+          _linkedTeamCards = const [];
+          _linkedTeamCardsLoading = false;
+        });
+        return;
+      }
+
+      final cards = await _cardService.getLinkedCardsForTicket(widget.ticketId);
+      if (!mounted) return;
+      setState(() {
+        _supportsLinkedTeamCards = true;
+        _linkedTeamCards = cards;
+        _linkedTeamCardsLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Takim baglantilari yuklenirken hata: $e');
+      if (!mounted) return;
+      setState(() {
+        _linkedTeamCards = const [];
+        _linkedTeamCardsLoading = false;
+      });
+    }
+  }
+
+  Future<void> _openLinkedTeamBoard(TicketLinkedTeamCard linkedCard) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (_) => TeamHomePage(teamId: linkedCard.teamId, initialTabIndex: 0),
+      ),
+    );
+    if (!mounted) return;
+    await _loadLinkedTeamCards();
+  }
+
+  Future<void> _openLinkedTeamConversation(
+    TicketLinkedTeamCard linkedCard,
+  ) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (_) => TeamHomePage(
+              teamId: linkedCard.teamId,
+              initialTabIndex: 1,
+              initialConversationCardId: linkedCard.cardId,
+            ),
+      ),
+    );
+    if (!mounted) return;
+    await _loadLinkedTeamCards();
+  }
+
+  Future<void> _openLinkedTeamCard(TicketLinkedTeamCard linkedCard) async {
+    try {
+      final card = await _cardService.getCard(linkedCard.cardId);
+      if (!mounted) return;
+
+      final result = await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => CardDetailPage(card: card)));
+
+      if (!mounted) return;
+
+      if (result == 'open_conversation') {
+        await _openLinkedTeamConversation(linkedCard);
+        return;
+      }
+
+      if (result != null) {
+        await _loadLinkedTeamCards();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Kart acilamadi: $e')));
     }
   }
 
@@ -336,11 +458,17 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   }
 
   bool _canCurrentUserAddNotes() {
-    final isPartnerUser = _userProfile?.role == 'partner_user';
-    final isAdminOrManager =
-        _userProfile?.isAdmin == true || _userProfile?.isManager == true;
-    final isTechnician = _userProfile?.isTechnician == true;
-    return isPartnerUser || isAdminOrManager || isTechnician;
+    if (_userProfile?.role == UserRole.partnerUser) {
+      return PermissionService.hasPermission(
+        _userProfile,
+        AppPermission.addPartnerTicketNote,
+      );
+    }
+
+    return PermissionService.hasPermission(
+      _userProfile,
+      AppPermission.addServiceTicketNote,
+    );
   }
 
   Map<String, String> _availableStatusItems(String currentStatus) {
@@ -355,7 +483,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   }
 
   Future<void> _showStatusQuickPicker(String currentStatus) async {
-    if (_userProfile?.role == 'partner_user') return;
+    if (!_canManageWorkflow) return;
 
     final items = _availableStatusItems(currentStatus);
     await showModalBottomSheet(
@@ -739,12 +867,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   // ignore: unused_element
   Widget? _buildFloatingActionButton() {
     final isPartnerUser = _userProfile?.role == 'partner_user';
-    final isAdminOrManager =
-        _userProfile?.isAdmin == true || _userProfile?.isManager == true;
-    final isTechnician = _userProfile?.isTechnician == true;
-
     // Sadece partner kullanıcıları, admin, manager ve teknisyenler not ekleyebilir
-    if (!isPartnerUser && !isAdminOrManager && !isTechnician) {
+    if (!_canCurrentUserAddNotes()) {
       return null;
     }
 
@@ -756,8 +880,17 @@ class _TicketDetailPageState extends State<TicketDetailPage>
           _showAddNoteDialog();
         }
       },
-      backgroundColor: isPartnerUser ? Colors.purple : AppColors.corporateNavy,
-      child: const Icon(Icons.add_comment, color: Colors.white),
+      backgroundColor:
+          isPartnerUser
+              ? Theme.of(context).colorScheme.secondary
+              : Theme.of(context).colorScheme.primary,
+      child: Icon(
+        Icons.add_comment,
+        color:
+            isPartnerUser
+                ? Theme.of(context).colorScheme.onSecondary
+                : Theme.of(context).colorScheme.onPrimary,
+      ),
       tooltip: isPartnerUser ? 'Partner Notu Ekle' : 'Servis Notu Ekle',
     );
   }
@@ -773,8 +906,16 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     return FloatingActionButton(
       onPressed: () => _openNoteDialog(isPartnerNote: isPartnerUser),
       backgroundColor:
-          isPartnerUser ? Colors.purple : Theme.of(context).colorScheme.primary,
-      child: const Icon(Icons.add_comment, color: Colors.white),
+          isPartnerUser
+              ? Theme.of(context).colorScheme.secondary
+              : Theme.of(context).colorScheme.primary,
+      child: Icon(
+        Icons.add_comment,
+        color:
+            isPartnerUser
+                ? Theme.of(context).colorScheme.onSecondary
+                : Theme.of(context).colorScheme.onPrimary,
+      ),
       tooltip: isPartnerUser ? 'Partner surec kaydi ekle' : 'Servis kaydi ekle',
     );
   }
@@ -788,8 +929,11 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     bool isPartnerUser,
     bool isWide,
   ) {
+    final primaryText = _primaryTextColor(context);
+    final secondaryText = _secondaryTextColor(context);
+
     return Container(
-      color: AppColors.surfaceWhite,
+      color: _surfaceColor(context),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -805,10 +949,10 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   children: [
                     Text(
                       ticket['title'] as String? ?? 'Başlıksız İş',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.textDark,
+                        color: primaryText,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -819,9 +963,9 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                       children: [
                         Text(
                           Formatters.safeText(ticket['job_code']),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: AppColors.textLight,
+                            color: secondaryText,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -831,10 +975,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                         ),
                         Text(
                           customer['name'] as String? ?? 'Müşteri Adı Yok',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textLight,
-                          ),
+                          style: TextStyle(fontSize: 13, color: secondaryText),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
@@ -873,10 +1014,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             children: [
               Text(
                 'Oluşturma: ${Formatters.date(ticket['created_at'])}',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textLight,
-                ),
+                style: TextStyle(fontSize: 11, color: secondaryText),
               ),
               if (plannedDate != null) ...[
                 const Text(
@@ -885,10 +1023,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 ),
                 Text(
                   'Planlanan: ${Formatters.date(plannedDate)}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textLight,
-                  ),
+                  style: TextStyle(fontSize: 11, color: secondaryText),
                 ),
               ],
             ],
@@ -916,14 +1051,16 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 icon: Icons.swap_horiz_outlined,
                 label: 'Durum Guncelle',
                 onPressed:
-                    isPartnerUser ? null : () => _showStatusQuickPicker(status),
+                    !_canManageWorkflow
+                        ? null
+                        : () => _showStatusQuickPicker(status),
               ),
               _buildHeaderActionButton(
                 icon: Icons.print_outlined,
                 label: 'PDF',
                 onPressed: _loading || _ticket == null ? null : _exportToPdf,
               ),
-              if (!isPartnerUser && _userProfile?.isTechnician != true)
+              if (_canEditTicket)
                 _buildHeaderActionButton(
                   icon: Icons.edit_outlined,
                   label: 'Düzenle',
@@ -937,7 +1074,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     _loadTicket();
                   },
                 ),
-              if (!isPartnerUser)
+              if (_canManageTicketSignatures)
                 _buildHeaderActionButton(
                   icon: Icons.edit_document,
                   label: 'İmzalar',
@@ -969,8 +1106,10 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     value: status,
                     items: _availableStatusItems(status),
                     onChanged:
-                        isPartnerUser ? null : (val) => _changeStatus(val!),
-                    isDisabled: isPartnerUser,
+                        !_canManageWorkflow
+                            ? null
+                            : (val) => _changeStatus(val!),
+                    isDisabled: !_canManageWorkflow,
                   ),
                 ),
                 SizedBox(
@@ -980,18 +1119,22 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     value: priority,
                     items: _priorityLabels,
                     onChanged:
-                        isPartnerUser ? null : (val) => _changePriority(val!),
-                    isDisabled: isPartnerUser,
+                        !_canManageWorkflow
+                            ? null
+                            : (val) => _changePriority(val!),
+                    isDisabled: !_canManageWorkflow,
                   ),
                 ),
                 SizedBox(
                   width: isWide ? 200 : double.infinity,
                   child: InkWell(
                     onTap:
-                        isPartnerUser || _isUpdating ? null : _pickPlannedDate,
+                        !_canManageWorkflow || _isUpdating
+                            ? null
+                            : _pickPlannedDate,
                     borderRadius: BorderRadius.circular(8),
                     child: Opacity(
-                      opacity: isPartnerUser ? 0.5 : 1.0,
+                      opacity: _canManageWorkflow ? 1 : 0.5,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -1028,7 +1171,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                 ],
                               ),
                             ),
-                            if (isPartnerUser)
+                            if (!_canManageWorkflow)
                               const Icon(
                                 Icons.lock_outline,
                                 size: 18,
@@ -1292,7 +1435,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                               icon: Icons.swap_horiz_outlined,
                               label: 'Durum guncelle',
                               onPressed:
-                                  isPartnerUser
+                                  !_canManageWorkflow
                                       ? null
                                       : () => _showStatusQuickPicker(status),
                             ),
@@ -1304,8 +1447,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                       ? null
                                       : _exportToPdf,
                             ),
-                            if (!isPartnerUser &&
-                                _userProfile?.isTechnician != true)
+                            if (_canEditTicket)
                               _buildHeaderActionButton(
                                 icon: Icons.edit_outlined,
                                 label: 'Duzenle',
@@ -1321,7 +1463,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                   _loadTicket();
                                 },
                               ),
-                            if (!isPartnerUser)
+                            if (_canManageTicketSignatures)
                               _buildHeaderActionButton(
                                 icon: Icons.edit_document,
                                 label: 'Imzalar',
@@ -1353,10 +1495,10 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                   value: status,
                                   items: _availableStatusItems(status),
                                   onChanged:
-                                      isPartnerUser
+                                      !_canManageWorkflow
                                           ? null
                                           : (val) => _changeStatus(val!),
-                                  isDisabled: isPartnerUser,
+                                  isDisabled: !_canManageWorkflow,
                                 ),
                               ),
                               SizedBox(
@@ -1366,22 +1508,22 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                   value: priority,
                                   items: _priorityLabels,
                                   onChanged:
-                                      isPartnerUser
+                                      !_canManageWorkflow
                                           ? null
                                           : (val) => _changePriority(val!),
-                                  isDisabled: isPartnerUser,
+                                  isDisabled: !_canManageWorkflow,
                                 ),
                               ),
                               SizedBox(
                                 width: isWide ? 250 : double.infinity,
                                 child: InkWell(
                                   onTap:
-                                      isPartnerUser || _isUpdating
+                                      !_canManageWorkflow || _isUpdating
                                           ? null
                                           : _pickPlannedDate,
                                   borderRadius: BorderRadius.circular(14),
                                   child: Opacity(
-                                    opacity: isPartnerUser ? 0.55 : 1,
+                                    opacity: _canManageWorkflow ? 1 : 0.55,
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 14,
@@ -1659,25 +1801,27 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   }
 
   Widget _buildPartnerInfoBar() {
+    final accent = Theme.of(context).colorScheme.primary;
+    final isDark = _isDark(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.blue.shade50,
+        color: isDark ? accent.withOpacity(0.12) : AppColors.surfaceAccent,
         border: Border(
-          bottom: BorderSide(color: Colors.blue.shade200, width: 1),
+          bottom: BorderSide(color: accent.withOpacity(0.22), width: 1),
         ),
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline, size: 18, color: Colors.blue.shade700),
+          Icon(Icons.info_outline, size: 18, color: accent),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               'Bu ekran görüntüleme modundadır. Değişiklik yapmak için merkez ile iletişime geçin.',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.blue.shade700,
+                color: accent,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -2511,6 +2655,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 ],
               ),
               const SizedBox(height: 20),
+              _buildTeamLinksCard(),
+              const SizedBox(height: 20),
               _buildModernContentCard(
                 title: 'Eksik Parca ve Takip',
                 icon: Icons.warning_amber_rounded,
@@ -2589,6 +2735,226 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     );
   }
 
+  Widget _buildTeamLinksCard() {
+    return _buildModernContentCard(
+      title: 'Takim Baglantilari',
+      icon: Icons.groups_2_outlined,
+      children: [
+        Text(
+          'Bu is emrine bagli ekip kartlari ve hizli gecisler burada toplanir.',
+          style: TextStyle(color: _secondaryTextColor(context), height: 1.5),
+        ),
+        const SizedBox(height: 16),
+        if (_linkedTeamCardsLoading)
+          const SizedBox(
+            height: 72,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          )
+        else if (!_supportsLinkedTeamCards)
+          Text(
+            'Takim kartlarini is emrine baglama ozelligi bu ortamda henuz etkin degil.',
+            style: TextStyle(color: _secondaryTextColor(context), height: 1.5),
+          )
+        else if (_linkedTeamCards.isEmpty)
+          Text(
+            'Bu is emrine bagli takim karti bulunmuyor. Takim panosunda karti bu is emrine bagladiginda burada otomatik gorunecek.',
+            style: TextStyle(color: _secondaryTextColor(context), height: 1.5),
+          )
+        else
+          Column(
+            children:
+                _linkedTeamCards
+                    .map(
+                      (linkedCard) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildLinkedTeamCardTile(linkedCard),
+                      ),
+                    )
+                    .toList(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildLinkedTeamCardTile(TicketLinkedTeamCard linkedCard) {
+    final theme = Theme.of(context);
+    final statusColor = _cardStatusColor(linkedCard.status);
+    final priorityColor = _cardPriorityColor(linkedCard.priority);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _surfaceMutedColor(context),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _borderColor(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withOpacity(
+                    _isDark(context) ? 0.20 : 0.10,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.group_work_outlined,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      linkedCard.teamName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      linkedCard.title,
+                      style: TextStyle(
+                        color: _primaryTextColor(context),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildLinkedTeamChip(
+                icon: Icons.view_kanban_outlined,
+                label: linkedCard.boardName,
+                color: AppColors.corporateBlue,
+              ),
+              _buildLinkedTeamChip(
+                icon: Icons.sync_alt_rounded,
+                label: linkedCard.status.label,
+                color: statusColor,
+              ),
+              _buildLinkedTeamChip(
+                icon: Icons.flag_outlined,
+                label: linkedCard.priority.label,
+                color: priorityColor,
+              ),
+              if ((linkedCard.assigneeName ?? '').trim().isNotEmpty)
+                _buildLinkedTeamChip(
+                  icon: Icons.person_outline,
+                  label: linkedCard.assigneeName!,
+                  color: AppColors.corporateNavy,
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Son hareket: ${_formatLinkedTeamDate(linkedCard.updatedAt)}',
+            style: TextStyle(color: _secondaryTextColor(context)),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _openLinkedTeamBoard(linkedCard),
+                icon: const Icon(Icons.dashboard_outlined),
+                label: const Text('Pano'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _openLinkedTeamConversation(linkedCard),
+                icon: const Icon(Icons.forum_outlined),
+                label: const Text('Konusma'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _openLinkedTeamCard(linkedCard),
+                icon: const Icon(Icons.open_in_new_outlined),
+                label: const Text('Karti Ac'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLinkedTeamChip({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _cardStatusColor(CardStatus status) {
+    switch (status) {
+      case CardStatus.todo:
+        return AppColors.corporateBlue;
+      case CardStatus.doing:
+        return const Color(0xFFF59E0B);
+      case CardStatus.done:
+        return const Color(0xFF10B981);
+      case CardStatus.sent:
+        return AppColors.corporateNavy;
+    }
+  }
+
+  Color _cardPriorityColor(CardPriority priority) {
+    switch (priority) {
+      case CardPriority.low:
+        return const Color(0xFF10B981);
+      case CardPriority.normal:
+        return const Color(0xFFF59E0B);
+      case CardPriority.high:
+        return AppColors.corporateRed;
+    }
+  }
+
+  String _formatLinkedTeamDate(DateTime value) {
+    final local = value.toLocal();
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$day.$month $hour:$minute';
+  }
+
   Future<void> _openImagePreview(String url) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -2645,11 +3011,18 @@ class _TicketDetailPageState extends State<TicketDetailPage>
 
   String? _roleLabelFor(String? role) {
     switch (role) {
+      case 'user':
+        return 'Kullanici';
+      case 'engineer':
+        return 'Muhendis';
       case 'technician':
         return 'Teknisyen';
       case 'manager':
+        return 'Yonetici';
+      case 'supervisor':
+        return 'Supervizor';
       case 'admin':
-        return 'Muhendis';
+        return 'Admin';
       case 'partner_user':
         return 'Partner';
       default:
@@ -2787,9 +3160,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
         final noteType = note['note_type'] as String? ?? 'service_note';
         final isPartnerNote = noteType == 'partner_note';
         final isCurrentUser = note['user_id'] == _userProfile?.id;
-        final isAdminOrManager =
-            _userProfile?.isAdmin == true || _userProfile?.isManager == true;
-        final canEditNote = isCurrentUser || isAdminOrManager;
+        final canEditNote = isCurrentUser || _canModerateTicketNotes;
         final isLast = index == _notes.length - 1;
 
         return Stack(
@@ -3336,16 +3707,21 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             final noteType = note['note_type'] as String? ?? 'service_note';
             final isPartnerNote = noteType == 'partner_note';
             final isCurrentUser = note['user_id'] == _userProfile?.id;
-            final isAdminOrManager =
-                _userProfile?.isAdmin == true ||
-                _userProfile?.isManager == true;
-            final canEditNote = isCurrentUser || isAdminOrManager;
+            final canEditNote = isCurrentUser || _canModerateTicketNotes;
 
             String? roleLabel;
-            if (role == 'technician') {
+            if (role == 'user') {
+              roleLabel = 'Kullanici';
+            } else if (role == 'engineer') {
+              roleLabel = 'Muhendis';
+            } else if (role == 'technician') {
               roleLabel = 'Teknisyen';
-            } else if (role == 'manager' || role == 'admin') {
-              roleLabel = 'Mühendis';
+            } else if (role == 'manager') {
+              roleLabel = 'Yonetici';
+            } else if (role == 'supervisor') {
+              roleLabel = 'Supervizor';
+            } else if (role == 'admin') {
+              roleLabel = 'Admin';
             } else if (role == 'partner_user') {
               roleLabel = 'Partner';
             }
@@ -4200,8 +4576,10 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
-      color: AppColors.backgroundGrey,
+      color: theme.scaffoldBackgroundColor,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
       alignment: Alignment.centerLeft,
       child: Center(
@@ -4209,9 +4587,21 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
           constraints: const BoxConstraints(maxWidth: 1080),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: AppColors.surfaceWhite,
+              color: theme.cardColor,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.borderSubtle),
+              border: Border.all(
+                color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
+              ),
+              boxShadow:
+                  overlapsContent
+                      ? [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(isDark ? 0.18 : 0.06),
+                          blurRadius: 14,
+                          offset: const Offset(0, 6),
+                        ),
+                      ]
+                      : null,
             ),
             child: tabBar,
           ),

@@ -21,17 +21,11 @@ class UpdateService {
       final packageInfo = await PackageInfo.fromPlatform();
       final currentBuildNumber = int.parse(packageInfo.buildNumber);
 
-      final response =
-          await _supabase
-              .from('app_versions')
-              .select()
-              .order('build_number', ascending: false)
-              .limit(1)
-              .maybeSingle();
+      final response = await _fetchLatestVersion();
 
       if (response == null) return;
 
-      final latestBuildNumber = response['build_number'] as int;
+      final latestBuildNumber = _parseBuildNumber(response['build_number']);
       final isMandatory = response['is_mandatory'] as bool? ?? false;
       final downloadUrl = response['download_url'] as String;
       final releaseNotes =
@@ -54,6 +48,81 @@ class UpdateService {
         stackTrace: stackTrace,
       );
     }
+  }
+
+  Future<Map<String, dynamic>?> _fetchLatestVersion() async {
+    final platformKey = _currentPlatformKey();
+
+    if (platformKey != null) {
+      final platformVersion = await _tryFetchPlatformVersion(platformKey);
+      if (platformVersion != null) {
+        return platformVersion;
+      }
+
+      final sharedVersion = await _tryFetchPlatformVersion('all');
+      if (sharedVersion != null) {
+        return sharedVersion;
+      }
+    }
+
+    final response =
+        await _supabase
+            .from('app_versions')
+            .select()
+            .order('build_number', ascending: false)
+            .limit(1)
+            .maybeSingle();
+
+    return response == null ? null : Map<String, dynamic>.from(response);
+  }
+
+  Future<Map<String, dynamic>?> _tryFetchPlatformVersion(
+    String platform,
+  ) async {
+    try {
+      final response =
+          await _supabase
+              .from('app_versions')
+              .select()
+              .eq('platform', platform)
+              .order('build_number', ascending: false)
+              .limit(1)
+              .maybeSingle();
+
+      return response == null ? null : Map<String, dynamic>.from(response);
+    } on PostgrestException catch (error) {
+      if (_isMissingPlatformColumn(error)) {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  String? _currentPlatformKey() {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'android';
+      case TargetPlatform.windows:
+        return 'windows';
+      default:
+        return null;
+    }
+  }
+
+  int _parseBuildNumber(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  bool _isMissingPlatformColumn(PostgrestException error) {
+    final message = error.message.toLowerCase();
+    return message.contains('platform') &&
+        (message.contains('column') ||
+            message.contains('schema cache') ||
+            message.contains('does not exist') ||
+            error.code == '42703');
   }
 
   void _showUpdateDialog(

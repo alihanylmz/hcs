@@ -6,8 +6,10 @@
 class UserRole {
   static const String admin = 'admin';
   static const String manager = 'manager';
+  static const String engineer = 'engineer';
   static const String technician = 'technician';
   static const String supervisor = 'supervisor';
+  static const String user = 'user';
   static const String pending = 'pending';
   static const String partnerUser = 'partner_user';
 }
@@ -34,11 +36,17 @@ class UserProfile {
   // ---- Yardımcı statik parser fonksiyonları ----
 
   static String _validateRole(String? role) {
+    if (role == 'partner') {
+      return UserRole.partnerUser;
+    }
+
     const validRoles = {
       UserRole.admin,
       UserRole.manager,
+      UserRole.engineer,
       UserRole.technician,
       UserRole.supervisor,
+      UserRole.user,
       UserRole.pending,
       UserRole.partnerUser,
     };
@@ -93,12 +101,15 @@ class UserProfile {
 
   bool get isAdmin => role == UserRole.admin;
 
-  bool get isManager =>
-      role == UserRole.manager || role == UserRole.admin;
+  bool get isManager => role == UserRole.manager || role == UserRole.admin;
+
+  bool get isEngineer => role == UserRole.engineer;
 
   bool get isTechnician => role == UserRole.technician;
 
   bool get isSupervisor => role == UserRole.supervisor;
+
+  bool get isUser => role == UserRole.user;
 
   bool get isPending => role == UserRole.pending;
 

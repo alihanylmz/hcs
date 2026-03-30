@@ -134,9 +134,22 @@ class UpdateService {
         url.trim().toLowerCase().endsWith('.appinstaller');
   }
 
+  bool _isWindowsManualPackage(String url) {
+    if (kIsWeb) {
+      return false;
+    }
+
+    final normalized = url.trim().toLowerCase();
+    return defaultTargetPlatform == TargetPlatform.windows &&
+        (normalized.endsWith('.zip') || normalized.endsWith('.exe'));
+  }
+
   String _downloadActionLabel(String downloadUrl) {
     if (_shouldUseWindowsAppInstaller(downloadUrl)) {
       return 'Windows Yukleyiciyi Ac';
+    }
+    if (_isWindowsManualPackage(downloadUrl)) {
+      return 'Indir ve Manuel Guncelle';
     }
     return 'Indir ve Guncelle';
   }
@@ -180,6 +193,17 @@ class UpdateService {
                     style: const TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                   const SizedBox(height: 20),
+                  if (_isWindowsManualPackage(downloadUrl))
+                    const Text(
+                      'Windows guncellemesi manuel kurulur. Zip dosyasini indirip acin, sonra yeni surum klasorundeki dosyalarla mevcut kurulumunuzu degistirin.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  if (_isWindowsManualPackage(downloadUrl) && isMandatory)
+                    const SizedBox(height: 12),
                   if (isMandatory)
                     const Text(
                       'Kullanima devam etmek icin guncelleme yapmaniz gerekmektedir.',

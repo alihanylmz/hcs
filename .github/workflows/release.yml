@@ -295,6 +295,7 @@ jobs:
         shell: pwsh
         run: |
           $versionedName = "istakip-windows-v${{ needs.prepare.outputs.version_name }}+${{ needs.prepare.outputs.build_number }}"
+          $stableZipName = 'istakip-windows.zip'
           $stagingPath = Join-Path $env:RUNNER_TEMP $versionedName
           if (Test-Path $stagingPath) {
             Remove-Item -LiteralPath $stagingPath -Recurse -Force
@@ -302,6 +303,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stagingPath | Out-Null
           Copy-Item "build\windows\x64\runner\Release\*" $stagingPath -Recurse -Force
           Compress-Archive -Path $stagingPath -DestinationPath "dist\$versionedName.zip" -Force
+          Copy-Item "dist\$versionedName.zip" "dist\$stableZipName" -Force
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4

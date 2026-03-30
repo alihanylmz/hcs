@@ -13,14 +13,11 @@ Add these GitHub repository secrets once, then releases can be created by pushin
 - `ANDROID_KEY_ALIAS`
 - `SUPABASE_ACCESS_TOKEN`
 - `SUPABASE_PROJECT_REF`
-- `WINDOWS_PFX_BASE64` optional but recommended
-- `WINDOWS_PFX_PASSWORD` optional but recommended
 
-Helper commands for secrets:
+Helper command for the Android keystore secret:
 
 ```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("android\\app\\upload-keystore.jks"))
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\\certs\\company-code-sign.pfx"))
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("android\app\upload-keystore.jks"))
 ```
 
 ## Versioning
@@ -28,7 +25,7 @@ Helper commands for secrets:
 - Update `version:` in `pubspec.yaml`.
 - `1.2.3+45` means:
   - Android: `versionName=1.2.3`, `versionCode=45`
-  - Windows MSIX: `1.2.3.45`
+  - Windows: release package version `1.2.3+45`
 - Keep build numbers increasing for every published release.
 
 ## GitHub Releases
@@ -40,14 +37,10 @@ GitHub Releases is the download source for both Android and Windows.
   - Upload the release APK to GitHub Releases and use that asset URL in `app_versions.download_url`.
   - Keep the same keystore forever; Android updates require the new APK to be signed with the same key as the installed one.
 - Windows:
-  - The release workflow now publishes these assets on every tag:
-    - versioned ZIP bundle
-    - versioned MSIX package
-    - stable `istakip-windows.msix`
-    - stable `istakip-windows.appinstaller`
-    - signing certificate `.cer`
-  - The stable App Installer URL is the one that should be used in `app_versions.download_url`.
-  - Once the app is installed through `.appinstaller`, future Windows updates can flow through App Installer.
+  - Flutter Windows cannot be distributed as only a single `.exe`; the full runner folder is required.
+  - The release workflow publishes a versioned ZIP bundle and a stable `istakip-windows.zip` asset on every tag.
+  - Use the stable ZIP URL in `app_versions.download_url` so the app can always open the latest package.
+  - Windows updates are manual: the app shows a notification, the user downloads the ZIP, extracts it, and replaces the old installation files.
 
 ## App Update Table
 
@@ -65,20 +58,20 @@ insert into public.app_versions (
 ) values
   (
     'android',
-    '1.1.2',
-    7,
-    'https://github.com/alihanylmz/hcs/releases/download/v1.1.2/istakip-android-v1.1.2+7.apk',
+    '1.1.7',
+    12,
+    'https://github.com/alihanylmz/hcs/releases/download/v1.1.7/istakip-android-v1.1.7+12.apk',
     'Android release notes',
-    'v1.1.2',
+    'v1.1.7',
     false
   ),
   (
     'windows',
-    '1.1.2',
-    7,
-    'https://github.com/alihanylmz/hcs/releases/latest/download/istakip-windows.appinstaller',
+    '1.1.7',
+    12,
+    'https://github.com/alihanylmz/hcs/releases/latest/download/istakip-windows.zip',
     'Windows release notes',
-    'v1.1.2',
+    'v1.1.7',
     false
   );
 ```
@@ -96,14 +89,12 @@ insert into public.app_versions (
 flutter build apk --release
 ```
 
-## Windows MSIX + App Installer
+## Windows Manual Update
 
-- The workflow builds the regular Windows runner, then creates an MSIX package and a matching `.appinstaller` file.
-- If `WINDOWS_PFX_BASE64` and `WINDOWS_PFX_PASSWORD` are configured, the workflow signs the EXE and the MSIX with your certificate.
-- If those secrets are missing, the workflow creates a temporary self-signed certificate and uploads `istakip-windows.cer`.
-- On test machines, install that `.cer` first if Windows does not trust the MSIX signature.
-- The first Windows migration should be done by opening `istakip-windows.appinstaller`.
-- After the app is installed through App Installer once, future releases can be offered through the same stable App Installer URL.
+- The workflow builds the regular Windows runner and packages the full folder as ZIP.
+- Publish or share `istakip-windows.zip` with users.
+- When the app shows an update prompt, the user downloads the ZIP, extracts it, closes the old app, and replaces the old installation folder with the new files.
+- This is a notified manual update flow, not an automatic installer.
 
 ## Release Checklist
 
@@ -111,13 +102,11 @@ After the workflow files in `.github/workflows/` are committed:
 
 1. Update `version:` in `pubspec.yaml`.
 2. Commit and push the branch.
-3. Create and push the matching tag, for example `v1.1.3`.
+3. Create and push the matching tag, for example `v1.1.7`.
 4. GitHub Actions will build:
    - `istakip-android-v<version>+<build>.apk`
    - `istakip-windows-v<version>+<build>.zip`
-   - `istakip-windows-v<version>+<build>.msix`
-   - `istakip-windows-v<version>+<build>.appinstaller`
-   - `istakip-windows.appinstaller`
+   - `istakip-windows.zip`
 5. The workflow publishes those assets to a GitHub Release automatically.
 6. Insert or update matching `app_versions` rows.
 7. Smoke test the update prompt on both platforms.
@@ -125,7 +114,7 @@ After the workflow files in `.github/workflows/` are committed:
 Tag commands:
 
 ```powershell
-git tag v1.1.3
+git tag v1.1.7
 git push origin main --tags
 ```
 

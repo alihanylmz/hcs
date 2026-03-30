@@ -25,7 +25,7 @@ Helper command for the Android keystore secret:
 - Update `version:` in `pubspec.yaml`.
 - `1.2.3+45` means:
   - Android: `versionName=1.2.3`, `versionCode=45`
-  - Windows: release package version `1.2.3+45`
+  - Windows installer release: `1.2.3+45`
 - Keep build numbers increasing for every published release.
 
 ## GitHub Releases
@@ -37,10 +37,11 @@ GitHub Releases is the download source for both Android and Windows.
   - Upload the release APK to GitHub Releases and use that asset URL in `app_versions.download_url`.
   - Keep the same keystore forever; Android updates require the new APK to be signed with the same key as the installed one.
 - Windows:
-  - Flutter Windows cannot be distributed as only a single `.exe`; the full runner folder is required.
-  - The release workflow publishes a versioned ZIP bundle and a stable `istakip-windows.zip` asset on every tag.
-  - Use the stable ZIP URL in `app_versions.download_url` so the app can always open the latest package.
-  - Windows updates are manual: the app shows a notification, the user downloads the ZIP, extracts it, and replaces the old installation files.
+  - Flutter Windows cannot be distributed as only the app `.exe`; the full runner folder is required.
+  - The release workflow publishes a versioned setup installer EXE and a stable `istakip-windows-setup.exe` asset on every tag.
+  - The workflow also publishes ZIP bundles as fallback.
+  - Use the stable setup EXE URL in `app_versions.download_url` so the app can always open the latest installer.
+  - Windows updates stay manual: the app shows a notification, the user downloads the installer EXE, closes the old app if needed, and runs the setup file.
 
 ## App Update Table
 
@@ -58,20 +59,20 @@ insert into public.app_versions (
 ) values
   (
     'android',
-    '1.1.7',
-    12,
-    'https://github.com/alihanylmz/hcs/releases/download/v1.1.7/istakip-android-v1.1.7+12.apk',
+    '1.1.8',
+    13,
+    'https://github.com/alihanylmz/hcs/releases/download/v1.1.8/istakip-android-v1.1.8+13.apk',
     'Android release notes',
-    'v1.1.7',
+    'v1.1.8',
     false
   ),
   (
     'windows',
-    '1.1.7',
-    12,
-    'https://github.com/alihanylmz/hcs/releases/latest/download/istakip-windows.zip',
-    'Windows release notes',
-    'v1.1.7',
+    '1.1.8',
+    13,
+    'https://github.com/alihanylmz/hcs/releases/latest/download/istakip-windows-setup.exe',
+    'Windows installer release notes',
+    'v1.1.8',
     false
   );
 ```
@@ -89,12 +90,12 @@ insert into public.app_versions (
 flutter build apk --release
 ```
 
-## Windows Manual Update
+## Windows Installer Update
 
-- The workflow builds the regular Windows runner and packages the full folder as ZIP.
-- Publish or share `istakip-windows.zip` with users.
-- When the app shows an update prompt, the user downloads the ZIP, extracts it, closes the old app, and replaces the old installation folder with the new files.
-- This is a notified manual update flow, not an automatic installer.
+- The workflow builds the regular Windows runner and then packages it with Inno Setup as a single installer EXE.
+- Publish or share `istakip-windows-setup.exe` with users.
+- When the app shows an update prompt, the user downloads the installer, runs it, and completes the setup.
+- This is not silent auto-update; it is a notified manual installer flow.
 
 ## Release Checklist
 
@@ -102,9 +103,11 @@ After the workflow files in `.github/workflows/` are committed:
 
 1. Update `version:` in `pubspec.yaml`.
 2. Commit and push the branch.
-3. Create and push the matching tag, for example `v1.1.7`.
+3. Create and push the matching tag, for example `v1.1.8`.
 4. GitHub Actions will build:
    - `istakip-android-v<version>+<build>.apk`
+   - `istakip-windows-v<version>+<build>-setup.exe`
+   - `istakip-windows-setup.exe`
    - `istakip-windows-v<version>+<build>.zip`
    - `istakip-windows.zip`
 5. The workflow publishes those assets to a GitHub Release automatically.
@@ -114,7 +117,7 @@ After the workflow files in `.github/workflows/` are committed:
 Tag commands:
 
 ```powershell
-git tag v1.1.7
+git tag v1.1.8
 git push origin main --tags
 ```
 

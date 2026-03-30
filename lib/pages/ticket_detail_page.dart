@@ -274,7 +274,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder:
-            (_) => TeamHomePage(teamId: linkedCard.teamId, initialTabIndex: 0),
+            (_) => TeamHomePage(teamId: linkedCard.teamId),
       ),
     );
     if (!mounted) return;
@@ -287,11 +287,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder:
-            (_) => TeamHomePage(
-              teamId: linkedCard.teamId,
-              initialTabIndex: 1,
-              initialConversationCardId: linkedCard.cardId,
-            ),
+            (_) => TeamHomePage(teamId: linkedCard.teamId),
       ),
     );
     if (!mounted) return;

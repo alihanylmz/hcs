@@ -35,21 +35,21 @@ class SidebarItem extends StatelessWidget {
             color:
                 isActive
                     ? activeColor
-                    : Colors.white.withOpacity(isDark ? 0.02 : 0.04),
+                    : Colors.white.withOpacity(isDark ? 0.025 : 0.035),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color:
                   isActive
                       ? AppColors.corporateBlue.withOpacity(0.30)
-                      : Colors.white.withOpacity(isDark ? 0.05 : 0.08),
+                      : Colors.white.withOpacity(isDark ? 0.06 : 0.08),
             ),
             boxShadow:
                 isActive
                     ? [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.10),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
+                        color: Colors.black.withOpacity(0.07),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
                     ]
                     : null,
@@ -101,7 +101,7 @@ class SidebarDivider extends StatelessWidget {
         color:
             isDark
                 ? Colors.white.withOpacity(0.08)
-                : Colors.white.withOpacity(0.10),
+                : Colors.white.withOpacity(0.12),
         thickness: 1,
         height: 1,
       ),

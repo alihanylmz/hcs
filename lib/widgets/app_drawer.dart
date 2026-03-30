@@ -11,6 +11,7 @@ import '../pages/login_page.dart';
 import '../pages/partner_management_page.dart';
 import '../pages/fault_codes_page.dart';
 import '../pages/my_teams_page.dart';
+import '../services/permission_service.dart';
 import '../theme/app_colors.dart';
 
 enum AppDrawerPage {
@@ -43,27 +44,35 @@ class AppDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    
-    // Drawer container (neumorphism)
-    final Color baseBg = isDark ? const Color(0xFF111827) : const Color(0xFFF2F2F2);
-    final Color divider = isDark ? Colors.white12 : const Color(0xFFE0E0E0);
-    final Color textColor = isDark ? Colors.white : Colors.black87;
-    final Color iconMuted = isDark ? Colors.white70 : Colors.black54;
-    final Color activeBg = isDark ? Colors.white.withOpacity(0.10) : const Color(0xFFE9E9E9);
+
+    final Color baseBg =
+        isDark
+            ? AppColors.sidebarBackgroundDark
+            : AppColors.sidebarBackgroundLight;
+    final Color divider = Colors.white.withOpacity(isDark ? 0.08 : 0.10);
+    final Color textColor = AppColors.sidebarText;
+    final Color iconMuted = AppColors.sidebarTextMuted;
+    final Color activeBg =
+        isDark ? AppColors.sidebarActiveDark : AppColors.sidebarActiveLight;
     final Color accent = AppColors.corporateYellow;
-    
+
     return Drawer(
       width: 320,
       backgroundColor: Colors.transparent,
       elevation: 0,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
-          topRight: Radius.circular(0), // Modern düz tasarım
+          topRight: Radius.circular(0),
           bottomRight: Radius.circular(0),
         ),
       ),
       child: Padding(
-        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top, bottom: 12, left: 12, right: 12),
+        padding: EdgeInsets.only(
+          top: MediaQuery.of(context).padding.top,
+          bottom: 12,
+          left: 12,
+          right: 12,
+        ),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(28),
@@ -79,7 +88,6 @@ class AppDrawer extends StatelessWidget {
             borderRadius: BorderRadius.circular(28),
             child: Stack(
               children: [
-                // Base
                 Positioned.fill(
                   child: Container(
                     decoration: BoxDecoration(
@@ -89,11 +97,10 @@ class AppDrawer extends StatelessWidget {
                   ),
                 ),
 
-                // Noise / grain (procedural)
                 Positioned.fill(
                   child: IgnorePointer(
                     child: Opacity(
-                      opacity: isDark ? 0.07 : 0.06,
+                      opacity: isDark ? 0.04 : 0.03,
                       child: RepaintBoundary(
                         child: CustomPaint(
                           painter: _NoisePainter(isDark: isDark),
@@ -103,7 +110,6 @@ class AppDrawer extends StatelessWidget {
                   ),
                 ),
 
-                // Inner shadow overlay
                 Positioned.fill(
                   child: IgnorePointer(
                     child: Container(
@@ -113,10 +119,10 @@ class AppDrawer extends StatelessWidget {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: [
-                            Colors.black.withOpacity(isDark ? 0.18 : 0.10),
+                            Colors.black.withOpacity(isDark ? 0.12 : 0.08),
                             Colors.transparent,
                             Colors.transparent,
-                            Colors.black.withOpacity(isDark ? 0.18 : 0.10),
+                            Colors.black.withOpacity(isDark ? 0.12 : 0.08),
                           ],
                           stops: const [0.0, 0.18, 0.82, 1.0],
                         ),
@@ -125,7 +131,6 @@ class AppDrawer extends StatelessWidget {
                   ),
                 ),
 
-                // Content
                 SafeArea(
                   top: false,
                   child: Column(
@@ -147,16 +152,20 @@ class AppDrawer extends StatelessWidget {
                           padding: const EdgeInsets.only(bottom: 12),
                           children: [
                             _NavTile(
-                              label: 'Takımlarım',
+                              label: 'Tak\u0131mlar\u0131m',
                               icon: Icons.groups_outlined,
                               active: currentPage == AppDrawerPage.myTeams,
                               iconMuted: iconMuted,
                               textColor: textColor,
                               activeBg: activeBg,
                               accent: accent,
-                              onTap: () => _navigate(context, AppDrawerPage.myTeams, MyTeamsPage()),
+                              onTap:
+                                  () => _navigate(
+                                    context,
+                                    AppDrawerPage.myTeams,
+                                    MyTeamsPage(),
+                                  ),
                             ),
-                            // Bildirimler geçici kapalı
                             // _NavTile(
                             //   label: 'Bildirimler',
                             //   icon: Icons.notifications_outlined,
@@ -168,27 +177,43 @@ class AppDrawer extends StatelessWidget {
                             //   onTap: () => _navigate(context, AppDrawerPage.notifications, TeamNotificationsPage()),
                             // ),
                             _NavTile(
-                              label: 'İş Listesi',
+                              label: '\u0130\u015f Listesi',
                               icon: Icons.list_alt_rounded,
                               active: currentPage == AppDrawerPage.ticketList,
                               iconMuted: iconMuted,
                               textColor: textColor,
                               activeBg: activeBg,
                               accent: accent,
-                              onTap: () => _navigate(context, AppDrawerPage.ticketList, const TicketListPage()),
+                              onTap:
+                                  () => _navigate(
+                                    context,
+                                    AppDrawerPage.ticketList,
+                                    const TicketListPage(),
+                                  ),
                             ),
-                            if (userRole == 'admin' || userRole == 'manager')
+                            if (PermissionService.roleHasPermission(
+                              userRole,
+                              AppPermission.viewDashboard,
+                            ))
                               _NavTile(
-                                label: 'Yönetici Paneli',
+                                label: 'Y\u00f6netici Paneli',
                                 icon: Icons.dashboard_rounded,
                                 active: currentPage == AppDrawerPage.dashboard,
                                 iconMuted: iconMuted,
                                 textColor: textColor,
                                 activeBg: activeBg,
                                 accent: accent,
-                                onTap: () => _navigate(context, AppDrawerPage.dashboard, const DashboardPage()),
+                                onTap:
+                                    () => _navigate(
+                                      context,
+                                      AppDrawerPage.dashboard,
+                                      const DashboardPage(),
+                                    ),
                               ),
-                            if (userRole != 'partner_user')
+                            if (PermissionService.roleHasPermission(
+                              userRole,
+                              AppPermission.viewStock,
+                            ))
                               _NavTile(
                                 label: 'Stok Durumu',
                                 icon: Icons.inventory_2_outlined,
@@ -197,27 +222,42 @@ class AppDrawer extends StatelessWidget {
                                 textColor: textColor,
                                 activeBg: activeBg,
                                 accent: accent,
-                                onTap: () => _navigate(context, AppDrawerPage.stock, const StockOverviewPage()),
+                                onTap:
+                                    () => _navigate(
+                                      context,
+                                      AppDrawerPage.stock,
+                                      const StockOverviewPage(),
+                                    ),
                               ),
                             _NavTile(
-                              label: 'Biten İşler (Arşiv)',
+                              label: 'Biten \u0130\u015fler (Ar\u015fiv)',
                               icon: Icons.task_alt_rounded,
                               active: currentPage == AppDrawerPage.archived,
                               iconMuted: iconMuted,
                               textColor: textColor,
                               activeBg: activeBg,
                               accent: accent,
-                              onTap: () => _navigate(context, AppDrawerPage.archived, const ArchivedTicketsPage()),
+                              onTap:
+                                  () => _navigate(
+                                    context,
+                                    AppDrawerPage.archived,
+                                    const ArchivedTicketsPage(),
+                                  ),
                             ),
                             _NavTile(
-                              label: 'Arıza Rehberi',
+                              label: 'Ar\u0131za Rehberi',
                               icon: Icons.support_agent_rounded,
                               active: currentPage == AppDrawerPage.faultCodes,
                               iconMuted: iconMuted,
                               textColor: textColor,
                               activeBg: activeBg,
                               accent: accent,
-                              onTap: () => _navigate(context, AppDrawerPage.faultCodes, const FaultCodesPage()),
+                              onTap:
+                                  () => _navigate(
+                                    context,
+                                    AppDrawerPage.faultCodes,
+                                    const FaultCodesPage(),
+                                  ),
                             ),
 
                             const SizedBox(height: 8),
@@ -235,46 +275,69 @@ class AppDrawer extends StatelessWidget {
                               onTap: () {
                                 Navigator.pop(context);
                                 Navigator.of(context)
-                                    .push(MaterialPageRoute(builder: (_) => const ProfilePage()))
+                                    .push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const ProfilePage(),
+                                      ),
+                                    )
                                     .then((_) => onProfileReload?.call());
                               },
                             ),
                             _NavTile(
-                              label: IsTakipApp.of(context)?.isDarkMode == true ? 'Aydınlık Mod' : 'Karanlık Mod',
-                              icon: IsTakipApp.of(context)?.isDarkMode == true ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                              label:
+                                  IsTakipApp.of(context)?.isDarkMode == true
+                                      ? 'Ayd\u0131nl\u0131k Mod'
+                                      : 'Karanl\u0131k Mod',
+                              icon:
+                                  IsTakipApp.of(context)?.isDarkMode == true
+                                      ? Icons.light_mode_outlined
+                                      : Icons.dark_mode_outlined,
                               active: false,
                               iconMuted: iconMuted,
                               textColor: textColor,
                               activeBg: activeBg,
                               accent: accent,
-                              onTap: () => IsTakipApp.of(context)?.toggleTheme(),
+                              onTap:
+                                  () => IsTakipApp.of(context)?.toggleTheme(),
                             ),
 
                             const SizedBox(height: 12),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
                               child: Material(
                                 color: Colors.transparent,
                                 borderRadius: BorderRadius.circular(14),
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(14),
                                   onTap: () async {
-                                    await Supabase.instance.client.auth.signOut();
+                                    await Supabase.instance.client.auth
+                                        .signOut();
                                     if (context.mounted) {
                                       Navigator.of(context).pushAndRemoveUntil(
-                                        MaterialPageRoute(builder: (_) => const LoginPage()),
+                                        MaterialPageRoute(
+                                          builder: (_) => const LoginPage(),
+                                        ),
                                         (route) => false,
                                       );
                                     }
                                   },
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
                                     child: Row(
                                       children: [
-                                        Icon(Icons.logout_rounded, color: Colors.red.withOpacity(0.85), size: 22),
+                                        Icon(
+                                          Icons.logout_rounded,
+                                          color: Colors.red.withOpacity(0.85),
+                                          size: 22,
+                                        ),
                                         const SizedBox(width: 14),
                                         Text(
-                                          'Çıkış Yap',
+                                          '\u00c7\u0131k\u0131\u015f Yap',
                                           style: TextStyle(
                                             fontSize: 15,
                                             fontWeight: FontWeight.w600,
@@ -300,28 +363,17 @@ class AppDrawer extends StatelessWidget {
       ),
     );
   }
-  
+
   void _navigate(BuildContext context, AppDrawerPage page, Widget widget) {
     Navigator.pop(context);
     if (currentPage != page) {
-      // pushReplacement iOS geri-swipe/back davranışını bozar; push ile doğal geri hareketi korunur.
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => widget),
-      );
+      // pushReplacement iOS geri-swipe/back davranÄ±ÅŸÄ±nÄ± bozar; push ile doÄŸal geri hareketi korunur.
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => widget));
     }
   }
-  
+
   String _getUserRoleLabel(String? role) {
-    switch (role) {
-      case 'admin':
-      case 'manager':
-        return 'YÖNETİCİ';
-      case 'partner_user':
-        return 'PARTNER';
-      case 'technician':
-      default:
-        return 'TEKNİSYEN';
-    }
+    return PermissionService.roleLabel(role).toUpperCase();
   }
 }
 
@@ -344,7 +396,10 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayName = (userName == null || userName!.trim().isEmpty) ? 'Kullanıcı' : userName!.trim();
+    final displayName =
+        (userName == null || userName!.trim().isEmpty)
+            ? 'Kullan\u0131c\u0131'
+            : userName!.trim();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
@@ -354,10 +409,7 @@ class _ProfileHeader extends StatelessWidget {
           Container(
             width: 52,
             height: 52,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: accent, // ring
-            ),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: accent),
             padding: const EdgeInsets.all(3),
             child: Container(
               decoration: BoxDecoration(
@@ -365,7 +417,8 @@ class _ProfileHeader extends StatelessWidget {
                 color: isDark ? const Color(0xFF0B1220) : Colors.white,
               ),
               child: CircleAvatar(
-                backgroundColor: isDark ? Colors.white10 : const Color(0xFFEAEAEA),
+                backgroundColor:
+                    isDark ? Colors.white10 : const Color(0xFFEAEAEA),
                 child: Text(
                   displayName.substring(0, 1).toUpperCase(),
                   style: TextStyle(
@@ -385,7 +438,11 @@ class _ProfileHeader extends StatelessWidget {
                   displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textColor),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -397,7 +454,6 @@ class _ProfileHeader extends StatelessWidget {
               ],
             ),
           ),
-          // Drawer kapatma (X) — kullanıcı beklentisi: açık menüde net kapatma aksiyonu
           Material(
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(12),
@@ -416,16 +472,7 @@ class _ProfileHeader extends StatelessWidget {
   }
 
   String _roleLabel(String? role) {
-    switch (role) {
-      case 'admin':
-      case 'manager':
-        return 'Yönetici';
-      case 'partner_user':
-        return 'Partner';
-      case 'technician':
-      default:
-        return 'Teknisyen';
-    }
+    return PermissionService.roleLabel(role);
   }
 }
 
@@ -459,7 +506,13 @@ class _NavTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       child: Material(
         color: bg,
-        borderRadius: BorderRadius.circular(14),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side:
+              active
+                  ? BorderSide(color: Colors.white.withOpacity(0.10))
+                  : BorderSide.none,
+        ),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
           onTap: onTap,
@@ -493,7 +546,7 @@ class _NavTile extends StatelessWidget {
                           color: accent.withOpacity(0.35),
                           blurRadius: 10,
                           offset: const Offset(0, 3),
-                        )
+                        ),
                       ],
                     ),
                   ),
@@ -513,10 +566,12 @@ class _NoisePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rnd = math.Random(1337);
-    final int count = ((size.width * size.height) / 1200).clamp(400, 1400).toInt();
-    final paint = Paint()
-      ..style = PaintingStyle.fill
-      ..strokeWidth = 1;
+    final int count =
+        ((size.width * size.height) / 1200).clamp(400, 1400).toInt();
+    final paint =
+        Paint()
+          ..style = PaintingStyle.fill
+          ..strokeWidth = 1;
 
     for (int i = 0; i < count; i++) {
       final dx = rnd.nextDouble() * size.width;
@@ -531,4 +586,3 @@ class _NoisePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
-

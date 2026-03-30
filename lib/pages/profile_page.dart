@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/user_service.dart';
+import '../services/permission_service.dart';
 import '../models/user_profile.dart';
 import '../widgets/app_drawer.dart';
 import '../theme/app_colors.dart';
@@ -27,7 +28,7 @@ class _ProfilePageState extends State<ProfilePage> {
     super.initState();
     _loadProfile();
   }
-  
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -48,25 +49,28 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _updateProfile() async {
     if (_userProfile == null) return;
-    
+
     // Klavyeyi kapat
     FocusScope.of(context).unfocus();
-    
+
     setState(() => _isLoading = true);
     try {
-      await _userService.updateProfile(_userProfile!.id, fullName: _nameController.text.trim());
+      await _userService.updateProfile(
+        _userProfile!.id,
+        fullName: _nameController.text.trim(),
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Profil başarıyla güncellendi'),
             backgroundColor: Colors.green,
-          )
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red)
+          SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -97,7 +101,9 @@ class _ProfilePageState extends State<ProfilePage> {
           userName: _userProfile?.fullName,
           userRole: _userProfile?.role,
         ),
-        body: const Center(child: CircularProgressIndicator(color: AppColors.corporateNavy)),
+        body: const Center(
+          child: CircularProgressIndicator(color: AppColors.corporateNavy),
+        ),
       );
     }
 
@@ -117,7 +123,10 @@ class _ProfilePageState extends State<ProfilePage> {
           icon: const Icon(Icons.menu, color: Colors.white),
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
-        title: const Text('Profilim', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Profilim',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         centerTitle: true,
         actions: [
           IconButton(
@@ -163,16 +172,22 @@ class _ProfilePageState extends State<ProfilePage> {
                 Positioned(
                   bottom: -60,
                   child: Container(
-                    padding: const EdgeInsets.all(4), // Beyaz çerçeve için boşluk
+                    padding: const EdgeInsets.all(
+                      4,
+                    ), // Beyaz çerçeve için boşluk
                     decoration: BoxDecoration(
-                      color: bgColor, // Arka plan rengiyle aynı olsun ki kesik gibi dursun
+                      color:
+                          bgColor, // Arka plan rengiyle aynı olsun ki kesik gibi dursun
                       shape: BoxShape.circle,
                     ),
                     child: CircleAvatar(
                       radius: 60,
-                      backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                      backgroundColor:
+                          isDark ? Colors.grey.shade800 : Colors.grey.shade200,
                       child: Text(
-                        (_userProfile?.displayName ?? 'A').substring(0, 1).toUpperCase(),
+                        (_userProfile?.displayName ?? 'A')
+                            .substring(0, 1)
+                            .toUpperCase(),
                         style: TextStyle(
                           fontSize: 48,
                           fontWeight: FontWeight.bold,
@@ -186,7 +201,6 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
 
             const SizedBox(height: 70), // Avatar boşluğu
-
             // --- 2. İSİM VE ROL BİLGİSİ ---
             Text(
               _userProfile?.displayName ?? 'İsimsiz Kullanıcı',
@@ -202,7 +216,9 @@ class _ProfilePageState extends State<ProfilePage> {
               decoration: BoxDecoration(
                 color: AppColors.corporateNavy.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.corporateNavy.withOpacity(0.2)),
+                border: Border.all(
+                  color: AppColors.corporateNavy.withOpacity(0.2),
+                ),
               ),
               child: Text(
                 _getRoleLabel(_userProfile?.role),
@@ -259,9 +275,12 @@ class _ProfilePageState extends State<ProfilePage> {
                           height: 120,
                           width: double.infinity,
                           decoration: BoxDecoration(
-                            color: isDark ? Colors.black26 : Colors.grey.shade50,
+                            color:
+                                isDark ? Colors.black26 : Colors.grey.shade50,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.corporateNavy.withOpacity(0.2)),
+                            border: Border.all(
+                              color: AppColors.corporateNavy.withOpacity(0.2),
+                            ),
                           ),
                           child: Stack(
                             children: [
@@ -275,40 +294,77 @@ class _ProfilePageState extends State<ProfilePage> {
                                 top: 4,
                                 right: 4,
                                 child: IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.red,
+                                  ),
                                   onPressed: () async {
                                     final confirm = await showDialog<bool>(
                                       context: context,
-                                      builder: (ctx) => AlertDialog(
-                                        title: const Text('İmzayı Sil'),
-                                        content: const Text('Kayıtlı imzanızı silmek istediğinize emin misiniz?'),
-                                        actions: [
-                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
-                                          TextButton(
-                                            onPressed: () => Navigator.pop(ctx, true),
-                                            child: const Text('Sil', style: TextStyle(color: Colors.red)),
+                                      builder:
+                                          (ctx) => AlertDialog(
+                                            title: const Text('İmzayı Sil'),
+                                            content: const Text(
+                                              'Kayıtlı imzanızı silmek istediğinize emin misiniz?',
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed:
+                                                    () => Navigator.pop(
+                                                      ctx,
+                                                      false,
+                                                    ),
+                                                child: const Text('İptal'),
+                                              ),
+                                              TextButton(
+                                                onPressed:
+                                                    () => Navigator.pop(
+                                                      ctx,
+                                                      true,
+                                                    ),
+                                                child: const Text(
+                                                  'Sil',
+                                                  style: TextStyle(
+                                                    color: Colors.red,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                        ],
-                                      ),
                                     );
                                     if (confirm == true) {
                                       setState(() => _isLoading = true);
                                       try {
-                                        await _userService.clearSignature(_userProfile!.id);
+                                        await _userService.clearSignature(
+                                          _userProfile!.id,
+                                        );
                                         await _loadProfile();
                                         if (mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(content: Text('İmza başarıyla silindi'), backgroundColor: Colors.green),
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'İmza başarıyla silindi',
+                                              ),
+                                              backgroundColor: Colors.green,
+                                            ),
                                           );
                                         }
                                       } catch (e) {
                                         if (mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Hata: $e'),
+                                              backgroundColor: Colors.red,
+                                            ),
                                           );
                                         }
                                       } finally {
-                                        if (mounted) setState(() => _isLoading = false);
+                                        if (mounted)
+                                          setState(() => _isLoading = false);
                                       }
                                     }
                                   },
@@ -325,10 +381,11 @@ class _ProfilePageState extends State<ProfilePage> {
                               final result = await Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => SignaturePage(
-                                    ticketId: 'PROFILE_SETUP',
-                                    type: SignatureType.technician,
-                                  ),
+                                  builder:
+                                      (_) => SignaturePage(
+                                        ticketId: 'PROFILE_SETUP',
+                                        type: SignatureType.technician,
+                                      ),
                                 ),
                               );
                               if (result == true) {
@@ -339,7 +396,9 @@ class _ProfilePageState extends State<ProfilePage> {
                             label: const Text('İMZAYI GÜNCELLE'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppColors.corporateNavy,
-                              side: const BorderSide(color: AppColors.corporateNavy),
+                              side: const BorderSide(
+                                color: AppColors.corporateNavy,
+                              ),
                             ),
                           ),
                         ),
@@ -356,10 +415,11 @@ class _ProfilePageState extends State<ProfilePage> {
                               final result = await Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => SignaturePage(
-                                    ticketId: 'PROFILE_SETUP',
-                                    type: SignatureType.technician,
-                                  ),
+                                  builder:
+                                      (_) => SignaturePage(
+                                        ticketId: 'PROFILE_SETUP',
+                                        type: SignatureType.technician,
+                                      ),
                                 ),
                               );
                               if (result == true) {
@@ -379,7 +439,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
 
                   // Sadece Yönetici Görür
-                  if (_userProfile?.isManager == true || _userProfile?.isAdmin == true) ...[
+                  if (PermissionService.hasPermission(
+                    _userProfile,
+                    AppPermission.viewProfileAdminTools,
+                  )) ...[
                     const SizedBox(height: 20),
                     _buildActionCard(
                       context,
@@ -389,7 +452,12 @@ class _ProfilePageState extends State<ProfilePage> {
                       color: Colors.orange.shade700,
                       cardColor: cardColor,
                       onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const UserManagementPage()));
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const UserManagementPage(),
+                          ),
+                        );
                       },
                     ),
                   ],
@@ -411,26 +479,27 @@ class _ProfilePageState extends State<ProfilePage> {
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
+                      child:
+                          _isLoading
+                              ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                              : const Text(
+                                'DEĞİŞİKLİKLERİ KAYDET',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
                               ),
-                            )
-                          : const Text(
-                              'DEĞİŞİKLİKLERİ KAYDET',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1,
-                              ),
-                            ),
                     ),
                   ),
-                  
+
                   const SizedBox(height: 40),
                 ],
               ),
@@ -443,7 +512,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   // --- WIDGET YARDIMCILARI ---
 
-  Widget _buildProfileCard(BuildContext context, {
+  Widget _buildProfileCard(
+    BuildContext context, {
     required String title,
     required IconData icon,
     required List<Widget> children,
@@ -508,12 +578,16 @@ class _ProfilePageState extends State<ProfilePage> {
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: isEditable 
-                ? (isDark ? Colors.black12 : AppColors.backgroundGrey) 
-                : (isDark ? Colors.black26 : Colors.grey.shade100),
+            color:
+                isEditable
+                    ? (isDark ? Colors.black12 : AppColors.backgroundGrey)
+                    : (isDark ? Colors.black26 : Colors.grey.shade100),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isEditable ? Colors.transparent : (isDark ? Colors.white10 : Colors.grey.shade200),
+              color:
+                  isEditable
+                      ? Colors.transparent
+                      : (isDark ? Colors.white10 : Colors.grey.shade200),
             ),
           ),
           child: TextFormField(
@@ -525,9 +599,16 @@ class _ProfilePageState extends State<ProfilePage> {
               color: isDark ? Colors.white : AppColors.textDark,
             ),
             decoration: InputDecoration(
-              prefixIcon: Icon(icon, color: isDark ? Colors.grey : Colors.grey.shade500, size: 20),
+              prefixIcon: Icon(
+                icon,
+                color: isDark ? Colors.grey : Colors.grey.shade500,
+                size: 20,
+              ),
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
               isDense: true,
             ),
           ),
@@ -536,7 +617,8 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildActionCard(BuildContext context, {
+  Widget _buildActionCard(
+    BuildContext context, {
     required String title,
     required String subtitle,
     required IconData icon,
@@ -592,7 +674,11 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
             ),
-            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey.shade400),
+            Icon(
+              Icons.arrow_forward_ios,
+              size: 16,
+              color: Colors.grey.shade400,
+            ),
           ],
         ),
       ),
@@ -600,11 +686,6 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   String _getRoleLabel(String? role) {
-    switch (role) {
-      case 'admin': return 'SİSTEM YÖNETİCİSİ';
-      case 'manager': return 'YÖNETİCİ';
-      case 'technician': return 'SAHA TEKNİSYENİ';
-      default: return 'KULLANICI';
-    }
+    return PermissionService.roleLabel(role).toUpperCase();
   }
 }

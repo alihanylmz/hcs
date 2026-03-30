@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/stock_service.dart';
 import '../services/partner_service.dart';
+import '../services/permission_service.dart';
 import '../services/user_service.dart';
 import '../models/partner.dart';
 import '../models/ticket_part.dart'; // Eklendi
@@ -63,6 +64,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
   List<Partner> _partners = [];
   int? _selectedPartnerId;
   bool _canAssignPartner = false; // Sadece admin/manager atayabilir
+  bool _canManageDraftTickets = false;
 
   String _selectedTandem = 'yok';
   String _heaterExists = 'Yok'; // Yeni: Isıtıcı var mı yok mu
@@ -253,7 +255,10 @@ class _EditTicketPageState extends State<EditTicketPage> {
       final profile = await userService.getCurrentUserProfile();
 
       // Sadece Admin ve Yöneticiler partner atayabilir
-      if (profile != null && (profile.isAdmin || profile.isManager)) {
+      if (PermissionService.hasPermission(
+        profile,
+        AppPermission.assignTicketPartner,
+      )) {
         final partners = await _partnerService.getAllPartners();
         if (mounted) {
           setState(() {
@@ -268,6 +273,30 @@ class _EditTicketPageState extends State<EditTicketPage> {
   }
 
   Future<void> _loadUserRole() async {
+    final profile = await UserService().getCurrentUserProfile();
+
+    if (!mounted) return;
+
+    setState(() {
+      _userRole = profile?.role;
+      _canManageDraftTickets = PermissionService.hasPermission(
+        profile,
+        AppPermission.manageDraftTickets,
+      );
+    });
+
+    if (!PermissionService.hasPermission(profile, AppPermission.editTicket)) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bu kaydi duzenleme yetkiniz yok.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
     if (user != null) {
@@ -789,8 +818,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                                 ),
                                                 items: [
                                                   // Admin ve manager'lar için draft seçeneği
-                                                  if (_userRole == 'admin' ||
-                                                      _userRole == 'manager')
+                                                  if (_canManageDraftTickets)
                                                     const DropdownMenuItem(
                                                       value: 'draft',
                                                       child: Text(

@@ -6,8 +6,8 @@ import 'app_colors.dart';
 class AppTheme {
   const AppTheme._();
 
-  static ThemeData get lightTheme => _buildTheme(brightness: Brightness.light);
-  static ThemeData get darkTheme => _buildTheme(brightness: Brightness.dark);
+  static final ThemeData lightTheme = _buildTheme(brightness: Brightness.light);
+  static final ThemeData darkTheme = _buildTheme(brightness: Brightness.dark);
 
   static ThemeData _buildTheme({required Brightness brightness}) {
     final isDark = brightness == Brightness.dark;
@@ -15,16 +15,20 @@ class AppTheme {
     final scaffoldColor =
         isDark ? AppColors.backgroundDark : AppColors.backgroundGrey;
     final surfaceColor =
+        isDark ? AppColors.surfaceDark : AppColors.surfaceWhite;
+    final cardColor =
         isDark ? AppColors.surfaceDarkRaised : AppColors.surfaceWhite;
     final surfaceAltColor =
         isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceSoft;
     final borderColor = isDark ? AppColors.borderDark : AppColors.borderSubtle;
     final primaryColor =
-        isDark ? const Color(0xFF7CB3FF) : AppColors.corporateBlue;
-    final secondaryColor = AppColors.corporateYellow;
+        isDark ? const Color(0xFF89C6BF) : AppColors.corporateBlue;
+    final secondaryColor =
+        isDark ? const Color(0xFFD4B184) : AppColors.corporateYellow;
     final onSurfaceColor = isDark ? AppColors.textOnDark : AppColors.textDark;
     final mutedTextColor =
         isDark ? AppColors.textOnDarkMuted : AppColors.textLight;
+    final onPrimaryColor = isDark ? const Color(0xFF0D1715) : Colors.white;
 
     final baseTextTheme = GoogleFonts.plusJakartaSansTextTheme(
       isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
@@ -90,9 +94,9 @@ class AppTheme {
               primary: primaryColor,
               secondary: secondaryColor,
               tertiary: AppColors.statusDone,
-              surface: surfaceColor,
+              surface: cardColor,
               error: AppColors.corporateRed,
-              onPrimary: AppColors.textDark,
+              onPrimary: onPrimaryColor,
               onSecondary: AppColors.textDark,
               onSurface: onSurfaceColor,
               outline: borderColor,
@@ -101,9 +105,9 @@ class AppTheme {
               primary: primaryColor,
               secondary: secondaryColor,
               tertiary: AppColors.statusDone,
-              surface: surfaceColor,
+              surface: cardColor,
               error: AppColors.corporateRed,
-              onPrimary: Colors.white,
+              onPrimary: onPrimaryColor,
               onSecondary: AppColors.textDark,
               onSurface: onSurfaceColor,
               outline: borderColor,
@@ -114,13 +118,13 @@ class AppTheme {
       brightness: brightness,
       primaryColor: primaryColor,
       scaffoldBackgroundColor: scaffoldColor,
-      canvasColor: surfaceColor,
+      canvasColor: scaffoldColor,
       colorScheme: colorScheme,
       textTheme: baseTextTheme,
       dividerColor: borderColor,
-      shadowColor: Colors.black.withOpacity(isDark ? 0.30 : 0.08),
+      shadowColor: Colors.black.withValues(alpha: isDark ? 0.22 : 0.07),
       splashFactory: InkRipple.splashFactory,
-      cardColor: surfaceColor,
+      cardColor: cardColor,
       appBarTheme: AppBarTheme(
         backgroundColor: surfaceColor,
         foregroundColor: onSurfaceColor,
@@ -152,20 +156,20 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: surfaceColor,
+        backgroundColor: cardColor,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: surfaceColor,
-        modalBackgroundColor: surfaceColor,
+        backgroundColor: cardColor,
+        modalBackgroundColor: cardColor,
         surfaceTintColor: Colors.transparent,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: surfaceColor,
+        color: cardColor,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         elevation: 8,
@@ -176,8 +180,8 @@ class AppTheme {
         backgroundColor: surfaceAltColor,
         selectedColor:
             isDark
-                ? primaryColor.withOpacity(0.20)
-                : primaryColor.withOpacity(0.12),
+                ? primaryColor.withValues(alpha: 0.20)
+                : primaryColor.withValues(alpha: 0.12),
         labelStyle: baseTextTheme.labelMedium?.copyWith(color: onSurfaceColor),
         secondaryLabelStyle: baseTextTheme.labelMedium?.copyWith(
           color: onSurfaceColor,
@@ -185,7 +189,7 @@ class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       ),
       cardTheme: CardThemeData(
-        color: surfaceColor,
+        color: cardColor,
         elevation: 0,
         margin: const EdgeInsets.only(bottom: 16),
         shape: RoundedRectangleBorder(
@@ -220,7 +224,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryColor,
-          foregroundColor: isDark ? AppColors.textDark : colorScheme.onPrimary,
+          foregroundColor: colorScheme.onPrimary,
           elevation: 0,
           shadowColor: Colors.transparent,
           minimumSize: const Size(0, 50),
@@ -238,7 +242,7 @@ class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: primaryColor,
-          foregroundColor: isDark ? AppColors.textDark : colorScheme.onPrimary,
+          foregroundColor: colorScheme.onPrimary,
           minimumSize: const Size(0, 50),
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
           shape: RoundedRectangleBorder(
@@ -254,6 +258,10 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: onSurfaceColor,
+          backgroundColor:
+              isDark
+                  ? AppColors.surfaceDarkMuted.withValues(alpha: 0.52)
+                  : AppColors.surfaceWhite,
           side: BorderSide(color: borderColor),
           minimumSize: const Size(0, 50),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -270,15 +278,31 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: primaryColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           textStyle: GoogleFonts.plusJakartaSans(
             fontSize: 14,
             fontWeight: FontWeight.w700,
           ),
         ),
       ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          foregroundColor: onSurfaceColor,
+          backgroundColor:
+              isDark
+                  ? AppColors.surfaceDarkMuted.withValues(alpha: 0.72)
+                  : AppColors.surfaceSoft,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: secondaryColor,
-        foregroundColor: AppColors.textDark,
+        backgroundColor: isDark ? AppColors.corporateBlue : primaryColor,
+        foregroundColor: Colors.white,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
@@ -286,6 +310,7 @@ class AppTheme {
       listTileTheme: ListTileThemeData(
         iconColor: mutedTextColor,
         textColor: onSurfaceColor,
+        selectedTileColor: surfaceAltColor,
         tileColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
@@ -295,7 +320,9 @@ class AppTheme {
         indicator: BoxDecoration(
           color: isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceAccent,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: borderColor),
+          border: Border.all(
+            color: isDark ? primaryColor.withValues(alpha: 0.26) : borderColor,
+          ),
         ),
         labelColor: onSurfaceColor,
         unselectedLabelColor: mutedTextColor,
@@ -318,6 +345,20 @@ class AppTheme {
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith<Color>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return isDark ? AppColors.surfaceDarkRaised : Colors.white;
+        }),
+        trackColor: WidgetStateProperty.resolveWith<Color>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor.withValues(alpha: 0.38);
+          }
+          return isDark ? AppColors.borderDark : AppColors.borderStrong;
+        }),
       ),
     );
   }

@@ -57,14 +57,14 @@ class AppLayout extends StatelessWidget {
           colors:
               isDark
                   ? const [
+                    Color(0xFF0B1520),
                     AppColors.backgroundDark,
-                    Color(0xFF0C1726),
-                    Color(0xFF101E2F),
+                    Color(0xFF152638),
                   ]
                   : const [
-                    AppColors.backgroundGrey,
                     Color(0xFFF8FAFD),
-                    Color(0xFFEFF4FA),
+                    AppColors.backgroundGrey,
+                    Color(0xFFECF3FA),
                   ],
         ),
       ),
@@ -72,15 +72,18 @@ class AppLayout extends StatelessWidget {
           isWideScreen
               ? Row(
                 children: [
-                  Sidebar(
-                    activeMenuItem: _getActiveMenuItem(),
-                    userName: userName,
-                    userRole: userRole,
+                  RepaintBoundary(
+                    child: Sidebar(
+                      activeMenuItem: _getActiveMenuItem(),
+                      userName: userName,
+                      userRole: userRole,
+                    ),
                   ),
                   Expanded(
                     child: Column(
                       children: [
-                        if (showAppBar) _buildDesktopAppBar(context),
+                        if (showAppBar)
+                          RepaintBoundary(child: _buildDesktopAppBar(context)),
                         Expanded(child: child),
                       ],
                     ),
@@ -98,10 +101,7 @@ class AppLayout extends StatelessWidget {
       );
     }
 
-    final scaffoldKey = GlobalKey<ScaffoldState>();
-
     return Scaffold(
-      key: scaffoldKey,
       backgroundColor: theme.scaffoldBackgroundColor,
       drawer: AppDrawer(
         currentPage: _convertToDrawerPage(),
@@ -109,16 +109,13 @@ class AppLayout extends StatelessWidget {
         userRole: userRole,
         onProfileReload: onProfileReload,
       ),
-      appBar: showAppBar ? _buildMobileAppBar(context, scaffoldKey) : null,
+      appBar: showAppBar ? _buildMobileAppBar(context) : null,
       body: body,
       floatingActionButton: floatingActionButton,
     );
   }
 
-  PreferredSizeWidget _buildMobileAppBar(
-    BuildContext context,
-    GlobalKey<ScaffoldState> scaffoldKey,
-  ) {
+  PreferredSizeWidget _buildMobileAppBar(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -129,9 +126,13 @@ class AppLayout extends StatelessWidget {
       leading: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            icon: const Icon(Icons.menu_rounded),
-            onPressed: () => scaffoldKey.currentState?.openDrawer(),
+          Builder(
+            builder: (buttonContext) {
+              return IconButton(
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: () => Scaffold.of(buttonContext).openDrawer(),
+              );
+            },
           ),
           Container(
             width: 34,
@@ -151,8 +152,8 @@ class AppLayout extends StatelessWidget {
       ),
       backgroundColor:
           isDark
-              ? AppColors.surfaceDark.withOpacity(0.94)
-              : AppColors.surfaceWhite.withOpacity(0.94),
+              ? AppColors.surfaceDarkRaised.withOpacity(0.96)
+              : AppColors.surfaceWhite.withOpacity(0.97),
       elevation: 0,
       actions: [
         _buildThemeToggle(context, compact: true),
@@ -179,17 +180,17 @@ class AppLayout extends StatelessWidget {
       decoration: BoxDecoration(
         color:
             isDark
-                ? AppColors.surfaceDark.withOpacity(0.92)
-                : AppColors.surfaceWhite.withOpacity(0.94),
+                ? AppColors.surfaceDarkRaised.withOpacity(0.94)
+                : AppColors.surfaceWhite.withOpacity(0.96),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.16 : 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: Colors.black.withOpacity(isDark ? 0.10 : 0.035),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -217,7 +218,7 @@ class AppLayout extends StatelessWidget {
         appState?.isDarkMode ??
         (Theme.of(context).brightness == Brightness.dark);
     final backgroundColor =
-        isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceAccent;
+        isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceMuted;
     final borderColor = isDark ? AppColors.borderDark : AppColors.borderSubtle;
     final iconColor =
         isDark ? AppColors.corporateYellow : AppColors.corporateBlue;
@@ -252,14 +253,13 @@ class AppLayout extends StatelessWidget {
                   width: compact ? 28 : 32,
                   height: compact ? 28 : 32,
                   decoration: BoxDecoration(
-                    color:
-                        isDark ? AppColors.surfaceDark : AppColors.surfaceWhite,
+                    color: isDark ? const Color(0xFF102030) : Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(isDark ? 0.18 : 0.06),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
+                        color: Colors.black.withOpacity(isDark ? 0.08 : 0.03),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
                       ),
                     ],
                   ),

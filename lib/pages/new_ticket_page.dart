@@ -8,6 +8,7 @@ import '../services/user_service.dart'; // Kullanıcı servisi
 import '../services/partner_service.dart'; // Partner Service eklendi
 import '../models/partner.dart'; // Partner Model eklendi
 import '../theme/app_colors.dart';
+import '../services/permission_service.dart';
 
 class NewTicketPage extends StatefulWidget {
   const NewTicketPage({super.key, this.deviceType});
@@ -19,41 +20,42 @@ class NewTicketPage extends StatefulWidget {
 }
 
 class _NewTicketPageState extends State<NewTicketPage> {
-  // --- SABİTLER VE AYARLAR ---
+  // --- SABITLER VE AYARLAR ---
   static const Color _corporateNavy = AppColors.corporateNavy;
   static const Color _backgroundGrey = AppColors.backgroundGrey;
   static const Color _surfaceWhite = AppColors.surfaceWhite;
   static const Color _textDark = AppColors.textDark;
   static const Color _textLight = AppColors.textLight;
 
-  // Listeler artık StockService'den alınıyor
+  // Listeler artik StockService'den aliniyor
   final StockService _stockService = StockService();
   List<String> _availableDriveBrands =
-      []; // Veritabanından yüklenen sürücü markaları
+      []; // Veritabanindan y�klenen s�r�c� markalari
 
   // Partner Firmalar
   final PartnerService _partnerService = PartnerService();
   List<Partner> _partners = [];
   int? _selectedPartnerId;
   bool _canAssignPartner = false; // Sadece admin/manager atayabilir
+  bool _canManageDraftTickets = false;
 
   final _formKey = GlobalKey<FormState>();
 
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _jobCodeController = TextEditingController();
-  // _aspiratorKwController ve _vantKwController kaldırıldı (artık dropdown)
+  // _aspiratorKwController ve _vantKwController kaldirildi (artik dropdown)
   final _kompresor1KwController = TextEditingController();
   final _kompresor2KwController = TextEditingController();
-  final _heaterKwController = TextEditingController(); // Yeni: Isıtıcı kW
+  final _heaterKwController = TextEditingController(); // Yeni: Isitici kW
 
-  // Jet Fan / Otopark Sistemi İçin Yeni Controller'lar
-  // _zoneCountController kaldırıldı, yerine _selectedZoneCount ve _zoneFanCounts kullanılacak
+  // Jet Fan / Otopark Sistemi I�in Yeni Controller'lar
+  // _zoneCountController kaldirildi, yerine _selectedZoneCount ve _zoneFanCounts kullanilacak
   final _jetFanCountController = TextEditingController();
-  // _bidirectionalFanCountController kaldırıldı
-  // _inverterCountController kaldırıldı
+  // _bidirectionalFanCountController kaldirildi
+  // _inverterCountController kaldirildi
   final _inverterBrandController =
-      TextEditingController(); // Manuel giriş veya Dropdown olabilir
+      TextEditingController(); // Manuel giris veya Dropdown olabilir
 
   // Jet Fan Dinamik Listeleri
   int _selectedZoneCount = 0;
@@ -78,18 +80,18 @@ class _NewTicketPageState extends State<NewTicketPage> {
   double? _selectedHmiSize;
 
   String? _selectedAspiratorBrand;
-  String? _selectedAspiratorModel; // Aspiratör için model
+  String? _selectedAspiratorModel; // Aspirat�r i�in model
   double? _selectedAspiratorKw;
   List<String> _availableAspiratorModels =
-      []; // Aspiratör markasına göre modeller
+      []; // Aspirat�r markasina g�re modeller
 
   String? _selectedVantBrand;
-  String? _selectedVantModel; // Vantilatör için model
+  String? _selectedVantModel; // Vantilat�r i�in model
   double? _selectedVantKw;
-  List<String> _availableVantModels = []; // Vantilatör markasına göre modeller
+  List<String> _availableVantModels = []; // Vantilat�r markasina g�re modeller
 
   String _selectedTandem = 'yok';
-  String _heaterExists = 'Yok'; // Yeni: Isıtıcı var mı yok mu
+  String _heaterExists = 'Yok'; // Yeni: Isitici var mi yok mu
   String _selectedIsiticiKademe = 'yok';
 
   bool _dx = false;
@@ -99,11 +101,11 @@ class _NewTicketPageState extends State<NewTicketPage> {
   bool _rotor = false;
   bool _brulor = false;
 
-  // İş başlangıç durumu: taslak mı, aktif mi?
+  // Is baslangi� durumu: taslak mi, aktif mi?
   bool _createAsDraft = false;
 
   DateTime? _plannedDate;
-  PlatformFile? _selectedPdf; // Seçilen PDF dosyası
+  PlatformFile? _selectedPdf; // Se�ilen PDF dosyasi
   bool _isUploading = false;
 
   bool _isSaving = false;
@@ -128,7 +130,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
   Future<void> _loadDriveBrands() async {
     try {
       final brands = await _stockService.getBrandsByCategory('Sürücü');
-      // Sadece veritabanından gelenleri kullan
+      // Sadece veritabanindan gelenleri kullan
       final allBrands = brands;
       if (mounted) {
         setState(() {
@@ -136,7 +138,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
         });
       }
     } catch (e) {
-      // Hata durumunda boş liste
+      // Hata durumunda bos liste
       if (mounted) {
         setState(() {
           _availableDriveBrands = [];
@@ -150,8 +152,11 @@ class _NewTicketPageState extends State<NewTicketPage> {
       final userService = UserService();
       final profile = await userService.getCurrentUserProfile();
 
-      // Sadece Admin ve Yöneticiler partner atayabilir
-      if (profile != null && (profile.isAdmin || profile.isManager)) {
+      // Sadece Admin ve Y�neticiler partner atayabilir
+      if (PermissionService.hasPermission(
+        profile,
+        AppPermission.assignTicketPartner,
+      )) {
         final partners = await _partnerService.getAllPartners();
         if (mounted) {
           setState(() {
@@ -187,10 +192,10 @@ class _NewTicketPageState extends State<NewTicketPage> {
         setState(() {
           if (isAspirator) {
             _availableAspiratorModels = models;
-            _selectedAspiratorModel = null; // Marka değişince modeli sıfırla
+            _selectedAspiratorModel = null; // Marka degisince modeli sifirla
           } else {
             _availableVantModels = models;
-            _selectedVantModel = null; // Marka değişince modeli sıfırla
+            _selectedVantModel = null; // Marka degisince modeli sifirla
           }
         });
       }
@@ -211,21 +216,28 @@ class _NewTicketPageState extends State<NewTicketPage> {
     final userService = UserService();
     final profile = await userService.getCurrentUserProfile();
 
-    if (profile != null &&
-        (profile.role == 'technician' ||
-            profile.role == 'pending' ||
-            profile.role == 'partner_user')) {
-      // Teknisyenler, partner kullanıcılar ve onay bekleyen kullanıcılar iş açamaz
-      if (mounted) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bu kullanıcı tipi yeni iş emri oluşturamaz.'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
-        );
+    if (!mounted) return;
+
+    setState(() {
+      _canManageDraftTickets = PermissionService.hasPermission(
+        profile,
+        AppPermission.manageDraftTickets,
+      );
+      if (!_canManageDraftTickets) {
+        _createAsDraft = false;
       }
+    });
+
+    if (!PermissionService.hasPermission(profile, AppPermission.createTicket)) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bu kullanıcı tipi yeni iş emri oluşturamaz.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
     }
   }
 
@@ -283,7 +295,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
-        withData: true, // Web için gerekli
+        withData: true, // Web i�in gerekli
       );
 
       if (result != null) {
@@ -323,7 +335,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
     final supabase = Supabase.instance.client;
 
     try {
-      // 1) Müşteri oluştur
+      // 1) M�steri olustur
       final customerInsert =
           await supabase
               .from('customers')
@@ -344,7 +356,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
       final komp1Kw = _parseDouble(_kompresor1KwController.text);
       final komp2Kw = _parseDouble(_kompresor2KwController.text);
-      // Isıtıcı verilerini hazırla
+      // Isitici verilerini hazirla
       final heaterKw =
           (_heaterExists == 'Var')
               ? _parseDouble(_heaterKwController.text)
@@ -354,7 +366,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
       // Jet Fan Verileri
       final zoneCount = _selectedZoneCount;
-      // Zone detaylarını al
+      // Zone detaylarini al
       final List<Map<String, dynamic>> zoneDetails = [];
       for (int i = 0; i < _zoneFanCountControllers.length; i++) {
         zoneDetails.add({
@@ -364,14 +376,14 @@ class _NewTicketPageState extends State<NewTicketPage> {
       }
 
       final jetFanCount = _parseInt(_jetFanCountController.text);
-      // bidirectCount artık kullanılmıyor
-      // inverterCount artık kullanılmıyor
+      // bidirectCount artik kullanilmiyor
+      // inverterCount artik kullanilmiyor
       final inverterBrand =
           _inverterBrandController.text.trim().isEmpty
               ? null
               : _inverterBrandController.text.trim();
 
-      // Jet Fan Detay JSON Hazırlığı
+      // Jet Fan Detay JSON Hazirligi
       final Map<String, dynamic> jetfanDetails = {
         'zone_details': zoneDetails,
         'smoke_fans': _smokeFans,
@@ -380,7 +392,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
       String? pdfUrl;
 
-      // PDF Yükleme İşlemi
+      // PDF Y�kleme Islemi
       if (_selectedPdf != null) {
         try {
           final fileBytes = _selectedPdf!.bytes;
@@ -405,18 +417,18 @@ class _NewTicketPageState extends State<NewTicketPage> {
           }
         } catch (e) {
           debugPrint('PDF yükleme hatası: $e');
-          // PDF yüklenemese bile iş emri açılsın mı?
-          // Kullanıcıya hata gösterip duralım şimdilik.
+          // PDF y�klenemese bile is emri a�ilsin mi?
+          // Kullanıcıya hata g�sterip duralim simdilik.
           throw Exception(
             'PDF yüklenirken hata oluştu: $e. (Lütfen "ticket-files" adında bir bucket olduğundan emin olun)',
           );
         }
       }
 
-      // 2) Ticket oluştur
+      // 2) Ticket olustur
       String finalDescription = _descriptionController.text.trim();
       if (pdfUrl != null) {
-        finalDescription += '\n\nEkli PDF Dosyası: $pdfUrl';
+        finalDescription += '\n\nEkli PDF Dosyasi: $pdfUrl';
       }
 
       final ticketInsert =
@@ -427,7 +439,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                 'description': finalDescription,
                 'customer_id': customerId,
                 'priority': 'normal',
-                // Taslak seçildiyse draft, aksi halde open
+                // Taslak se�ildiyse draft, aksi halde open
                 'status': _createAsDraft ? 'draft' : 'open',
                 'partner_id': _selectedPartnerId, // Partner ID Eklendi
                 'planned_date': _plannedDate?.toIso8601String(),
@@ -448,9 +460,9 @@ class _NewTicketPageState extends State<NewTicketPage> {
                 'kompresor_kw_2': komp2Kw,
                 'tandem': _selectedTandem,
                 'isitici_kademe':
-                    heaterStage, // Güncellendi: Mantıksal kontrol eklendi
+                    heaterStage, // G�ncellendi: Mantiksal kontrol eklendi
                 'isitici_kw':
-                    heaterKw, // Güncellendi: Mantıksal kontrol eklendi
+                    heaterKw, // G�ncellendi: Mantiksal kontrol eklendi
                 'dx': _dx,
                 'sulu_batarya': _suluBatarya,
                 'karisim_damper': _karisimDamper,
@@ -459,8 +471,8 @@ class _NewTicketPageState extends State<NewTicketPage> {
                 'brulor': _brulor,
                 'zone_count': zoneCount,
                 'jetfan_count': jetFanCount,
-                'bidirectional_jetfan_count': null, // Artık kullanılmıyor
-                'inverter_count': null, // Artık kullanılmıyor
+                'bidirectional_jetfan_count': null, // Artik kullanilmiyor
+                'inverter_count': null, // Artik kullanilmiyor
                 'inverter_brand': inverterBrand,
                 'jetfan_details': jetfanDetails,
               })
@@ -469,23 +481,23 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
       final ticketId = ticketInsert['id'];
 
-      // --- STOKTAN DÜŞME VE EKSİK KONTROLÜ (KALDIRILDI) ---
-      // Artık yeni iş emri oluştururken otomatik stok düşmüyoruz.
-      // Kullanıcı iş emri detayından manuel olarak parça eklemeli.
+      // --- STOKTAN D�??ME VE EKSIK KONTROL� (KALDIRILDI) ---
+      // Artik yeni is emri olustururken otomatik stok d�sm�yoruz.
+      // Kullanıcı is emri detayindan manuel olarak par�a eklemeli.
       /*
       try {
         final stockService = StockService();
         final List<String> missingItems = [];
 
-        // 1. Standart Kontroller (Jet Fan dışındakiler veya ortaklar)
+        // 1. Standart Kontroller (Jet Fan disindakiler veya ortaklar)
         final standardMissing = await stockService.processTicketStockUsage(
       ...
       */
       // ---------------------------
 
-      // --- BİLDİRİM GÖNDERME ---
-      // Eğer iş taslak olarak oluşturulmadıysa (aktif iş ise) bildirim gönder.
-      // Taslak işler daha sonra durum değiştiğinde (draft -> open) yeni iş emri gibi bildirilecek.
+      // --- BILDIRIM G�NDERME ---
+      // Eger is taslak olarak olusturulmadiysa (aktif is ise) bildirim g�nder.
+      // Taslak isler daha sonra durum degistiginde (draft -> open) yeni is emri gibi bildirilecek.
       if (!_createAsDraft) {
         try {
           final notificationService = NotificationService();
@@ -504,7 +516,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
           );
         } catch (notifErr) {
           debugPrint(
-            'Bildirim gönderme hatası (Kritik değil, işlem devam ediyor): $notifErr',
+            'Bildirim gönderme hatası (kritik değil, işlem devam ediyor): $notifErr',
           );
         }
       }
@@ -529,7 +541,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
     }
   }
 
-  // --- ARAYÜZ (BUILD METODU) ---
+  // --- ARAY�Z (BUILD METODU) ---
 
   @override
   Widget build(BuildContext context) {
@@ -546,7 +558,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
         backgroundColor: surfaceColor,
         elevation: 1,
         shadowColor: Colors.black.withOpacity(0.05),
-        iconTheme: IconThemeData(color: textColor), // İkon rengi
+        iconTheme: IconThemeData(color: textColor), // Ikon rengi
         leadingWidth: 80,
         leading: Row(
           children: [
@@ -557,7 +569,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
         title: Text(
           'YENİ İŞ EMRİ',
           style: TextStyle(
-            color: textColor, // Başlık rengi
+            color: textColor, // Baslik rengi
             fontSize: 16,
             fontWeight: FontWeight.bold,
             letterSpacing: 1.2,
@@ -598,7 +610,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                       ),
                     ),
 
-                  // --- ÜST BÖLÜM: İŞ VE MÜŞTERİ BİLGİLERİ ---
+                  // --- �ST B�L�M: I?? VE M�??TERI BILGILERI ---
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -606,9 +618,9 @@ class _NewTicketPageState extends State<NewTicketPage> {
                         flex: isWide ? 3 : 1,
                         child: Column(
                           children: [
-                            // İŞ BİLGİLERİ KARTI
+                            // İş Bilgileri KARTI
                             _buildContentCard(
-                              title: 'İŞ BİLGİLERİ',
+                              title: 'İş Bilgileri',
                               icon: Icons.work_outline,
                               children: [
                                 Row(
@@ -642,33 +654,34 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                   maxLines: 3,
                                 ),
                                 const SizedBox(height: 16),
-                                Row(
-                                  children: [
-                                    Switch(
-                                      value: _createAsDraft,
-                                      onChanged: (val) {
-                                        setState(() {
-                                          _createAsDraft = val;
-                                        });
-                                      },
-                                      activeColor: _corporateNavy,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Expanded(
-                                      child: Text(
-                                        'Bu işi taslak (gizli) olarak kaydet (teknisyenler görmez, sonradan açıldığında bildirim gider).',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: _textLight,
+                                if (_canManageDraftTickets)
+                                  Row(
+                                    children: [
+                                      Switch(
+                                        value: _createAsDraft,
+                                        onChanged: (val) {
+                                          setState(() {
+                                            _createAsDraft = val;
+                                          });
+                                        },
+                                        activeColor: _corporateNavy,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Expanded(
+                                        child: Text(
+                                          'Bu işi taslak (gizli) olarak kaydet (teknisyenler görmez, sonradan açıldığında bildirim gider).',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: _textLight,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
+                                    ],
+                                  ),
                                 const SizedBox(height: 16),
                                 _buildDatePicker(),
                                 const SizedBox(height: 16),
-                                // PDF Seçici
+                                // PDF Se�ici
                                 InkWell(
                                   onTap: _pickPdf,
                                   borderRadius: BorderRadius.circular(8),
@@ -698,7 +711,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               const Text(
-                                                'Ek Döküman (PDF)',
+                                                'Ek Doküman (PDF)',
                                                 style: TextStyle(
                                                   fontSize: 11,
                                                   color: _textLight,
@@ -746,26 +759,26 @@ class _NewTicketPageState extends State<NewTicketPage> {
                             ),
                             const SizedBox(height: 24),
 
-                            // MÜŞTERİ BİLGİLERİ KARTI
+                            // M�??TERI BILGILERI KARTI
                             _buildContentCard(
-                              title: 'MÜŞTERİ BİLGİLERİ',
+                              title: 'Müşteri Bilgileri',
                               icon: Icons.person_outline,
                               children: [
-                                // --- PARTNER FİRMA SEÇİMİ (Sadece Yetkililer İçin) ---
+                                // --- PARTNER FIRMA SE�IMI (Sadece Yetkililer I�in) ---
                                 if (_canAssignPartner &&
                                     _partners.isNotEmpty) ...[
                                   _buildDropdown<int?>(
-                                    // int? yapıldı (boş olabilir)
+                                    // int? yapildi (bos olabilir)
                                     label: 'Partner Firma Ataması (Opsiyonel)',
                                     value: _selectedPartnerId,
                                     items: [
                                       null,
                                       ..._partners.map((p) => p.id),
-                                    ], // Null (Boş) seçenek
+                                    ], // Null (Bos) se�enek
                                     itemLabelBuilder: (val) {
                                       if (val == null)
                                         return 'Atama Yapılmayacak (Doğrudan Müşteri)';
-                                      // firstWhere orElse düzeltmesi: null dönmemeli
+                                      // firstWhere orElse d�zeltmesi: null d�nmemeli
                                       final p = _partners.firstWhere(
                                         (element) => element.id == val,
                                         orElse:
@@ -780,7 +793,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                       setState(() {
                                         _selectedPartnerId = val;
                                         if (val != null) {
-                                          // Partner seçildiyse cihaz markasını otomatik ayarla
+                                          // Partner se�ildiyse cihaz markasini otomatik ayarla
                                           final p = _partners.firstWhere(
                                             (e) => e.id == val,
                                             orElse:
@@ -845,7 +858,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                     children: [
                                       _buildTechnicalInfoCard(),
                                       const SizedBox(height: 24),
-                                      _buildHeaterInfoCard(), // Yeni: Isıtıcı Kartı
+                                      _buildHeaterInfoCard(), // Yeni: Isitici Karti
                                       const SizedBox(height: 24),
                                       _buildHardwareFeaturesCard(),
                                     ],
@@ -854,7 +867,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                     ],
                   ),
 
-                  // Mobil görünüm için teknik detayları alta al
+                  // Mobil g�r�n�m i�in teknik detaylari alta al
                   if (!isWide && widget.deviceType != 'other') ...[
                     const SizedBox(height: 24),
                     if (widget.deviceType == 'jet_fan')
@@ -910,17 +923,17 @@ class _NewTicketPageState extends State<NewTicketPage> {
   }
 
   Widget _buildJetFanInfoCard() {
-    // 0-15 arası seçim listesi
+    // 0-15 arasi se�im listesi
     final countOptions = List.generate(16, (index) => index);
 
-    // 1-15 Zone Seçimi (0 olamaz, en az 1 olabilir ama opsiyonel olsun diye 0-15 koyuyoruz)
+    // 1-15 Zone Se�imi (0 olamaz, en az 1 olabilir ama opsiyonel olsun diye 0-15 koyuyoruz)
     final zoneOptions = List.generate(16, (index) => index);
 
     return _buildContentCard(
-      title: 'JET FAN SİSTEM BİLGİLERİ',
+      title: 'Jet Fan Sistem Bilgileri',
       icon: Icons.wind_power,
       children: [
-        // ÜST BÖLÜM: Genel Sayılar
+        // �ST B�L�M: Genel Sayilar
         Row(
           children: [
             Expanded(
@@ -931,7 +944,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                 onChanged: (val) {
                   setState(() {
                     _selectedZoneCount = val ?? 0;
-                    // Controller listesini güncelle
+                    // Controller listesini g�ncelle
                     if (_selectedZoneCount > _zoneFanCountControllers.length) {
                       for (
                         int i = _zoneFanCountControllers.length;
@@ -941,7 +954,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                         _zoneFanCountControllers.add(TextEditingController());
                       }
                     } else {
-                      // Fazlalıkları dispose et ve listeden çıkar
+                      // Fazlaliklari dispose et ve listeden �ikar
                       for (
                         int i = _zoneFanCountControllers.length - 1;
                         i >= _selectedZoneCount;
@@ -967,7 +980,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
           ],
         ),
 
-        // DİNAMİK ZONE LİSTESİ
+        // DINAMIK ZONE LISTESI
         if (_zoneFanCountControllers.isNotEmpty) ...[
           const SizedBox(height: 16),
           const Text(
@@ -988,7 +1001,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: _buildTextField(
                   controller: _zoneFanCountControllers[index],
-                  label: '${index + 1}. Zone Jetfan Sayısı',
+                  label: '${index + 1}. Zone Jet Fan Sayısı',
                   isNumeric: true,
                 ),
               );
@@ -1000,7 +1013,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
         const Divider(),
         const SizedBox(height: 16),
 
-        // --- DUMAN TAHLİYE FANLARI ---
+        // --- DUMAN TAHLIYE FANLARI ---
         Text(
           'Duman Tahliye Fanları',
           style: TextStyle(
@@ -1017,7 +1030,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
           onChanged: (val) {
             setState(() {
               _smokeFanCount = val ?? 0;
-              // Listeyi güncelle
+              // Listeyi g�ncelle
               if (_smokeFanCount > _smokeFans.length) {
                 for (int i = _smokeFans.length; i < _smokeFanCount; i++) {
                   _smokeFans.add({'brand': null, 'kw': null});
@@ -1039,7 +1052,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
                   children: [
-                    // Sıra No
+                    // Sira No
                     Container(
                       width: 24,
                       alignment: Alignment.center,
@@ -1101,7 +1114,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
           onChanged: (val) {
             setState(() {
               _freshFanCount = val ?? 0;
-              // Listeyi güncelle
+              // Listeyi g�ncelle
               if (_freshFanCount > _freshFans.length) {
                 for (int i = _freshFans.length; i < _freshFanCount; i++) {
                   _freshFans.add({'brand': null, 'kw': null});
@@ -1123,7 +1136,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
                   children: [
-                    // Sıra No
+                    // Sira No
                     Container(
                       width: 24,
                       alignment: Alignment.center,
@@ -1165,15 +1178,15 @@ class _NewTicketPageState extends State<NewTicketPage> {
         ],
 
         const SizedBox(height: 24),
-        // En alttaki İnverter Sayısı alanı kaldırıldı.
-        // Eğer genel marka seçimi isteniyorsa buraya eklenebilir ama talep edilmedi.
+        // En alttaki Inverter Sayisi alani kaldirildi.
+        // Eger genel marka se�imi isteniyorsa buraya eklenebilir ama talep edilmedi.
       ],
     );
   }
 
   Widget _buildTechnicalInfoCard() {
     return _buildContentCard(
-      title: 'CİHAZ TEKNİK VERİLERİ',
+      title: 'Cihaz Teknik Verileri',
       icon: Icons.settings_input_component,
       children: [
         Row(
@@ -1196,7 +1209,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                 isRequired: true,
               ),
             ),
-            // Cihaz Markası Dropdown Kaldırıldı (Partner ismi kullanılacak)
+            // Cihaz Markasi Dropdown Kaldirildi (Partner ismi kullanilacak)
           ],
         ),
         const SizedBox(height: 16),
@@ -1212,7 +1225,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                   'ABB FBX',
                   'ABB CBX',
                   'ABB CBT',
-                ], // Güncellendi
+                ], // G�ncellendi
                 onChanged: (val) => setState(() => _selectedPlcModel = val),
               ),
             ),
@@ -1220,7 +1233,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
         ),
         const SizedBox(height: 16),
 
-        // HMI Bölümü
+        // HMI B�l�m�
         const Text(
           'HMI Ekran Bilgileri',
           style: TextStyle(
@@ -1254,7 +1267,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
         ),
         const SizedBox(height: 16),
 
-        // Aspiratör Bölümü
+        // Aspirat�r B�l�m�
         const Text(
           'Aspiratör Sürücü Bilgileri',
           style: TextStyle(
@@ -1278,7 +1291,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
               ),
             ),
             const SizedBox(width: 12),
-            // Model seçimi (sadece modeller varsa göster)
+            // Model se�imi (sadece modeller varsa g�ster)
             if (_selectedAspiratorBrand != null &&
                 _availableAspiratorModels.isNotEmpty)
               Expanded(
@@ -1293,7 +1306,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
             const SizedBox(width: 12),
             Expanded(
               child: _buildDropdown<dynamic>(
-                // dynamic yapıldı
+                // dynamic yapildi
                 label: 'Güç (kW)',
                 value: _selectedAspiratorKw,
                 items: [null, ...StockService.kwValues], // Yok (null) eklendi
@@ -1306,7 +1319,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
         const SizedBox(height: 16),
 
-        // Vantilatör Bölümü
+        // Vantilat�r B�l�m�
         const Text(
           'Vantilatör Sürücü Bilgileri',
           style: TextStyle(
@@ -1330,7 +1343,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
               ),
             ),
             const SizedBox(width: 12),
-            // Model seçimi (sadece modeller varsa göster)
+            // Model se�imi (sadece modeller varsa g�ster)
             if (_selectedVantBrand != null && _availableVantModels.isNotEmpty)
               Expanded(
                 child: _buildDropdown(
@@ -1343,7 +1356,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
             const SizedBox(width: 12),
             Expanded(
               child: _buildDropdown<dynamic>(
-                // dynamic yapıldı
+                // dynamic yapildi
                 label: 'Güç (kW)',
                 value: _selectedVantKw,
                 items: [null, ...StockService.kwValues], // Yok (null) eklendi
@@ -1412,7 +1425,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
   Widget _buildHeaterInfoCard() {
     return _buildContentCard(
-      title: 'ISITICI BİLGİLERİ',
+      title: 'Isıtıcı Bilgileri',
       icon: Icons.whatshot,
       children: [
         Row(
@@ -1425,7 +1438,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                 onChanged: (val) {
                   setState(() {
                     _heaterExists = val!;
-                    // Eğer Yok seçilirse diğer alanları sıfırla
+                    // Eger Yok se�ilirse diger alanlari sifirla
                     if (_heaterExists == 'Yok') {
                       _selectedIsiticiKademe = 'yok';
                       _heaterKwController.clear();
@@ -1476,7 +1489,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
   Widget _buildHardwareFeaturesCard() {
     return _buildContentCard(
-      title: 'DONANIM KONTROLÜ',
+      title: 'Donanım Kontrolü',
       icon: Icons.check_box_outlined,
       children: [
         Wrap(
@@ -1522,7 +1535,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
     required IconData icon,
     required List<Widget> children,
   }) {
-    // Tema kontrolü
+    // Tema kontrol�
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF1E293B) : _surfaceWhite;
     final textColor = isDark ? Colors.white : _corporateNavy;
@@ -1586,7 +1599,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
     String? suffixText,
     TextInputType? keyboardType,
   }) {
-    // Tema kontrolü
+    // Tema kontrol�
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final fillColor =
         isDark ? const Color(0xFF334155) : _backgroundGrey.withOpacity(0.5);
@@ -1649,26 +1662,26 @@ class _NewTicketPageState extends State<NewTicketPage> {
     required Function(T?) onChanged,
     bool isRequired = false,
   }) {
-    // Eğer gelen değer listede yoksa null yap (Hata vermemesi için)
+    // Eger gelen deger listede yoksa null yap (Hata vermemesi i�in)
     T? safeValue;
     if (value != null) {
       try {
-        // Listede eşleşen değerin kendisini al (Referans güvenliği için)
+        // Listede eslesen degerin kendisini al (Referans g�venligi i�in)
         safeValue = items.firstWhere((item) => item == value);
       } catch (_) {
         safeValue = null;
       }
     }
 
-    // Tema kontrolü - Dark mode uyumluluğu için
+    // Tema kontrol� - Dark mode uyumlulugu i�in
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Dropdown arka plan rengi: Dark mode'da koyu gri, Light mode'da beyaz
     final dropdownColor = isDark ? const Color(0xFF1E293B) : _surfaceWhite;
-    // Input alanı dolgu rengi: Dark mode'da daha açık gri, Light mode'da çok açık gri
+    // Input alani dolgu rengi: Dark mode'da daha a�ik gri, Light mode'da �ok a�ik gri
     final fillColor =
         isDark ? const Color(0xFF334155) : _backgroundGrey.withOpacity(0.5);
 
-    // Seçili metin rengi:
+    // Se�ili metin rengi:
     final textColor = isDark ? Colors.white : Colors.black;
 
     return DropdownButtonFormField<T>(
@@ -1728,7 +1741,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
         color: textColor,
         fontSize: 14,
         fontWeight: FontWeight.w500,
-      ), // Seçili öğe rengi
+      ), // Se�ili �ge rengi
     );
   }
 

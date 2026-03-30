@@ -19,6 +19,7 @@ class UiBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final bg = backgroundColor ?? theme.colorScheme.error;
     final fg = textColor ?? theme.colorScheme.onError;
 
@@ -28,12 +29,14 @@ class UiBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.10) : bg.withOpacity(0.22),
+        ),
         boxShadow: [
           BoxShadow(
-            color: bg.withOpacity(0.35),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: bg.withOpacity(isDark ? 0.26 : 0.22),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),

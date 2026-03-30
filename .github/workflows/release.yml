@@ -262,25 +262,25 @@ jobs:
           Copy-Item "${{ steps.windows_cert.outputs.cer_path }}" "dist\$versionedName.cer" -Force
 
           $appInstaller = @"
-<?xml version="1.0" encoding="utf-8"?>
-<AppInstaller
-  xmlns="http://schemas.microsoft.com/appx/appinstaller/2017/2"
-  xmlns:s4="http://schemas.microsoft.com/appx/appinstaller/2021"
-  Uri="$stableAppInstallerUrl"
-  Version="$msixVersion">
-  <MainPackage
-    Name="com.hcs.istakip"
-    Publisher="$publisher"
-    Version="$msixVersion"
-    ProcessorArchitecture="x64"
-    Uri="$stableMsixUrl" />
-  <UpdateSettings>
-    <OnLaunch HoursBetweenUpdateChecks="0" ShowPrompt="true" UpdateBlocksActivation="false" />
-    <AutomaticBackgroundTask />
-    <s4:ForceUpdateFromAnyVersion>true</s4:ForceUpdateFromAnyVersion>
-  </UpdateSettings>
-</AppInstaller>
-"@
+          <?xml version="1.0" encoding="utf-8"?>
+          <AppInstaller
+            xmlns="http://schemas.microsoft.com/appx/appinstaller/2017/2"
+            xmlns:s4="http://schemas.microsoft.com/appx/appinstaller/2021"
+            Uri="$stableAppInstallerUrl"
+            Version="$msixVersion">
+            <MainPackage
+              Name="com.hcs.istakip"
+              Publisher="$publisher"
+              Version="$msixVersion"
+              ProcessorArchitecture="x64"
+              Uri="$stableMsixUrl" />
+            <UpdateSettings>
+              <OnLaunch HoursBetweenUpdateChecks="0" ShowPrompt="true" UpdateBlocksActivation="false" />
+              <AutomaticBackgroundTask />
+              <s4:ForceUpdateFromAnyVersion>true</s4:ForceUpdateFromAnyVersion>
+            </UpdateSettings>
+          </AppInstaller>
+          "@
 
           Set-Content -Path "dist\$stableAppInstallerName" -Value $appInstaller -Encoding utf8
           Set-Content -Path "dist\$versionedName.appinstaller" -Value $appInstaller -Encoding utf8

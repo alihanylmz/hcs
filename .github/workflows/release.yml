@@ -1,0 +1,232 @@
+﻿name: Release Builds
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version_name: ${{ steps.meta.outputs.version_name }}
+      build_number: ${{ steps.meta.outputs.build_number }}
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read app version
+        id: meta
+        shell: bash
+        run: |
+          version_line="$(grep '^version:' pubspec.yaml | head -n 1 | awk '{print $2}')"
+          version_name="${version_line%%+*}"
+          build_number="${version_line##*+}"
+          tag_name="${GITHUB_REF_NAME}"
+
+          if [[ "${tag_name}" != "v${version_name}" ]]; then
+            echo "Tag ${tag_name} does not match pubspec version v${version_name}."
+            exit 1
+          fi
+
+          echo "version_name=${version_name}" >> "$GITHUB_OUTPUT"
+          echo "build_number=${build_number}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${tag_name}" >> "$GITHUB_OUTPUT"
+
+  android-apk:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      ONESIGNAL_APP_ID: ${{ secrets.ONESIGNAL_APP_ID }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Validate Android secrets
+        shell: bash
+        run: |
+          missing=()
+          [[ -z "$SUPABASE_URL" ]] && missing+=("SUPABASE_URL")
+          [[ -z "$SUPABASE_ANON_KEY" && -z "$SUPABASE_KEY" ]] && missing+=("SUPABASE_ANON_KEY or SUPABASE_KEY")
+          [[ -z "$ANDROID_KEYSTORE_BASE64" ]] && missing+=("ANDROID_KEYSTORE_BASE64")
+          [[ -z "$ANDROID_STORE_PASSWORD" ]] && missing+=("ANDROID_STORE_PASSWORD")
+          [[ -z "$ANDROID_KEY_PASSWORD" ]] && missing+=("ANDROID_KEY_PASSWORD")
+          [[ -z "$ANDROID_KEY_ALIAS" ]] && missing+=("ANDROID_KEY_ALIAS")
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing GitHub secrets:\n- %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+      - name: Restore Android signing files
+        shell: bash
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          {
+            echo "storePassword=$ANDROID_STORE_PASSWORD"
+            echo "keyPassword=$ANDROID_KEY_PASSWORD"
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "storeFile=upload-keystore.jks"
+          } > android/key.properties
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Android APK
+        shell: bash
+        run: |
+          flutter build apk --release \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=SUPABASE_KEY="$SUPABASE_KEY" \
+            --dart-define=ONESIGNAL_APP_ID="$ONESIGNAL_APP_ID"
+
+      - name: Prepare Android artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/istakip-android-v${{ needs.prepare.outputs.version_name }}+${{ needs.prepare.outputs.build_number }}.apk"
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: dist/*.apk
+
+  windows-release:
+    needs: prepare
+    runs-on: windows-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      ONESIGNAL_APP_ID: ${{ secrets.ONESIGNAL_APP_ID }}
+      WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
+      WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Validate Windows secrets
+        shell: pwsh
+        run: |
+          $missing = @()
+          if ([string]::IsNullOrWhiteSpace($env:SUPABASE_URL)) { $missing += 'SUPABASE_URL' }
+          if ([string]::IsNullOrWhiteSpace($env:SUPABASE_ANON_KEY) -and [string]::IsNullOrWhiteSpace($env:SUPABASE_KEY)) {
+            $missing += 'SUPABASE_ANON_KEY or SUPABASE_KEY'
+          }
+          if ($missing.Count -gt 0) {
+            Write-Host "Missing GitHub secrets:"
+            $missing | ForEach-Object { Write-Host "- $_" }
+            exit 1
+          }
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows release
+        shell: pwsh
+        run: |
+          flutter build windows --release `
+            --dart-define=SUPABASE_URL=$env:SUPABASE_URL `
+            --dart-define=SUPABASE_ANON_KEY=$env:SUPABASE_ANON_KEY `
+            --dart-define=SUPABASE_KEY=$env:SUPABASE_KEY `
+            --dart-define=ONESIGNAL_APP_ID=$env:ONESIGNAL_APP_ID
+
+      - name: Sign Windows executable
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_PASSWORD)) {
+            Write-Host "Windows signing skipped because certificate secrets are not configured."
+            exit 0
+          }
+
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'windows-signing.pfx'
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+
+          $signtool = (Get-Command signtool.exe -ErrorAction Stop).Source
+          & $signtool sign `
+            /fd SHA256 `
+            /tr http://timestamp.digicert.com `
+            /td SHA256 `
+            /f $pfxPath `
+            /p $env:WINDOWS_PFX_PASSWORD `
+            "build\windows\x64\runner\Release\istakip_app.exe"
+
+      - name: Package Windows artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $artifactName = "istakip-windows-v${{ needs.prepare.outputs.version_name }}+${{ needs.prepare.outputs.build_number }}"
+          $stagingPath = Join-Path $env:RUNNER_TEMP $artifactName
+          if (Test-Path $stagingPath) {
+            Remove-Item -LiteralPath $stagingPath -Recurse -Force
+          }
+          New-Item -ItemType Directory -Force -Path $stagingPath | Out-Null
+          Copy-Item "build\windows\x64\runner\Release\*" $stagingPath -Recurse -Force
+          Compress-Archive -Path $stagingPath -DestinationPath "dist\$artifactName.zip" -Force
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: dist/*.zip
+
+  publish-release:
+    needs:
+      - prepare
+      - android-apk
+      - windows-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-release
+          path: release-assets/android
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: release-assets/windows
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
+          name: IsTakip ${{ needs.prepare.outputs.version_name }}
+          files: |
+            release-assets/android/*.apk
+            release-assets/windows/*.zip
+          generate_release_notes: true
+
+

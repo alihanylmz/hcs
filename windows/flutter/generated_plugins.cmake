@@ -5,8 +5,10 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
   file_selector_windows
+  local_notifier
   printing
   screen_retriever_windows
+  tray_manager
   url_launcher_windows
   window_manager
 )

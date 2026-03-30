@@ -16,6 +16,7 @@ import '../pages/ticket_detail_page.dart';
 import '../pages/notifications_page.dart';
 import '../pages/profile_page.dart';
 import '../services/pdf_export_service.dart';
+import '../services/permission_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sidebar/app_layout.dart';
@@ -52,7 +53,7 @@ class _TicketActionButton extends StatelessWidget {
     final Color baseColor =
         danger
             ? (isDark ? Colors.red.shade200 : AppColors.corporateRed)
-            : (isDark ? Colors.white : AppColors.textDark);
+            : theme.colorScheme.onSurface;
 
     // Karanlık modda arka planı biraz daha belirgin yapalım
     final Color bg =
@@ -60,7 +61,7 @@ class _TicketActionButton extends StatelessWidget {
             ? (isDark
                 ? Colors.red.withOpacity(0.16)
                 : AppColors.corporateRed.withOpacity(0.08))
-            : (isDark ? Colors.white.withOpacity(0.08) : AppColors.surfaceSoft);
+            : (isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceSoft);
 
     return TextButton.icon(
       style: TextButton.styleFrom(
@@ -75,9 +76,7 @@ class _TicketActionButton extends StatelessWidget {
                     ? (isDark
                         ? Colors.red.withOpacity(0.24)
                         : AppColors.corporateRed.withOpacity(0.16))
-                    : (isDark
-                        ? Colors.white.withOpacity(0.10)
-                        : AppColors.borderSubtle),
+                    : (isDark ? AppColors.borderDark : AppColors.borderSubtle),
           ),
         ),
         minimumSize: const Size(0, 34),
@@ -94,6 +93,7 @@ class _TicketActionButton extends StatelessWidget {
 
 class _TicketListPageState extends State<TicketListPage> {
   late Future<List<Map<String, dynamic>>> _ticketsFuture;
+  final DateFormat _shortDateFormatter = DateFormat('dd.MM.yyyy');
 
   final TextEditingController _searchController = TextEditingController();
   String _searchText = '';
@@ -113,6 +113,38 @@ class _TicketListPageState extends State<TicketListPage> {
   int _unreadNotifications = 0; // Okunmamış bildirim sayısı
   final GlobalKey _notifIconKey = GlobalKey();
   OverlayEntry? _notifOverlay;
+  List<Map<String, dynamic>>? _filteredSourceTickets;
+  String? _filteredCacheKey;
+  List<Map<String, dynamic>> _filteredTicketsCache =
+      const <Map<String, dynamic>>[];
+
+  bool get _canViewDraftTickets => PermissionService.roleHasPermission(
+    _userRole,
+    AppPermission.viewDraftTickets,
+  );
+
+  bool get _canCreateTickets => PermissionService.roleHasPermission(
+    _userRole,
+    AppPermission.createTicket,
+  );
+
+  bool get _canEditTickets =>
+      PermissionService.roleHasPermission(_userRole, AppPermission.editTicket);
+
+  bool get _canDeleteTickets => PermissionService.roleHasPermission(
+    _userRole,
+    AppPermission.deleteTicket,
+  );
+
+  bool get _canExportFilteredTicketsPdf => PermissionService.roleHasPermission(
+    _userRole,
+    AppPermission.exportFilteredTicketListPdf,
+  );
+
+  bool get _canExportAllTicketsPdf => PermissionService.roleHasPermission(
+    _userRole,
+    AppPermission.exportAllTicketListPdf,
+  );
 
   @override
   void initState() {
@@ -228,8 +260,16 @@ class _TicketListPageState extends State<TicketListPage> {
     List<Map<String, dynamic>> allTickets, {
     required bool isFiltered,
   }) async {
+    if (isFiltered && !_canExportFilteredTicketsPdf) {
+      return;
+    }
+
+    if (!isFiltered && !_canExportAllTicketsPdf) {
+      return;
+    }
+
     // Partner kullanıcılar "günlük/genel rapor" alamaz; sadece ekranda gördüğü filtreli listeyi alabilir.
-    if (_userRole == 'partner_user') {
+    if (!_canExportAllTicketsPdf) {
       if (!isFiltered) return;
 
       final partnerName =
@@ -292,9 +332,7 @@ class _TicketListPageState extends State<TicketListPage> {
   Future<List<Map<String, dynamic>>> _fetchAllTicketsForReport() async {
     final supabase = Supabase.instance.client;
 
-    final response = await supabase
-        .from('tickets')
-        .select('''
+    var query = supabase.from('tickets').select('''
           id,
           title,
           status,
@@ -309,8 +347,13 @@ class _TicketListPageState extends State<TicketListPage> {
             name,
             address
           )
-        ''')
-        .order('created_at', ascending: false);
+        ''');
+
+    if (!_canViewDraftTickets) {
+      query = query.neq('status', 'draft');
+    }
+
+    final response = await query.order('created_at', ascending: false);
 
     final List data = response as List;
     return data.cast<Map<String, dynamic>>();
@@ -328,11 +371,6 @@ class _TicketListPageState extends State<TicketListPage> {
     final supabase = Supabase.instance.client;
 
     // Teknisyenler, Admin ve Manager'lar tüm işleri görebilir (draft dahil)
-    final hasFullAccess =
-        _userRole == 'admin' ||
-        _userRole == 'manager' ||
-        _userRole == 'technician';
-
     var query = supabase.from('tickets').select('''
           id,
           title,
@@ -355,7 +393,7 @@ class _TicketListPageState extends State<TicketListPage> {
     // Sadece yetkisi olmayanlar (örn: pending, partner_user) draftları görmesin
     // Aslında partner_user da draft görmemeli.
     // Eğer "bütün işleri görsün" dendiğinde teknisyen kastediliyorsa, burayı açıyoruz.
-    if (!hasFullAccess) {
+    if (!_canViewDraftTickets) {
       query = query.neq('status', 'draft');
     }
 
@@ -368,9 +406,51 @@ class _TicketListPageState extends State<TicketListPage> {
   }
 
   Future<void> _refresh() async {
+    _invalidateFilteredCache();
     setState(() {
       _ticketsFuture = _fetchTickets();
     });
+  }
+
+  void _invalidateFilteredCache() {
+    _filteredSourceTickets = null;
+    _filteredCacheKey = null;
+    _filteredTicketsCache = const <Map<String, dynamic>>[];
+  }
+
+  String _buildFilteredCacheKey() {
+    final start =
+        _startDate == null
+            ? '-'
+            : '${_startDate!.year}-${_startDate!.month}-${_startDate!.day}';
+    final end =
+        _endDate == null
+            ? '-'
+            : '${_endDate!.year}-${_endDate!.month}-${_endDate!.day}';
+
+    return [
+      _searchText.trim(),
+      _statusFilter,
+      _priorityFilter,
+      start,
+      end,
+    ].join('|');
+  }
+
+  List<Map<String, dynamic>> _getFilteredTickets(
+    List<Map<String, dynamic>> tickets,
+  ) {
+    final cacheKey = _buildFilteredCacheKey();
+    if (identical(_filteredSourceTickets, tickets) &&
+        _filteredCacheKey == cacheKey) {
+      return _filteredTicketsCache;
+    }
+
+    final filtered = _applyFilters(tickets);
+    _filteredSourceTickets = tickets;
+    _filteredCacheKey = cacheKey;
+    _filteredTicketsCache = filtered;
+    return filtered;
   }
 
   Future<void> _signOut() async {
@@ -905,7 +985,7 @@ class _TicketListPageState extends State<TicketListPage> {
                             .then((_) => _refresh()),
                       ),
                       const SizedBox(width: 8),
-                      if (_userRole != 'partner_user' && _userRole != 'technician')
+                      if (_canEditTickets)
                         _TicketActionButton(
                           label: 'Düzenle',
                           icon: Icons.edit_outlined,
@@ -913,7 +993,7 @@ class _TicketListPageState extends State<TicketListPage> {
                               .push(MaterialPageRoute(builder: (_) => EditTicketPage(ticketId: ticket['id'].toString())))
                               .then((_) => _refresh()),
                         ),
-                      if (_userRole != 'technician' && _userRole != 'pending' && _userRole != 'partner_user') ...[
+                      if (_canDeleteTickets) ...[
                         const SizedBox(width: 8),
                         IconButton(
                           icon: Icon(Icons.delete_outline, size: 20, color: Colors.red.withOpacity(0.85)),
@@ -950,7 +1030,7 @@ class _TicketListPageState extends State<TicketListPage> {
       ),
     );
     */
-    return _buildTicketCardDense(ticket);
+    return _buildTicketCardModern(ticket);
   }
 
   String _statusLabelModern(String status) {
@@ -1144,9 +1224,9 @@ class _TicketListPageState extends State<TicketListPage> {
           border: Border.all(color: color.withOpacity(0.22)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.14 : 0.05),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
+              color: Colors.black.withOpacity(isDark ? 0.08 : 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -1215,7 +1295,7 @@ class _TicketListPageState extends State<TicketListPage> {
           icon: Icons.picture_as_pdf_outlined,
           onTap: () => _openTicketPdf(ticket),
         ),
-        if (_userRole != 'partner_user' && _userRole != 'technician')
+        if (_canEditTickets)
           _TicketActionButton(
             label: 'Düzenle',
             icon: Icons.edit_outlined,
@@ -1231,9 +1311,7 @@ class _TicketListPageState extends State<TicketListPage> {
                     )
                     .then((_) => _refresh()),
           ),
-        if (_userRole != 'technician' &&
-            _userRole != 'pending' &&
-            _userRole != 'partner_user')
+        if (_canDeleteTickets)
           _TicketActionButton(
             label: 'Sil',
             icon: Icons.delete_outline,
@@ -1281,13 +1359,14 @@ class _TicketListPageState extends State<TicketListPage> {
   Widget _buildTicketCardModern(Map<String, dynamic> ticket) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isWide = MediaQuery.of(context).size.width >= 900;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth >= 960;
 
     final customer =
         ticket['customers'] as Map<String, dynamic>? ?? <String, dynamic>{};
     final customerName = (customer['name'] as String?) ?? 'Müşteri bilgisi yok';
     final customerAddress = (customer['address'] as String?) ?? '';
-    final deviceBrand = ticket['device_brand'] as String?;
+    final deviceBrand = (ticket['device_brand'] as String?)?.trim();
     final status = ticket['status'] as String? ?? '';
     final priority = ticket['priority'] as String? ?? '';
     final plannedDate = ticket['planned_date'] as String?;
@@ -1298,7 +1377,6 @@ class _TicketListPageState extends State<TicketListPage> {
     final priorityColor = _priorityColorModern(priority);
     final surfaceColor =
         isDark ? const Color(0xFF162533) : AppColors.surfaceWhite;
-    final insetColor = isDark ? const Color(0xFF0F2233) : AppColors.surfaceSoft;
     final borderColor =
         isDark ? const Color(0xFF2B3A47) : AppColors.borderSubtle;
     final primaryText = isDark ? Colors.white : AppColors.textDark;
@@ -1322,192 +1400,172 @@ class _TicketListPageState extends State<TicketListPage> {
     if (plannedDate != null && plannedDate.isNotEmpty) {
       final dt = DateTime.tryParse(plannedDate);
       if (dt != null) {
-        plannedText = DateFormat('dd.MM.yyyy').format(dt);
+        plannedText = _shortDateFormatter.format(dt);
       }
     }
 
-    final summaryPanel = Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: insetColor,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: borderColor),
+    final headerInfoCards = <Widget>[
+      _buildTicketInfoPill(
+        label: 'İş Kodu',
+        value: jobCode,
+        icon: Icons.badge_outlined,
+        accent: AppColors.corporateBlue,
+        isDark: isDark,
       ),
-      child: Column(
-        crossAxisAlignment:
-            isWide ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          Text(
-            'İş Kodu',
-            style: TextStyle(
-              color: secondaryText,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            jobCode,
-            style: TextStyle(
-              color: primaryText,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Planlanan Tarih',
-            style: TextStyle(
-              color: secondaryText,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            plannedText,
-            style: TextStyle(
-              color: primaryText,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
+      _buildTicketInfoPill(
+        label: 'Plan',
+        value: plannedText,
+        icon: Icons.event_outlined,
+        accent: AppColors.statusOpen,
+        isDark: isDark,
       ),
+    ];
+
+    final statusWrap = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _buildMetaChipModern(
+          label: _statusLabelModern(status),
+          color: statusColor,
+          icon: leadingIcon,
+        ),
+        if (priority.isNotEmpty)
+          _buildMetaChipModern(
+            label: _priorityLabelModern(priority),
+            color: priorityColor,
+            icon: Icons.flag_outlined,
+          ),
+        if (deviceBrand != null && deviceBrand.isNotEmpty)
+          _buildMetaChipModern(
+            label: deviceBrand,
+            color: AppColors.corporateYellow,
+            icon: Icons.precision_manufacturing_outlined,
+          ),
+      ],
     );
 
-    final content = Column(
+    final leadingBadge = Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: statusColor.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: statusColor.withOpacity(0.20)),
+      ),
+      child: Icon(leadingIcon, color: statusColor, size: 24),
+    );
+
+    final titleBlock = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: statusColor.withOpacity(0.20)),
-              ),
-              child: Icon(leadingIcon, color: statusColor, size: 24),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                      color: primaryText,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    customerName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: secondaryText,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (deviceBrand != null && deviceBrand.trim().isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      deviceBrand,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 13, color: secondaryText),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
+        Text(
+          title,
+          maxLines: isWide ? 1 : 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+            color: primaryText,
+          ),
         ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _buildMetaChipModern(
-              label: _statusLabelModern(status),
-              color: statusColor,
-              icon: leadingIcon,
-            ),
-            if (priority.isNotEmpty)
-              _buildMetaChipModern(
-                label: _priorityLabelModern(priority),
-                color: priorityColor,
-                icon: Icons.flag_outlined,
-              ),
-          ],
+        const SizedBox(height: 6),
+        Text(
+          customerName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 14,
+            color: secondaryText,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         if (customerAddress.trim().isNotEmpty) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Text(
             customerAddress,
-            maxLines: isWide ? 2 : 3,
+            maxLines: isWide ? 1 : 2,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: secondaryText, fontSize: 13, height: 1.4),
+            style: TextStyle(color: secondaryText, fontSize: 13, height: 1.35),
           ),
         ],
       ],
     );
 
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (isWide)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              leadingBadge,
+              const SizedBox(width: 14),
+              Expanded(child: titleBlock),
+              const SizedBox(width: 16),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: headerInfoCards,
+                ),
+              ),
+            ],
+          )
+        else
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              leadingBadge,
+              const SizedBox(width: 14),
+              Expanded(child: titleBlock),
+            ],
+          ),
+        const SizedBox(height: 14),
+        statusWrap,
+        if (!isWide) ...[
+          const SizedBox(height: 14),
+          Wrap(spacing: 10, runSpacing: 10, children: headerInfoCards),
+        ],
+        const SizedBox(height: 14),
+        Divider(color: borderColor, height: 1),
+        const SizedBox(height: 12),
+        Align(
+          alignment: isWide ? Alignment.centerRight : Alignment.centerLeft,
+          child: _buildTicketActionWrap(ticket, isWide: isWide),
+        ),
+      ],
+    );
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.16 : 0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: isWide ? 1080 : double.infinity,
           ),
-        ],
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: surfaceColor,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(isDark ? 0.08 : 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: body,
+          ),
+        ),
       ),
-      child:
-          isWide
-              ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: content),
-                  const SizedBox(width: 20),
-                  SizedBox(
-                    width: 220,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        summaryPanel,
-                        const SizedBox(height: 14),
-                        _buildTicketActionWrap(ticket, isWide: true),
-                      ],
-                    ),
-                  ),
-                ],
-              )
-              : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  content,
-                  const SizedBox(height: 14),
-                  summaryPanel,
-                  const SizedBox(height: 14),
-                  _buildTicketActionWrap(ticket, isWide: false),
-                ],
-              ),
     );
   }
 
@@ -2065,7 +2123,7 @@ class _TicketListPageState extends State<TicketListPage> {
                 break;
               case 'pdf_all':
                 // Partner kullanıcılar tüm işleri PDF alamaz
-                if (_userRole == 'partner_user') break;
+                if (!_canExportAllTicketsPdf) break;
                 final allTickets = await _fetchAllTicketsForReport();
                 await _createPdfReport(allTickets, isFiltered: false);
                 break;
@@ -2087,7 +2145,7 @@ class _TicketListPageState extends State<TicketListPage> {
                     title: Text('Filtrelenmiş listeyi PDF al'),
                   ),
                 ),
-                if (_userRole != 'partner_user')
+                if (_canExportAllTicketsPdf)
                   const PopupMenuItem(
                     value: 'pdf_all',
                     child: ListTile(
@@ -2116,9 +2174,7 @@ class _TicketListPageState extends State<TicketListPage> {
         ),
       ],
       floatingActionButton:
-          (_userRole == 'admin' ||
-                  _userRole == 'manager' ||
-                  _userRole == 'technician')
+          _canCreateTickets
               ? FloatingActionButton.extended(
                 onPressed: () async {
                   await Navigator.push(
@@ -2129,7 +2185,10 @@ class _TicketListPageState extends State<TicketListPage> {
                 },
                 label: const Text('Yeni İş Emri'),
                 icon: const Icon(Icons.add),
-                backgroundColor: AppColors.corporateNavy,
+                backgroundColor:
+                    Theme.of(context).floatingActionButtonTheme.backgroundColor,
+                foregroundColor:
+                    Theme.of(context).floatingActionButtonTheme.foregroundColor,
               )
               : null,
       child: UiMaxWidth(
@@ -2147,7 +2206,7 @@ class _TicketListPageState extends State<TicketListPage> {
             }
 
             final tickets = snapshot.data ?? [];
-            final filtered = _applyFilters(tickets);
+            final filtered = _getFilteredTickets(tickets);
 
             final openCount =
                 tickets.where((e) => e['status'] == 'open').length;
@@ -2157,6 +2216,7 @@ class _TicketListPageState extends State<TicketListPage> {
             return RefreshIndicator(
               onRefresh: _refresh,
               child: CustomScrollView(
+                cacheExtent: 320,
                 slivers: [
                   SliverToBoxAdapter(
                     child: Padding(
@@ -2178,10 +2238,10 @@ class _TicketListPageState extends State<TicketListPage> {
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(
-                                isDark ? 0.16 : 0.05,
+                                isDark ? 0.08 : 0.03,
                               ),
-                              blurRadius: 18,
-                              offset: const Offset(0, 8),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
                             ),
                           ],
                         ),
@@ -2318,7 +2378,7 @@ class _TicketListPageState extends State<TicketListPage> {
                                       ),
                                     ),
                                   ),
-                                  if (_userRole != 'partner_user')
+                                  if (_canExportAllTicketsPdf)
                                     OutlinedButton.icon(
                                       onPressed:
                                           tickets.isEmpty
@@ -2609,10 +2669,11 @@ class _TicketListPageState extends State<TicketListPage> {
                       ),
                       sliver: SliverList(
                         delegate: SliverChildBuilderDelegate(
-                          (context, index) => RepaintBoundary(
-                            child: _buildTicketCardModern(filtered[index]),
-                          ),
+                          (context, index) =>
+                              _buildTicketCardModern(filtered[index]),
                           childCount: filtered.length,
+                          addAutomaticKeepAlives: false,
+                          addSemanticIndexes: false,
                         ),
                       ),
                     ),

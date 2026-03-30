@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/pdf_export_service.dart';
+import '../services/permission_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sidebar/app_layout.dart';
@@ -93,10 +94,10 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
     });
   }
 
-  bool get _canManageTickets =>
-      _userRole != 'technician' &&
-      _userRole != 'pending' &&
-      _userRole != 'partner_user';
+  bool get _canManageTickets => PermissionService.roleHasPermission(
+    _userRole,
+    AppPermission.manageArchivedTickets,
+  );
 
   Future<void> _deleteTicket(String ticketId) async {
     if (!_canManageTickets) {

@@ -41,9 +41,17 @@ CREATE TABLE IF NOT EXISTS teams (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     name text NOT NULL,
     description text,
+    emoji text NOT NULL DEFAULT '🚀',
+    accent_color text NOT NULL DEFAULT '#2563EB',
     created_by uuid REFERENCES auth.users(id) NOT NULL,
     created_at timestamptz DEFAULT now()
 );
+
+ALTER TABLE teams
+ADD COLUMN IF NOT EXISTS emoji text NOT NULL DEFAULT '🚀';
+
+ALTER TABLE teams
+ADD COLUMN IF NOT EXISTS accent_color text NOT NULL DEFAULT '#2563EB';
 
 -- TEAM_MEMBERS (Takım Üyeleri)
 CREATE TABLE IF NOT EXISTS team_members (

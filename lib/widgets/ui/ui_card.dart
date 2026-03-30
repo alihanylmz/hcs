@@ -27,8 +27,7 @@ class UiCard extends StatelessWidget {
     final borderRadius = BorderRadius.circular(radius);
 
     final surface = switch (tone) {
-      UiCardTone.base =>
-        isDark ? AppColors.surfaceDarkRaised : AppColors.surfaceWhite,
+      UiCardTone.base => theme.cardColor,
       UiCardTone.muted =>
         isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceSoft,
       UiCardTone.accent =>
@@ -66,9 +65,9 @@ class UiCard extends StatelessWidget {
           border: Border.all(color: border),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.18 : 0.05),
-              blurRadius: isDark ? 20 : 16,
-              offset: const Offset(0, 8),
+              color: Colors.black.withOpacity(isDark ? 0.10 : 0.035),
+              blurRadius: isDark ? 10 : 8,
+              offset: const Offset(0, 3),
             ),
           ],
         ),

@@ -11,9 +11,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'config/app_config.dart';
+import 'models/user_profile.dart';
 import 'pages/login_page.dart';
 import 'pages/ticket_detail_page.dart';
 import 'pages/ticket_list_page.dart';
+import 'services/windows_background_notification_service.dart';
 import 'services/update_service.dart';
 import 'services/user_service.dart';
 import 'theme/app_theme.dart';
@@ -78,6 +80,23 @@ Future<void> main() async {
       anonKey: AppConfig.supabaseAnonKey,
     );
 
+    if (!kIsWeb && Platform.isWindows) {
+      await WindowsBackgroundNotificationService.instance.initialize(
+        onOpenTicket: (ticketId) async {
+          final navigator = navigatorKey.currentState;
+          if (navigator == null) {
+            return;
+          }
+
+          navigator.push(
+            MaterialPageRoute(
+              builder: (context) => TicketDetailPage(ticketId: ticketId),
+            ),
+          );
+        },
+      );
+    }
+
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -112,6 +131,7 @@ class IsTakipApp extends StatefulWidget {
 
 class IsTakipAppState extends State<IsTakipApp> {
   ThemeMode _themeMode = ThemeMode.system;
+  SharedPreferences? _prefs;
 
   Brightness get _systemBrightness =>
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
@@ -125,7 +145,14 @@ class IsTakipAppState extends State<IsTakipApp> {
   Future<void> _loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
     final savedTheme = prefs.getString('theme_mode');
+
+    if (!mounted) {
+      _prefs = prefs;
+      return;
+    }
+
     setState(() {
+      _prefs = prefs;
       if (savedTheme == 'light') {
         _themeMode = ThemeMode.light;
       } else if (savedTheme == 'dark') {
@@ -137,12 +164,14 @@ class IsTakipAppState extends State<IsTakipApp> {
   }
 
   Future<void> toggleTheme() async {
-    final prefs = await SharedPreferences.getInstance();
     final nextMode = isDarkMode ? ThemeMode.light : ThemeMode.dark;
 
     setState(() {
       _themeMode = nextMode;
     });
+
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
 
     await prefs.setString(
       'theme_mode',
@@ -166,6 +195,7 @@ class IsTakipAppState extends State<IsTakipApp> {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: _themeMode,
+      themeAnimationDuration: Duration.zero,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -186,6 +216,11 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
+  bool _isHandlingPendingSession = false;
+  final UserService _userService = UserService();
+  Future<UserProfile?>? _profileFuture;
+  String? _profileUserId;
+
   @override
   void initState() {
     super.initState();
@@ -214,11 +249,18 @@ class _AuthGateState extends State<AuthGate> {
             Supabase.instance.client.auth.currentSession;
 
         if (session == null) {
+          _profileFuture = null;
+          _profileUserId = null;
           return const LoginPage();
         }
 
-        return FutureBuilder(
-          future: UserService().getCurrentUserProfile(),
+        if (_profileFuture == null || _profileUserId != session.user.id) {
+          _profileUserId = session.user.id;
+          _profileFuture = _userService.getCurrentUserProfile();
+        }
+
+        return FutureBuilder<UserProfile?>(
+          future: _profileFuture,
           builder: (context, userSnapshot) {
             if (userSnapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
@@ -242,6 +284,32 @@ class _AuthGateState extends State<AuthGate> {
                   child: Text(
                     'Profiliniz bulunamadı.\nYöneticinizle görüşün.',
                     textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+
+            if (userProfile.isPending) {
+              if (!_isHandlingPendingSession) {
+                _isHandlingPendingSession = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  await Supabase.instance.client.auth.signOut();
+                  if (mounted) {
+                    setState(() {
+                      _isHandlingPendingSession = false;
+                    });
+                  }
+                });
+              }
+
+              return const Scaffold(
+                body: Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      'Hesabiniz kayit bekliyor.\nYonetici onayi tamamlanmadan giris yapamazsiniz.',
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ),
               );

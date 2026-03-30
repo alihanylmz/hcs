@@ -66,6 +66,9 @@ class UiSecondaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     final button =
         icon == null
             ? OutlinedButton(onPressed: onPressed, child: Text(label))
@@ -75,7 +78,25 @@ class UiSecondaryButton extends StatelessWidget {
               label: Text(label),
             );
 
-    return expand ? SizedBox(width: double.infinity, child: button) : button;
+    final wrappedButton = Theme(
+      data: theme.copyWith(
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: theme.colorScheme.onSurface,
+            backgroundColor:
+                isDark
+                    ? AppColors.surfaceDarkMuted.withOpacity(0.56)
+                    : AppColors.surfaceWhite,
+            side: BorderSide(color: theme.dividerColor),
+          ),
+        ),
+      ),
+      child: button,
+    );
+
+    return expand
+        ? SizedBox(width: double.infinity, child: wrappedButton)
+        : wrappedButton;
   }
 }
 
@@ -94,6 +115,7 @@ class UiGhostButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return TextButton.icon(
       onPressed: onPressed,
@@ -101,6 +123,10 @@ class UiGhostButton extends StatelessWidget {
       label: Text(label),
       style: TextButton.styleFrom(
         foregroundColor: theme.colorScheme.primary,
+        backgroundColor:
+            isDark
+                ? theme.colorScheme.primary.withOpacity(0.10)
+                : theme.colorScheme.primary.withOpacity(0.08),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
@@ -122,12 +148,18 @@ class UiDestructiveButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return OutlinedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon ?? Icons.delete_outline, size: 18),
       label: Text(label),
       style: OutlinedButton.styleFrom(
         foregroundColor: AppColors.corporateRed,
+        backgroundColor:
+            isDark
+                ? AppColors.corporateRed.withOpacity(0.12)
+                : AppColors.corporateRed.withOpacity(0.06),
         side: BorderSide(color: AppColors.corporateRed.withOpacity(0.24)),
       ),
     );

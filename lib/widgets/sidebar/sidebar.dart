@@ -10,6 +10,7 @@ import '../../pages/my_teams_page.dart';
 import '../../pages/profile_page.dart';
 import '../../pages/stock_overview_page.dart';
 import '../../pages/ticket_list_page.dart';
+import '../../services/permission_service.dart';
 import '../../theme/app_colors.dart';
 import 'sidebar_item.dart';
 
@@ -46,17 +47,17 @@ class Sidebar extends StatelessWidget {
           end: Alignment.bottomCenter,
           colors: [
             baseBg,
-            Color.lerp(baseBg, Colors.black, isDark ? 0.12 : 0.06)!,
+            Color.lerp(baseBg, AppColors.corporateNavy, isDark ? 0.18 : 0.10)!,
           ],
         ),
         border: Border(
-          right: BorderSide(color: Colors.white.withOpacity(0.08)),
+          right: BorderSide(color: Colors.white.withOpacity(0.07)),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.20),
-            blurRadius: 24,
-            offset: const Offset(6, 0),
+            color: Colors.black.withOpacity(0.09),
+            blurRadius: 12,
+            offset: const Offset(3, 0),
           ),
         ],
       ),
@@ -69,7 +70,7 @@ class Sidebar extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.04),
+                  color: Colors.white.withOpacity(isDark ? 0.05 : 0.06),
                   borderRadius: BorderRadius.circular(22),
                   border: Border.all(color: Colors.white.withOpacity(0.08)),
                 ),
@@ -122,7 +123,7 @@ class Sidebar extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.04),
+                    color: Colors.white.withOpacity(isDark ? 0.05 : 0.06),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: Colors.white.withOpacity(0.08)),
                   ),
@@ -191,7 +192,10 @@ class Sidebar extends StatelessWidget {
                     textColor: textColor,
                     onTap: () => _navigate(context, const TicketListPage()),
                   ),
-                  if (userRole == 'admin' || userRole == 'manager')
+                  if (PermissionService.roleHasPermission(
+                    userRole,
+                    AppPermission.viewDashboard,
+                  ))
                     SidebarItem(
                       icon: Icons.dashboard_rounded,
                       label: 'Yonetici Paneli',
@@ -201,7 +205,10 @@ class Sidebar extends StatelessWidget {
                       textColor: textColor,
                       onTap: () => _navigate(context, const DashboardPage()),
                     ),
-                  if (userRole != 'partner_user')
+                  if (PermissionService.roleHasPermission(
+                    userRole,
+                    AppPermission.viewStock,
+                  ))
                     SidebarItem(
                       icon: Icons.inventory_2_outlined,
                       label: 'Stok Durumu',
@@ -303,15 +310,6 @@ class Sidebar extends StatelessWidget {
   }
 
   String _getRoleLabel(String role) {
-    switch (role) {
-      case 'admin':
-      case 'manager':
-        return 'Yonetici';
-      case 'partner_user':
-        return 'Partner';
-      case 'technician':
-      default:
-        return 'Teknisyen';
-    }
+    return PermissionService.roleLabel(role);
   }
 }

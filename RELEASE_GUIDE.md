@@ -1,4 +1,4 @@
-﻿# Release Guide
+# Release Guide
 
 ## One-Time Setup
 
@@ -13,8 +13,8 @@ Add these GitHub repository secrets once, then releases can be created by pushin
 - `ANDROID_KEY_ALIAS`
 - `SUPABASE_ACCESS_TOKEN`
 - `SUPABASE_PROJECT_REF`
-- `WINDOWS_PFX_BASE64` optional
-- `WINDOWS_PFX_PASSWORD` optional
+- `WINDOWS_PFX_BASE64` optional but recommended
+- `WINDOWS_PFX_PASSWORD` optional but recommended
 
 Helper commands for secrets:
 
@@ -28,21 +28,26 @@ Helper commands for secrets:
 - Update `version:` in `pubspec.yaml`.
 - `1.2.3+45` means:
   - Android: `versionName=1.2.3`, `versionCode=45`
-  - Windows: file/product version `1.2.3.45`
-- Keep build numbers increasing separately for Android and Windows releases in `app_versions`.
+  - Windows MSIX: `1.2.3.45`
+- Keep build numbers increasing for every published release.
 
 ## GitHub Releases
 
-GitHub Releases can be used as the download source for both Android and Windows.
+GitHub Releases is the download source for both Android and Windows.
 
 - Android:
-  - This project currently distributes directly as a signed APK.
+  - The project distributes directly as a signed APK.
   - Upload the release APK to GitHub Releases and use that asset URL in `app_versions.download_url`.
   - Keep the same keystore forever; Android updates require the new APK to be signed with the same key as the installed one.
 - Windows:
-  - GitHub Releases is a good fit for signed `.exe`, `.msi`, or `.zip` assets.
-  - The current app opens the download URL externally; it does not do silent in-place updates.
-  - The release workflow packages the full Windows bundle as a `.zip`, which is safer than uploading only the `.exe`.
+  - The release workflow now publishes these assets on every tag:
+    - versioned ZIP bundle
+    - versioned MSIX package
+    - stable `istakip-windows.msix`
+    - stable `istakip-windows.appinstaller`
+    - signing certificate `.cer`
+  - The stable App Installer URL is the one that should be used in `app_versions.download_url`.
+  - Once the app is installed through `.appinstaller`, future Windows updates can flow through App Installer.
 
 ## App Update Table
 
@@ -60,20 +65,20 @@ insert into public.app_versions (
 ) values
   (
     'android',
-    '1.2.0',
-    12,
-    'https://github.com/alihanylmz/hcs/releases/download/v1.2.0/istakip-android-v1.2.0+12.apk',
+    '1.1.2',
+    7,
+    'https://github.com/alihanylmz/hcs/releases/download/v1.1.2/istakip-android-v1.1.2+7.apk',
     'Android release notes',
-    'v1.2.0',
+    'v1.1.2',
     false
   ),
   (
     'windows',
-    '1.2.0',
-    27,
-    'https://github.com/alihanylmz/hcs/releases/download/v1.2.0/istakip-windows-v1.2.0+27.zip',
+    '1.1.2',
+    7,
+    'https://github.com/alihanylmz/hcs/releases/latest/download/istakip-windows.appinstaller',
     'Windows release notes',
-    'v1.2.0',
+    'v1.1.2',
     false
   );
 ```
@@ -82,7 +87,7 @@ insert into public.app_versions (
 
 - Copy `android/key.properties.example` to `android/key.properties`.
 - Create your release keystore outside git and point `storeFile` to it.
-- The project now uses release signing automatically when `android/key.properties` exists.
+- The project uses release signing automatically when `android/key.properties` exists.
 - Without a release keystore, Gradle falls back to debug signing. Do not publish builds signed that way.
 - For friend/internal distribution, build and share the release APK. `appbundle` is not required.
 - GitHub Actions can build the signed APK automatically from `ANDROID_*` secrets, so you do not need to create the APK locally every time.
@@ -91,19 +96,14 @@ insert into public.app_versions (
 flutter build apk --release
 ```
 
-## Windows Signing
+## Windows MSIX + App Installer
 
-- Build the Windows release artifact first.
-- Sign the generated `.exe` or installer with a code-signing certificate.
-- Timestamp the signature so it stays valid after certificate expiry.
-- If no Windows certificate secrets are configured, the workflow still publishes the unsigned Windows bundle zip.
-
-```powershell
-flutter build windows --release
-signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a build\windows\x64\runner\Release\istakip_app.exe
-```
-
-If you package with MSIX or an installer, sign that final artifact too.
+- The workflow builds the regular Windows runner, then creates an MSIX package and a matching `.appinstaller` file.
+- If `WINDOWS_PFX_BASE64` and `WINDOWS_PFX_PASSWORD` are configured, the workflow signs the EXE and the MSIX with your certificate.
+- If those secrets are missing, the workflow creates a temporary self-signed certificate and uploads `istakip-windows.cer`.
+- On test machines, install that `.cer` first if Windows does not trust the MSIX signature.
+- The first Windows migration should be done by opening `istakip-windows.appinstaller`.
+- After the app is installed through App Installer once, future releases can be offered through the same stable App Installer URL.
 
 ## Release Checklist
 
@@ -111,18 +111,21 @@ After the workflow files in `.github/workflows/` are committed:
 
 1. Update `version:` in `pubspec.yaml`.
 2. Commit and push the branch.
-3. Create and push the matching tag, for example `v1.1.0`.
+3. Create and push the matching tag, for example `v1.1.3`.
 4. GitHub Actions will build:
    - `istakip-android-v<version>+<build>.apk`
    - `istakip-windows-v<version>+<build>.zip`
-5. The workflow publishes both assets to a GitHub Release automatically.
-6. Insert or update matching `app_versions` rows for `android` and `windows`.
+   - `istakip-windows-v<version>+<build>.msix`
+   - `istakip-windows-v<version>+<build>.appinstaller`
+   - `istakip-windows.appinstaller`
+5. The workflow publishes those assets to a GitHub Release automatically.
+6. Insert or update matching `app_versions` rows.
 7. Smoke test the update prompt on both platforms.
 
 Tag commands:
 
 ```powershell
-git tag v1.1.0
+git tag v1.1.3
 git push origin main --tags
 ```
 
@@ -130,4 +133,3 @@ Supabase function deploy is also automated:
 
 - `approve-user` is redeployed automatically when `supabase/functions/approve-user/` changes on `main` or `master`.
 - You can also trigger `Deploy Supabase Function` manually from the GitHub Actions tab.
-

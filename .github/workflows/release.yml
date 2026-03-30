@@ -287,8 +287,9 @@ jobs:
           </AppInstaller>
           "@
 
-          Set-Content -Path "dist\$stableAppInstallerName" -Value $appInstaller -Encoding utf8
-          Set-Content -Path "dist\$versionedName.appinstaller" -Value $appInstaller -Encoding utf8
+          $appInstaller = $appInstaller.TrimStart()
+          Set-Content -Path "dist\$stableAppInstallerName" -Value $appInstaller -Encoding utf8BOM
+          Set-Content -Path "dist\$versionedName.appinstaller" -Value $appInstaller -Encoding utf8BOM
 
       - name: Package Windows ZIP bundle
         shell: pwsh

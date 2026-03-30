@@ -123,8 +123,6 @@ jobs:
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       ONESIGNAL_APP_ID: ${{ secrets.ONESIGNAL_APP_ID }}
-      WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
-      WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -152,11 +150,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Install MSIX tooling
+      - name: Install Inno Setup
         shell: pwsh
-        run: |
-          dart pub global activate msix
-          "$env:LOCALAPPDATA\Pub\Cache\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        run: choco install innosetup -y
 
       - name: Build Windows release
         shell: pwsh
@@ -167,129 +163,24 @@ jobs:
             --dart-define=SUPABASE_KEY=$env:SUPABASE_KEY `
             --dart-define=ONESIGNAL_APP_ID=$env:ONESIGNAL_APP_ID
 
-      - name: Prepare Windows certificates
-        id: windows_cert
-        shell: pwsh
-        run: |
-          $publisher = $null
-          $pfxPath = Join-Path $env:RUNNER_TEMP 'windows-msix-signing.pfx'
-          $cerPath = Join-Path $env:RUNNER_TEMP 'windows-msix-signing.cer'
-          $pfxPassword = $null
-
-          if (-not [string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_BASE64) -and -not [string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_PASSWORD)) {
-            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
-            $pfxPassword = $env:WINDOWS_PFX_PASSWORD
-            $cert = Get-PfxCertificate -FilePath $pfxPath
-            $publisher = $cert.Subject
-            [IO.File]::WriteAllBytes(
-              $cerPath,
-              $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
-            )
-          } else {
-            $publisher = 'CN=IsTakip Dev, O=HCS, C=TR'
-            $pfxPassword = [Guid]::NewGuid().ToString('N')
-            $securePassword = ConvertTo-SecureString -String $pfxPassword -AsPlainText -Force
-            $cert = New-SelfSignedCertificate `
-              -Type CodeSigningCert `
-              -Subject $publisher `
-              -FriendlyName 'IsTakip Dev' `
-              -CertStoreLocation 'Cert:\CurrentUser\My'
-            Export-PfxCertificate `
-              -Cert "Cert:\CurrentUser\My\$($cert.Thumbprint)" `
-              -FilePath $pfxPath `
-              -Password $securePassword | Out-Null
-            Export-Certificate `
-              -Cert "Cert:\CurrentUser\My\$($cert.Thumbprint)" `
-              -FilePath $cerPath | Out-Null
-          }
-
-          "publisher=$publisher" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "pfx_path=$pfxPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "pfx_password=$pfxPassword" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "cer_path=$cerPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Sign Windows executable
-        shell: pwsh
-        run: |
-          $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
-          if (-not $signtool) {
-            Write-Host "signtool.exe bulunamadi; EXE imzalama atlandi. MSIX paketi yine sertifika ile imzalanacak."
-            exit 0
-          }
-
-          & $signtool.Source sign `
-            /fd SHA256 `
-            /tr http://timestamp.digicert.com `
-            /td SHA256 `
-            /f "${{ steps.windows_cert.outputs.pfx_path }}" `
-            /p "${{ steps.windows_cert.outputs.pfx_password }}" `
-            "build\windows\x64\runner\Release\istakip_app.exe"
-
-      - name: Create MSIX package
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          $artifactName = "istakip-windows-v${{ needs.prepare.outputs.version_name }}+${{ needs.prepare.outputs.build_number }}"
-          dart pub global run msix:create `
-            --release `
-            --build-windows false `
-            --install-certificate false `
-            --display-name "IsTakip" `
-            --publisher-display-name "HCS" `
-            --identity-name "com.hcs.istakip" `
-            --version "${{ needs.prepare.outputs.version_name }}.${{ needs.prepare.outputs.build_number }}" `
-            --logo-path "assets/icon/icon.png" `
-            --capabilities "internetClient" `
-            --os-min-version "10.0.17763.0" `
-            --certificate-path "${{ steps.windows_cert.outputs.pfx_path }}" `
-            --certificate-password "${{ steps.windows_cert.outputs.pfx_password }}" `
-            --publisher "${{ steps.windows_cert.outputs.publisher }}" `
-            --output-path dist `
-            --output-name $artifactName
-
-      - name: Create App Installer files
+      - name: Build Windows installer EXE
         shell: pwsh
         run: |
           $versionName = '${{ needs.prepare.outputs.version_name }}'
           $buildNumber = '${{ needs.prepare.outputs.build_number }}'
-          $msixVersion = "$versionName.$buildNumber"
-          $versionedName = "istakip-windows-v$versionName+$buildNumber"
-          $stableMsixName = 'istakip-windows.msix'
-          $stableAppInstallerName = 'istakip-windows.appinstaller'
-          $stableCertName = 'istakip-windows.cer'
-          $repoBaseUrl = 'https://github.com/${{ github.repository }}/releases/latest/download'
-          $stableMsixUrl = "$repoBaseUrl/$stableMsixName"
-          $stableAppInstallerUrl = "$repoBaseUrl/$stableAppInstallerName"
-          $publisher = '${{ steps.windows_cert.outputs.publisher }}'
+          $versionedSetupName = "istakip-windows-v$versionName+$buildNumber-setup"
+          $stableSetupName = 'istakip-windows-setup'
+          $isccPath = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $isccPath)) {
+            Write-Error "ISCC.exe bulunamadi: $isccPath"
+            exit 1
+          }
 
-          Copy-Item "dist\$versionedName.msix" "dist\$stableMsixName" -Force
-          Copy-Item "${{ steps.windows_cert.outputs.cer_path }}" "dist\$stableCertName" -Force
-          Copy-Item "${{ steps.windows_cert.outputs.cer_path }}" "dist\$versionedName.cer" -Force
+          & $isccPath "/DMyAppVersion=$versionName" "/DMyAppPublisher=HCS" "/DMyOutputBaseFilename=$versionedSetupName" setup_script.iss
 
-          $appInstaller = @"
-          <?xml version="1.0" encoding="utf-8"?>
-          <AppInstaller
-            xmlns="http://schemas.microsoft.com/appx/appinstaller/2017/2"
-            xmlns:s4="http://schemas.microsoft.com/appx/appinstaller/2021"
-            Uri="$stableAppInstallerUrl"
-            Version="$msixVersion">
-            <MainPackage
-              Name="com.hcs.istakip"
-              Publisher="$publisher"
-              Version="$msixVersion"
-              ProcessorArchitecture="x64"
-              Uri="$stableMsixUrl" />
-            <UpdateSettings>
-              <OnLaunch HoursBetweenUpdateChecks="0" ShowPrompt="true" UpdateBlocksActivation="false" />
-              <s4:AutomaticBackgroundTask />
-              <s4:ForceUpdateFromAnyVersion>true</s4:ForceUpdateFromAnyVersion>
-            </UpdateSettings>
-          </AppInstaller>
-          "@
-
-          $appInstaller = $appInstaller.TrimStart()
-          Set-Content -Path "dist\$stableAppInstallerName" -Value $appInstaller -Encoding utf8BOM
-          Set-Content -Path "dist\$versionedName.appinstaller" -Value $appInstaller -Encoding utf8BOM
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "installer\$versionedSetupName.exe" "dist\$versionedSetupName.exe" -Force
+          Copy-Item "installer\$versionedSetupName.exe" "dist\$stableSetupName.exe" -Force
 
       - name: Package Windows ZIP bundle
         shell: pwsh
@@ -311,9 +202,7 @@ jobs:
           name: windows-release
           path: |
             dist/*.zip
-            dist/*.msix
-            dist/*.appinstaller
-            dist/*.cer
+            dist/*setup.exe
 
   publish-release:
     needs:
@@ -342,7 +231,5 @@ jobs:
           files: |
             release-assets/android/*.apk
             release-assets/windows/*.zip
-            release-assets/windows/*.msix
-            release-assets/windows/*.appinstaller
-            release-assets/windows/*.cer
+            release-assets/windows/*setup.exe
           generate_release_notes: true

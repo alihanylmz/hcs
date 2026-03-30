@@ -134,6 +134,16 @@ class UpdateService {
         url.trim().toLowerCase().endsWith('.appinstaller');
   }
 
+  bool _isWindowsInstallerExe(String url) {
+    if (kIsWeb) {
+      return false;
+    }
+
+    final normalized = url.trim().toLowerCase();
+    return defaultTargetPlatform == TargetPlatform.windows &&
+        normalized.endsWith('.exe');
+  }
+
   bool _isWindowsManualPackage(String url) {
     if (kIsWeb) {
       return false;
@@ -141,12 +151,15 @@ class UpdateService {
 
     final normalized = url.trim().toLowerCase();
     return defaultTargetPlatform == TargetPlatform.windows &&
-        (normalized.endsWith('.zip') || normalized.endsWith('.exe'));
+        normalized.endsWith('.zip');
   }
 
   String _downloadActionLabel(String downloadUrl) {
     if (_shouldUseWindowsAppInstaller(downloadUrl)) {
       return 'Windows Yukleyiciyi Ac';
+    }
+    if (_isWindowsInstallerExe(downloadUrl)) {
+      return 'Indir ve Kur';
     }
     if (_isWindowsManualPackage(downloadUrl)) {
       return 'Indir ve Manuel Guncelle';
@@ -193,6 +206,15 @@ class UpdateService {
                     style: const TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                   const SizedBox(height: 20),
+                  if (_isWindowsInstallerExe(downloadUrl))
+                    const Text(
+                      'Windows kurulumu tek dosya yukleyici ile yapilir. Dosyayi indirip calistirin; kurulum eski surumun ustune guncelleme yapabilir.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   if (_isWindowsManualPackage(downloadUrl))
                     const Text(
                       'Windows guncellemesi manuel kurulur. Zip dosyasini indirip acin, sonra yeni surum klasorundeki dosyalarla mevcut kurulumunuzu degistirin.',
@@ -202,7 +224,9 @@ class UpdateService {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                  if (_isWindowsManualPackage(downloadUrl) && isMandatory)
+                  if ((_isWindowsInstallerExe(downloadUrl) ||
+                          _isWindowsManualPackage(downloadUrl)) &&
+                      isMandatory)
                     const SizedBox(height: 12),
                   if (isMandatory)
                     const Text(

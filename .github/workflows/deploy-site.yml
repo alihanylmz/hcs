@@ -123,5 +123,5 @@ jobs:
           password: ${{ secrets.PLESK_PASSWORD }}
           port: ${{ secrets.PLESK_PORT || 21 }}
           local-dir: site/
-          server-dir: ${{ secrets.PLESK_FTP_TARGET_DIR || 'httpdocs/' }}
+          server-dir: ${{ secrets.PLESK_FTP_TARGET_DIR || '/httpdocs/' }}
           dangerous-clean-slate: false

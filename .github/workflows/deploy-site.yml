@@ -36,6 +36,17 @@ jobs:
             printf 'Missing GitHub secrets:\n- %s\n' "${missing[@]}"
             exit 1
           fi
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          for label, key in (
+              ("Is Takip", "IS_TAKIP_SUPABASE_URL"),
+              ("Teklif", "TEKLIF_SUPABASE_URL"),
+          ):
+              host = urlparse(os.environ.get(key, "")).netloc or "INVALID_URL"
+              print(f"{label} Supabase host: {host}")
+          PY
 
       - name: Checkout Is Takip and portal
         uses: actions/checkout@v4

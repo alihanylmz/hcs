@@ -1,0 +1,129 @@
+name: Deploy Site to Plesk
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      PUBLIC_QUOTE_BASE_URL: ${{ vars.PUBLIC_QUOTE_BASE_URL || 'https://uzalteknikservis.com/t' }}
+    steps:
+      - name: Validate secrets
+        shell: bash
+        run: |
+          missing=()
+          [[ -z "$SUPABASE_URL" ]] && missing+=("SUPABASE_URL")
+          [[ -z "$SUPABASE_ANON_KEY" ]] && missing+=("SUPABASE_ANON_KEY")
+          [[ -z "${{ secrets.PLESK_HOST }}" ]] && missing+=("PLESK_HOST")
+          [[ -z "${{ secrets.PLESK_USER }}" ]] && missing+=("PLESK_USER")
+          [[ -z "${{ secrets.PLESK_PASSWORD }}" ]] && missing+=("PLESK_PASSWORD")
+          [[ -z "${{ secrets.PLESK_TARGET_PATH }}" ]] && missing+=("PLESK_TARGET_PATH")
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing GitHub secrets:\n- %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+      - name: Checkout Is Takip and portal
+        uses: actions/checkout@v4
+        with:
+          repository: alihanylmz/hcs
+          ref: main
+          path: hcs
+          token: ${{ secrets.DEPLOY_REPO_TOKEN || github.token }}
+
+      - name: Checkout Teklif
+        uses: actions/checkout@v4
+        with:
+          repository: alihanylmz/uzalteklif
+          ref: master
+          path: uzalteklif
+          token: ${{ secrets.DEPLOY_REPO_TOKEN || github.token }}
+
+      - name: Setup Flutter stable for Is Takip
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build Is Takip web
+        working-directory: hcs
+        run: |
+          flutter pub get
+          flutter build web --release --base-href /is-takip/ \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+
+      - name: Setup Flutter beta for Teklif
+        uses: subosito/flutter-action@v2
+        with:
+          channel: beta
+          cache: true
+
+      - name: Build Teklif web
+        working-directory: uzalteklif
+        run: |
+          flutter pub get
+          flutter build web --release --base-href /teklif/ \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=PUBLIC_QUOTE_BASE_URL="$PUBLIC_QUOTE_BASE_URL"
+
+      - name: Prepare Plesk payload
+        shell: bash
+        run: |
+          rm -rf site
+          mkdir -p site/is-takip site/teklif
+          cp -a hcs/portal/. site/
+          cp -a hcs/build/web/. site/is-takip/
+          cp -a uzalteklif/build/web/. site/teklif/
+
+          cat > site/is-takip/.htaccess <<'EOF'
+          <IfModule mod_rewrite.c>
+            RewriteEngine On
+            RewriteBase /is-takip/
+            RewriteRule ^index\.html$ - [L]
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule . /is-takip/index.html [L]
+          </IfModule>
+          EOF
+
+          cat > site/teklif/.htaccess <<'EOF'
+          <IfModule mod_rewrite.c>
+            RewriteEngine On
+            RewriteBase /teklif/
+            RewriteRule ^index\.html$ - [L]
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule . /teklif/index.html [L]
+          </IfModule>
+          EOF
+
+      - name: Upload deploy artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plesk-site
+          path: site
+
+      - name: Deploy to Plesk over SFTP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PLESK_HOST }}
+          username: ${{ secrets.PLESK_USER }}
+          password: ${{ secrets.PLESK_PASSWORD }}
+          port: ${{ secrets.PLESK_PORT || 22 }}
+          source: site
+          target: ${{ secrets.PLESK_TARGET_PATH }}
+          strip_components: 1
+          overwrite: true

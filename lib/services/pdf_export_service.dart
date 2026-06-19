@@ -85,7 +85,7 @@ class PdfExportService {
         if (outputFile != null) {
           final file = File(outputFile);
           await file.writeAsBytes(bytes);
-          return 'Dosya kaydedildi: $outputFile';
+          return outputFile;
         }
         return null;
       }

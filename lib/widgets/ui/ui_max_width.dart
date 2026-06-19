@@ -4,8 +4,8 @@ class UiMaxWidth extends StatelessWidget {
   const UiMaxWidth({
     super.key,
     required this.child,
-    this.maxWidth = 1180,
-    this.padding = const EdgeInsets.symmetric(horizontal: 20),
+    this.maxWidth = 1420,
+    this.padding = const EdgeInsets.symmetric(horizontal: 24),
   });
 
   final Widget child;
@@ -18,6 +18,8 @@ class UiMaxWidth extends StatelessWidget {
     final resolvedPadding =
         screenWidth < 720
             ? const EdgeInsets.symmetric(horizontal: 16)
+            : screenWidth < 1200
+            ? const EdgeInsets.symmetric(horizontal: 20)
             : padding;
 
     return Align(

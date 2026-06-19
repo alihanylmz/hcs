@@ -4,6 +4,7 @@ import '../core/logging/app_logger.dart';
 import '../models/team.dart';
 import '../models/team_member.dart';
 import '../models/user_profile.dart';
+import 'notification_service.dart';
 
 class TeamService {
   TeamService({SupabaseClient? client})
@@ -14,7 +15,32 @@ class TeamService {
   static const String _listInvitableUsersRpcName =
       'list_team_invitable_profiles';
   final SupabaseClient _supabase;
+  final NotificationService _notificationService = NotificationService();
   bool? _supportsTeamVisualIdentityCache;
+
+  Future<bool> canCurrentUserCreateTeam() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return false;
+
+    try {
+      final response =
+          await _supabase
+              .from('profiles')
+              .select('role')
+              .eq('id', userId)
+              .maybeSingle();
+
+      final role = response?['role']?.toString();
+      return role != UserRole.partnerUser && role != UserRole.pending;
+    } catch (error, stackTrace) {
+      _logger.error(
+        'can_current_user_create_team_failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
+  }
 
   Future<List<Team>> listTeams() async {
     final userId = _supabase.auth.currentUser?.id;
@@ -49,6 +75,13 @@ class TeamService {
     final user = _supabase.auth.currentUser;
     if (user == null) {
       throw Exception('Kullanici oturumu bulunamadi.');
+    }
+
+    final canCreateTeam = await canCurrentUserCreateTeam();
+    if (!canCreateTeam) {
+      throw Exception(
+        'Partner kullanicilar takim olusturamaz. Mevcut takim davetleriyle ekip alanina katilabilir.',
+      );
     }
 
     final trimmedName = name.trim();
@@ -492,12 +525,19 @@ class TeamService {
         throw Exception('Onay bekleyen kullanici takima eklenemez.');
       }
 
-      await _upsertTeamMember(
+      final isNewMember = await _upsertTeamMember(
         teamId: teamId,
         userId: userId,
         inviterUserId: inviterUserId,
         role: role,
       );
+
+      if (isNewMember) {
+        await _notificationService.notifyMemberInvited(
+          teamId: teamId,
+          invitedUserId: userId,
+        );
+      }
     } catch (error, stackTrace) {
       _logger.error(
         'add_member_by_email_failed',
@@ -541,12 +581,19 @@ class TeamService {
         throw Exception('Onay bekleyen kullanici takima eklenemez.');
       }
 
-      await _upsertTeamMember(
+      final isNewMember = await _upsertTeamMember(
         teamId: teamId,
         userId: normalizedUserId,
         inviterUserId: inviterUserId,
         role: role,
       );
+
+      if (isNewMember) {
+        await _notificationService.notifyMemberInvited(
+          teamId: teamId,
+          invitedUserId: normalizedUserId,
+        );
+      }
     } catch (error, stackTrace) {
       _logger.error(
         'add_member_by_user_id_failed',
@@ -558,18 +605,28 @@ class TeamService {
     }
   }
 
-  Future<void> _upsertTeamMember({
+  Future<bool> _upsertTeamMember({
     required String teamId,
     required String userId,
     required String inviterUserId,
     required TeamRole role,
   }) async {
+    final existingMember =
+        await _supabase
+            .from('team_members')
+            .select('id')
+            .eq('team_id', teamId)
+            .eq('user_id', userId)
+            .maybeSingle();
+
     await _supabase.from('team_members').upsert({
       'team_id': teamId,
       'user_id': userId,
       'role': role.name,
       'invited_by': inviterUserId,
     });
+
+    return existingMember == null;
   }
 
   Future<void> removeMember(String teamId, String userId) async {

@@ -85,8 +85,8 @@ class UiSecondaryButton extends StatelessWidget {
             foregroundColor: theme.colorScheme.onSurface,
             backgroundColor:
                 isDark
-                    ? AppColors.surfaceDarkMuted.withOpacity(0.56)
-                    : AppColors.surfaceWhite,
+                    ? AppColors.surfaceDarkMuted.withValues(alpha: 0.78)
+                    : AppColors.surfaceSoft,
             side: BorderSide(color: theme.dividerColor),
           ),
         ),
@@ -125,8 +125,8 @@ class UiGhostButton extends StatelessWidget {
         foregroundColor: theme.colorScheme.primary,
         backgroundColor:
             isDark
-                ? theme.colorScheme.primary.withOpacity(0.10)
-                : theme.colorScheme.primary.withOpacity(0.08),
+                ? theme.colorScheme.primary.withValues(alpha: 0.14)
+                : AppColors.surfaceAccent,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
@@ -158,9 +158,9 @@ class UiDestructiveButton extends StatelessWidget {
         foregroundColor: AppColors.corporateRed,
         backgroundColor:
             isDark
-                ? AppColors.corporateRed.withOpacity(0.12)
-                : AppColors.corporateRed.withOpacity(0.06),
-        side: BorderSide(color: AppColors.corporateRed.withOpacity(0.24)),
+                ? AppColors.corporateRed.withValues(alpha: 0.14)
+                : AppColors.corporateRed.withValues(alpha: 0.06),
+        side: BorderSide(color: AppColors.corporateRed.withValues(alpha: 0.24)),
       ),
     );
   }

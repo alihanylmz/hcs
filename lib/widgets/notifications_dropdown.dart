@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/notification_item.dart';
+import '../services/notification_navigation_service.dart';
 import '../services/notification_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/ui/ui.dart';
@@ -13,14 +14,14 @@ class NotificationsDropdown extends StatefulWidget {
     this.limit = 10,
     this.width = 360,
     this.maxHeight = 420,
-    this.onOpenTicket,
+    this.onNavigate,
   });
 
   final VoidCallback onClose;
   final int limit;
   final double width;
   final double maxHeight;
-  final void Function(String ticketId)? onOpenTicket;
+  final Future<void> Function(Map<String, dynamic> data)? onNavigate;
 
   @override
   State<NotificationsDropdown> createState() => _NotificationsDropdownState();
@@ -66,10 +67,16 @@ class _NotificationsDropdownState extends State<NotificationsDropdown> {
 
   void _onTap(NotificationItem item) {
     final data = item.data ?? const <String, dynamic>{};
-    final ticketId = data['ticket_id']?.toString();
-    if (ticketId != null && ticketId.isNotEmpty && widget.onOpenTicket != null) {
+    if (data.isNotEmpty && widget.onNavigate != null) {
       widget.onClose();
-      widget.onOpenTicket!(ticketId);
+      widget.onNavigate!(data);
+      return;
+    }
+
+    if (data.isNotEmpty) {
+      final navigator = Navigator.of(context);
+      widget.onClose();
+      NotificationNavigationService.openFromData(navigator, data);
     }
   }
 
@@ -94,7 +101,9 @@ class _NotificationsDropdownState extends State<NotificationsDropdown> {
                   Expanded(
                     child: Text(
                       'Bildirimler',
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                   IconButton(
@@ -110,31 +119,38 @@ class _NotificationsDropdownState extends State<NotificationsDropdown> {
                 ],
               ),
             ),
-            Divider(height: 1, color: theme.dividerColor.withOpacity(0.2)),
+            Divider(
+              height: 1,
+              color: theme.dividerColor.withValues(alpha: 0.2),
+            ),
             Expanded(
-              child: _loading
-                  ? const UiLoading(message: 'Yükleniyor...')
-                  : _error != null
+              child:
+                  _loading
+                      ? const UiLoading(message: 'Yükleniyor...')
+                      : _error != null
                       ? UiErrorState(message: _error, onRetry: _load)
                       : _items.isEmpty
-                          ? const UiEmptyState(
-                              icon: Icons.notifications_none,
-                              title: 'Bildiriminiz bulunmuyor',
-                              subtitle: 'Yeni bildirimler burada görünecek.',
-                            )
-                          : ListView.separated(
-                              padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
-                              itemCount: _items.length,
-                              separatorBuilder: (_, __) =>
-                                  Divider(height: 1, color: theme.dividerColor.withOpacity(0.12)),
-                              itemBuilder: (context, index) {
-                                final item = _items[index];
-                                return _NotificationRow(
-                                  item: item,
-                                  onTap: () => _onTap(item),
-                                );
-                              },
+                      ? const UiEmptyState(
+                        icon: Icons.notifications_none,
+                        title: 'Bildiriminiz bulunmuyor',
+                        subtitle: 'Yeni bildirimler burada görünecek.',
+                      )
+                      : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+                        itemCount: _items.length,
+                        separatorBuilder:
+                            (_, __) => Divider(
+                              height: 1,
+                              color: theme.dividerColor.withValues(alpha: 0.12),
                             ),
+                        itemBuilder: (context, index) {
+                          final item = _items[index];
+                          return _NotificationRow(
+                            item: item,
+                            onTap: () => _onTap(item),
+                          );
+                        },
+                      ),
             ),
           ],
         ),
@@ -169,6 +185,34 @@ class _NotificationRow extends StatelessWidget {
           icon = Icons.change_circle;
           iconColor = Colors.blue;
           break;
+        case 'card_created':
+          icon = Icons.add_box_outlined;
+          iconColor = AppColors.corporateBlue;
+          break;
+        case 'card_updated':
+          icon = Icons.edit_note;
+          iconColor = AppColors.corporateBlue;
+          break;
+        case 'card_status_changed':
+          icon = Icons.task_alt_outlined;
+          iconColor = Colors.green;
+          break;
+        case 'card_assigned':
+          icon = Icons.assignment_ind_outlined;
+          iconColor = AppColors.corporateYellow;
+          break;
+        case 'card_comment':
+          icon = Icons.chat_bubble_outline;
+          iconColor = Colors.orange;
+          break;
+        case 'member_invited':
+          icon = Icons.group_add_outlined;
+          iconColor = AppColors.corporateBlue;
+          break;
+        case 'team_mention':
+          icon = Icons.alternate_email;
+          iconColor = AppColors.corporateRed;
+          break;
         case 'note_added':
         case 'partner_note_added':
           icon = Icons.comment;
@@ -190,7 +234,7 @@ class _NotificationRow extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundColor: iconColor.withOpacity(0.10),
+              backgroundColor: iconColor.withValues(alpha: 0.10),
               child: Icon(icon, color: iconColor, size: 18),
             ),
             const SizedBox(width: 10),
@@ -211,12 +255,16 @@ class _NotificationRow extends StatelessWidget {
                     item.message,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.hintColor,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     DateFormat('dd.MM.yyyy HH:mm').format(item.createdAt),
-                    style: theme.textTheme.labelSmall?.copyWith(color: theme.hintColor),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.hintColor,
+                    ),
                   ),
                 ],
               ),
@@ -229,5 +277,3 @@ class _NotificationRow extends StatelessWidget {
     );
   }
 }
-
-

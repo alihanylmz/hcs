@@ -181,7 +181,7 @@ class _TeamHomePageState extends State<TeamHomePage>
 
     return AppLayout(
       title: 'Takim Detayi',
-      currentPage: AppPage.myTeams,
+      currentPage: AppPage.other,
       child: Column(
         children: [
           Container(

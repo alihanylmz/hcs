@@ -1,6 +1,4 @@
-import 'package:flutter/material.dart';
-
-import '../../theme/app_colors.dart';
+﻿import 'package:flutter/material.dart';
 
 class SidebarItem extends StatelessWidget {
   const SidebarItem({
@@ -27,7 +25,7 @@ class SidebarItem extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Material(
         color: Colors.transparent,
         child: Ink(
@@ -35,36 +33,49 @@ class SidebarItem extends StatelessWidget {
             color:
                 isActive
                     ? activeColor
-                    : Colors.white.withOpacity(isDark ? 0.025 : 0.035),
-            borderRadius: BorderRadius.circular(16),
+                    : Colors.white.withValues(alpha: isDark ? 0.02 : 0.04),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color:
                   isActive
-                      ? AppColors.corporateBlue.withOpacity(0.30)
-                      : Colors.white.withOpacity(isDark ? 0.06 : 0.08),
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : Colors.white.withValues(alpha: isDark ? 0.06 : 0.08),
             ),
             boxShadow:
                 isActive
                     ? [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.07),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 18,
+                        offset: const Offset(0, 10),
                       ),
                     ]
                     : null,
           ),
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(
                 children: [
-                  Icon(
-                    icon,
-                    size: 20,
-                    color: isActive ? Colors.white : iconColor,
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color:
+                          isActive
+                              ? Colors.white.withValues(alpha: 0.14)
+                              : Colors.white.withValues(
+                                alpha: isDark ? 0.06 : 0.08,
+                              ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      icon,
+                      size: 20,
+                      color: isActive ? Colors.white : iconColor,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -73,9 +84,17 @@ class SidebarItem extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight:
-                            isActive ? FontWeight.w700 : FontWeight.w600,
+                            isActive ? FontWeight.w800 : FontWeight.w700,
                         color: isActive ? Colors.white : textColor,
                       ),
+                    ),
+                  ),
+                  AnimatedOpacity(
+                    opacity: isActive ? 1 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: const Icon(
+                      Icons.chevron_right_rounded,
+                      color: Colors.white,
                     ),
                   ),
                 ],
@@ -95,16 +114,11 @@ class SidebarDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-      child: Divider(
-        color:
-            isDark
-                ? Colors.white.withOpacity(0.08)
-                : Colors.white.withOpacity(0.12),
-        thickness: 1,
-        height: 1,
-      ),
+    return Divider(
+      color: Colors.white.withValues(alpha: isDark ? 0.08 : 0.12),
+      thickness: 1,
+      height: 1,
     );
   }
 }
+

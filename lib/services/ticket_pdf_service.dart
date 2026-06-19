@@ -4,6 +4,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import '../models/ticket_backup_record.dart';
+import '../models/ticket_fault_record.dart';
 import '../models/ticket_status.dart';
 import '../utils/pdf_helper.dart';
 
@@ -62,9 +64,18 @@ class TicketPdfService {
           .select('*, profiles(full_name, role)')
           .eq('ticket_id', idValue)
           .neq('note_type', 'partner_note')
+          .neq('note_type', 'fault_record')
+          .neq('note_type', 'backup_record')
           .order('created_at', ascending: true);
 
-      final notes = List<Map<String, dynamic>>.from(notesResponse);
+      final notes =
+          List<Map<String, dynamic>>.from(notesResponse)
+              .where(
+                (note) =>
+                    !TicketFaultRecord.isFaultRecordNote(note) &&
+                    !TicketBackupRecord.isBackupRecordNote(note),
+              )
+              .toList();
       final enrichedNotes = await _enrichNotesWithImages(notes);
 
       final partner = ticket['partners'] as Map<String, dynamic>?;

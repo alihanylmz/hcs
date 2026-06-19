@@ -68,3 +68,8 @@ windows/runner/RC*
 
 # Installer outputs
 installer/
+
+# Local tooling and release artifacts
+.dart_appdata/
+.tool_tmp/
+releases/

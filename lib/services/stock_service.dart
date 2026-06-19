@@ -7,15 +7,51 @@ class StockService {
   final String _table = 'inventory';
 
   // --- SABİT LİSTELER ---
-  static const List<String> categories = ['Sürücü', 'PLC', 'HMI', 'Şalt', 'Sensör', 'Diğer'];
-  
-  // static const List<String> driveBrands = ['Danfoss', 'GMT', 'INVT', 'ABB', 'Schneider', 'Diğer']; // Kaldırıldı
-  static const List<String> plcModels = ['GMT', 'Siemens', 'Delta', 'Fatek', 'Diğer'];
-  
-  static const List<String> hmiBrands = ['ABB', 'Weintek', 'GMT', 'Diğer'];
-  static const List<double> hmiSizes = [4.3, 7.0, 10.0, 12.0, 15.0]; // inç cinsinden
+  static const List<String> categories = [
+    'Sürücü',
+    'PLC',
+    'HMI',
+    'Şalt',
+    'Sensör',
+    'Diğer',
+  ];
 
-  static const List<double> kwValues = [0.75, 1.1, 1.5, 2.2, 3.0, 3.7, 4.0, 5.5, 7.5, 11.0, 15.0, 18.5, 22.0, 30.0, 37.0, 45.0];
+  // static const List<String> driveBrands = ['Danfoss', 'GMT', 'INVT', 'ABB', 'Schneider', 'Diğer']; // Kaldırıldı
+  static const List<String> plcModels = [
+    'GMT',
+    'Siemens',
+    'Delta',
+    'Fatek',
+    'Diğer',
+  ];
+
+  static const List<String> hmiBrands = ['ABB', 'Weintek', 'GMT', 'Diğer'];
+  static const List<double> hmiSizes = [
+    4.3,
+    7.0,
+    10.0,
+    12.0,
+    15.0,
+  ]; // inç cinsinden
+
+  static const List<double> kwValues = [
+    0.75,
+    1.1,
+    1.5,
+    2.2,
+    3.0,
+    3.7,
+    4.0,
+    5.5,
+    7.5,
+    11.0,
+    15.0,
+    18.5,
+    22.0,
+    30.0,
+    37.0,
+    45.0,
+  ];
 
   // --- YARDIMCI METODLAR ---
   // Sayı formatını standartlaştırır: 5.0 -> 5, 5.5 -> 5.5
@@ -25,7 +61,7 @@ class StockService {
     }
     return kw.toString();
   }
-  
+
   // HMI boyut formatı (7.0 -> 7, 4.3 -> 4.3)
   static String formatInch(double val) {
     if (val % 1 == 0) {
@@ -35,8 +71,22 @@ class StockService {
   }
 
   Future<List<Map<String, dynamic>>> getStocks() async {
-    final response = await _supabase.from(_table).select().order('name', ascending: true);
+    final response = await _supabase
+        .from(_table)
+        .select()
+        .order('name', ascending: true);
     return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<Map<String, dynamic>?> getStockByBarcode(String barcode) async {
+    final normalized = barcode.trim();
+    if (normalized.isEmpty) return null;
+
+    return _supabase
+        .from(_table)
+        .select()
+        .eq('barcode', normalized)
+        .maybeSingle();
   }
 
   /// Eksik malzemesi olan işleri getirir (Stok sayfasında göstermek için).
@@ -83,9 +133,18 @@ class StockService {
   // --- TICKET PARTS (Kullanılan Malzemeler) ---
 
   /// İş emrine parça ekler ve stoktan düşer
-  Future<void> addPartToTicket(String ticketId, int inventoryId, int quantity) async {
+  Future<void> addPartToTicket(
+    String ticketId,
+    int inventoryId,
+    int quantity,
+  ) async {
     // 1. Önce stok var mı kontrol et
-    final inv = await _supabase.from('inventory').select('quantity').eq('id', inventoryId).single();
+    final inv =
+        await _supabase
+            .from('inventory')
+            .select('quantity')
+            .eq('id', inventoryId)
+            .single();
     final currentQty = inv['quantity'] as int;
 
     if (currentQty < quantity) {
@@ -100,20 +159,22 @@ class StockService {
     });
 
     // 3. Stoktan düş
-    await _supabase.from('inventory').update({
-      'quantity': currentQty - quantity
-    }).eq('id', inventoryId);
+    await _supabase
+        .from('inventory')
+        .update({'quantity': currentQty - quantity})
+        .eq('id', inventoryId);
   }
 
   /// İş emrinden parça siler ve stoğa iade eder
   Future<void> removePartFromTicket(int partId) async {
     // 1. Parça bilgisini çek
-    final part = await _supabase
-        .from('ticket_parts')
-        .select('inventory_id, quantity')
-        .eq('id', partId)
-        .single();
-    
+    final part =
+        await _supabase
+            .from('ticket_parts')
+            .select('inventory_id, quantity')
+            .eq('id', partId)
+            .single();
+
     final invId = part['inventory_id'] as int;
     final qty = part['quantity'] as int;
 
@@ -124,12 +185,18 @@ class StockService {
     // Not: Stok kaydı silinmişse ne olacak? (Inventory tablosunda soft delete yoksa hata verebilir)
     // Inventory tablosundaki id kalıcı ise sorun yok.
     try {
-      final inv = await _supabase.from('inventory').select('quantity').eq('id', invId).single();
+      final inv =
+          await _supabase
+              .from('inventory')
+              .select('quantity')
+              .eq('id', invId)
+              .single();
       final currentQty = inv['quantity'] as int;
-      
-      await _supabase.from('inventory').update({
-        'quantity': currentQty + qty
-      }).eq('id', invId);
+
+      await _supabase
+          .from('inventory')
+          .update({'quantity': currentQty + qty})
+          .eq('id', invId);
     } catch (e) {
       debugPrint('Stok iade edilirken hata (Ürün silinmiş olabilir): $e');
     }
@@ -142,43 +209,49 @@ class StockService {
         .select('*, inventory(name, category)')
         .eq('ticket_id', ticketId) // UUID String
         .order('created_at', ascending: true);
-    
+
     return (response as List).map((e) => TicketPart.fromJson(e)).toList();
   }
 
   // --- ESKİ METODLAR (Geriye uyumluluk veya manuel işlemler için) ---
-  
+
   /// Stok miktarını azaltır (ürün adına göre)
-  /// 
+  ///
   /// ⚠️ RACE CONDITION UYARISI: Bu metod "read-modify-write" pattern kullanıyor.
   /// Eğer iki kullanıcı aynı anda aynı ürünü düşürürse, stok tutarsızlığı olabilir.
-  Future<String?> decreaseStockByName(String productName, {int amount = 1}) async {
+  Future<String?> decreaseStockByName(
+    String productName, {
+    int amount = 1,
+  }) async {
     try {
-      final response = await _supabase
-          .from(_table)
-          .select()
-          .eq('name', productName)
-          .maybeSingle();
+      final response =
+          await _supabase
+              .from(_table)
+              .select()
+              .eq('name', productName)
+              .maybeSingle();
 
       if (response == null) {
         debugPrint('Stokta hiç yok (Tanımsız): $productName');
-        return productName; 
+        return productName;
       }
 
       final currentQty = response['quantity'] as int? ?? 0;
       final newQty = currentQty - amount;
-      
+
       await _supabase
           .from(_table)
           .update({'quantity': newQty})
           .eq('id', response['id']);
-          
-      debugPrint('Stoktan düşüldü: $productName (Eski: $currentQty -> Yeni: $newQty)');
+
+      debugPrint(
+        'Stoktan düşüldü: $productName (Eski: $currentQty -> Yeni: $newQty)',
+      );
 
       if (newQty < 0) {
         return productName;
       }
-      
+
       return null;
     } catch (e) {
       debugPrint('Stok düşme hatası ($productName): $e');
@@ -188,22 +261,23 @@ class StockService {
 
   Future<void> increaseStockByName(String productName, {int amount = 1}) async {
     try {
-      final response = await _supabase
-          .from(_table)
-          .select()
-          .eq('name', productName)
-          .maybeSingle();
+      final response =
+          await _supabase
+              .from(_table)
+              .select()
+              .eq('name', productName)
+              .maybeSingle();
 
       if (response == null) return;
 
       final currentQty = response['quantity'] as int? ?? 0;
       final newQty = currentQty + amount;
-      
+
       await _supabase
           .from(_table)
           .update({'quantity': newQty})
           .eq('id', response['id']);
-          
+
       debugPrint('Stok iade edildi: $productName (Yeni Stok: $newQty)');
     } catch (e) {
       debugPrint('Stok iade hatası ($productName): $e');
@@ -232,7 +306,9 @@ class StockService {
     }
 
     // Aspiratör Sürücü Kontrol (Model varsa: "Marka Model kW Sürücü", yoksa: "Marka kW Sürücü")
-    if (aspiratorBrand != null && aspiratorKw != null && aspiratorBrand != 'Diğer') {
+    if (aspiratorBrand != null &&
+        aspiratorKw != null &&
+        aspiratorBrand != 'Diğer') {
       final kwStr = formatKw(aspiratorKw);
       String name;
       if (aspiratorModel != null && aspiratorModel.isNotEmpty) {
@@ -274,42 +350,43 @@ class StockService {
     required List<Map<String, dynamic>> smokeFans,
     required List<Map<String, dynamic>> freshFans,
   }) async {
-     List<String> missingItems = [];
+    List<String> missingItems = [];
 
-     // Duman Fanlarını Düş
-     for (var fan in smokeFans) {
-       final brand = fan['brand'] as String?;
-       final kw = fan['kw'] as double?;
+    // Duman Fanlarını Düş
+    for (var fan in smokeFans) {
+      final brand = fan['brand'] as String?;
+      final kw = fan['kw'] as double?;
 
-       if (brand != null && kw != null && brand != 'Diğer') {
-          final kwStr = formatKw(kw);
-          final name = '$brand $kwStr kW Sürücü'; // Fan motoru sürücü olarak mı geçiyor yoksa motor mu?
-          // Varsayım: Stok listesinde bu fanlar için 'Sürücü' veya direkt 'Motor' tanımı olabilir.
-          // Mevcut kod yapısında 'Sürücü' olarak kaydediyoruz gibi görünüyor. 
-          // Eğer bunlar 'Motor' ise isim convention değişmeli.
-          // Kullanıcı "motor marka ve kw" dedi.
-          // Ancak stock_service.dart'taki format: '$aspiratorBrand $kwStr kW Sürücü'
-          // Biz de aynı formatı kullanalım şimdilik:
-          
-          final result = await decreaseStockByName(name);
-          if (result != null) missingItems.add(result);
-       }
-     }
+      if (brand != null && kw != null && brand != 'Diğer') {
+        final kwStr = formatKw(kw);
+        final name =
+            '$brand $kwStr kW Sürücü'; // Fan motoru sürücü olarak mı geçiyor yoksa motor mu?
+        // Varsayım: Stok listesinde bu fanlar için 'Sürücü' veya direkt 'Motor' tanımı olabilir.
+        // Mevcut kod yapısında 'Sürücü' olarak kaydediyoruz gibi görünüyor.
+        // Eğer bunlar 'Motor' ise isim convention değişmeli.
+        // Kullanıcı "motor marka ve kw" dedi.
+        // Ancak stock_service.dart'taki format: '$aspiratorBrand $kwStr kW Sürücü'
+        // Biz de aynı formatı kullanalım şimdilik:
 
-     // Taze Hava Fanlarını Düş
-     for (var fan in freshFans) {
-       final brand = fan['brand'] as String?;
-       final kw = fan['kw'] as double?;
+        final result = await decreaseStockByName(name);
+        if (result != null) missingItems.add(result);
+      }
+    }
 
-       if (brand != null && kw != null && brand != 'Diğer') {
-          final kwStr = formatKw(kw);
-          final name = '$brand $kwStr kW Sürücü';
-          final result = await decreaseStockByName(name);
-          if (result != null) missingItems.add(result);
-       }
-     }
+    // Taze Hava Fanlarını Düş
+    for (var fan in freshFans) {
+      final brand = fan['brand'] as String?;
+      final kw = fan['kw'] as double?;
 
-     return missingItems;
+      if (brand != null && kw != null && brand != 'Diğer') {
+        final kwStr = formatKw(kw);
+        final name = '$brand $kwStr kW Sürücü';
+        final result = await decreaseStockByName(name);
+        if (result != null) missingItems.add(result);
+      }
+    }
+
+    return missingItems;
   }
 
   // İş Emri Güncellenmeden Önce Eski Stokları İade Et
@@ -328,7 +405,9 @@ class StockService {
       await increaseStockByName('$plcModel PLC');
     }
 
-    if (aspiratorBrand != null && aspiratorKw != null && aspiratorBrand != 'Diğer') {
+    if (aspiratorBrand != null &&
+        aspiratorKw != null &&
+        aspiratorBrand != 'Diğer') {
       final kwStr = formatKw(aspiratorKw);
       String name;
       if (aspiratorModel != null && aspiratorModel.isNotEmpty) {
@@ -357,7 +436,7 @@ class StockService {
   }
 
   // --- MARKA MODELLERİ YÖNETİMİ ---
-  
+
   /// Varsayılan markaları veritabanına yükler (eğer yoksa)
   Future<void> initializeDefaultBrands() async {
     // await _ensureCategoryDefaults('Sürücü', driveBrands); // Kaldırıldı
@@ -365,14 +444,17 @@ class StockService {
     await _ensureCategoryDefaults('HMI', hmiBrands);
   }
 
-  Future<void> _ensureCategoryDefaults(String category, List<String> defaults) async {
+  Future<void> _ensureCategoryDefaults(
+    String category,
+    List<String> defaults,
+  ) async {
     try {
       final response = await _supabase
           .from('brand_models')
           .select('id')
           .eq('category', category)
           .limit(1);
-      
+
       if ((response as List).isEmpty) {
         debugPrint('$category için varsayılan markalar yükleniyor...');
         for (var brand in defaults) {
@@ -386,7 +468,7 @@ class StockService {
       debugPrint('$category varsayılanları yükleme hatası: $e');
     }
   }
-  
+
   /// Belirli bir markanın alt modellerini getirir (kategoriye göre)
   Future<List<String>> getBrandModels(String brandName, String category) async {
     try {
@@ -396,16 +478,14 @@ class StockService {
           .eq('brand_name', brandName)
           .eq('category', category)
           .order('model_name', ascending: true);
-      
-      return (response as List)
-          .map((e) => e['model_name'] as String)
-          .toList();
+
+      return (response as List).map((e) => e['model_name'] as String).toList();
     } catch (e) {
       debugPrint('Marka modelleri çekme hatası ($brandName, $category): $e');
       return [];
     }
   }
-  
+
   /// Kategoriye göre markaları getirir (sadece marka kayıtları, model_name = '' olanlar)
   Future<List<String>> getBrandsByCategory(String category) async {
     try {
@@ -413,20 +493,22 @@ class StockService {
           .from('brand_models')
           .select('brand_name')
           .eq('category', category)
-          .eq('model_name', '') // Sadece marka kayıtlarını getir (model_name boş olanlar)
+          .eq(
+            'model_name',
+            '',
+          ) // Sadece marka kayıtlarını getir (model_name boş olanlar)
           .order('brand_name', ascending: true);
-      
-      final brands = (response as List)
-          .map((e) => e['brand_name'] as String)
-          .toList();
-      
+
+      final brands =
+          (response as List).map((e) => e['brand_name'] as String).toList();
+
       return brands;
     } catch (e) {
       debugPrint('Kategori markaları çekme hatası ($category): $e');
       return [];
     }
   }
-  
+
   /// Yeni marka ekler
   Future<void> addBrand(String brandName, String category) async {
     try {
@@ -437,7 +519,7 @@ class StockService {
           .eq('brand_name', brandName)
           .eq('category', category)
           .limit(1);
-      
+
       if ((existing as List).isEmpty) {
         // İlk model olarak boş bir kayıt ekle (sadece marka için)
         await _supabase.from('brand_models').insert({
@@ -451,7 +533,7 @@ class StockService {
       rethrow;
     }
   }
-  
+
   /// Markayı siler (tüm modelleriyle birlikte)
   Future<void> deleteBrand(String brandName, String category) async {
     try {
@@ -472,18 +554,21 @@ class StockService {
       final response = await _supabase
           .from('brand_models')
           .select()
-          .neq('model_name', '') // Boş model adlarını filtrele (sadece marka kayıtları)
+          .neq(
+            'model_name',
+            '',
+          ) // Boş model adlarını filtrele (sadece marka kayıtları)
           .order('category', ascending: true)
           .order('brand_name', ascending: true)
           .order('model_name', ascending: true);
-      
+
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       debugPrint('Tüm marka modelleri çekme hatası: $e');
       return [];
     }
   }
-  
+
   /// Tüm markaları getirir (kategoriye göre gruplanmış)
   Future<Map<String, List<String>>> getAllBrands() async {
     try {
@@ -493,7 +578,7 @@ class StockService {
           .eq('model_name', '') // Sadece marka kayıtları
           .order('category', ascending: true)
           .order('brand_name', ascending: true);
-      
+
       final Map<String, List<String>> result = {};
       for (var item in response as List) {
         final category = item['category'] as String;
@@ -505,7 +590,7 @@ class StockService {
           result[category]!.add(brand);
         }
       }
-      
+
       return result;
     } catch (e) {
       debugPrint('Tüm markaları çekme hatası: $e');
@@ -514,15 +599,19 @@ class StockService {
   }
 
   /// Yeni marka modeli ekler
-  Future<void> addBrandModel(String brandName, String modelName, String category) async {
+  Future<void> addBrandModel(
+    String brandName,
+    String modelName,
+    String category,
+  ) async {
     try {
       final trimmedModelName = modelName.trim();
-      
+
       // Boş model adı kontrolü
       if (trimmedModelName.isEmpty) {
         throw Exception('Model adı boş olamaz');
       }
-      
+
       // Aynı marka+model kombinasyonu zaten varsa ekleme
       final existing = await _supabase
           .from('brand_models')
@@ -531,11 +620,11 @@ class StockService {
           .eq('model_name', trimmedModelName)
           .eq('category', category)
           .limit(1);
-      
+
       if ((existing as List).isNotEmpty) {
         throw Exception('Bu model zaten mevcut');
       }
-      
+
       await _supabase.from('brand_models').insert({
         'brand_name': brandName,
         'model_name': trimmedModelName,

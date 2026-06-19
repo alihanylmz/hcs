@@ -57,7 +57,7 @@ class NotificationServiceKanban {
     }
   }
 
-  Future<void> markAsRead(int notificationId) async {
+  Future<void> markAsRead(String notificationId) async {
     try {
       await _client
           .from('notifications')
@@ -92,7 +92,7 @@ class NotificationServiceKanban {
     }
   }
 
-  Future<void> deleteNotification(int notificationId) async {
+  Future<void> deleteNotification(String notificationId) async {
     try {
       await _client.from('notifications').delete().eq('id', notificationId);
     } catch (error, stackTrace) {

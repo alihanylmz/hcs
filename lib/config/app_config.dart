@@ -1,14 +1,26 @@
+import 'package:flutter/foundation.dart';
+
 class AppConfig {
   const AppConfig._();
 
-  static const String _supabaseUrl =
-      String.fromEnvironment('SUPABASE_URL');
-  static const String _supabaseAnonKey =
-      String.fromEnvironment('SUPABASE_ANON_KEY');
-  static const String _legacySupabaseKey =
-      String.fromEnvironment('SUPABASE_KEY');
-  static const String _configuredOneSignalAppId =
-      String.fromEnvironment('ONESIGNAL_APP_ID');
+  static const String _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const String _supabaseAnonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+  );
+  static const String _legacySupabaseKey = String.fromEnvironment(
+    'SUPABASE_KEY',
+  );
+  static const String _configuredOneSignalAppId = String.fromEnvironment(
+    'ONESIGNAL_APP_ID',
+  );
+  static const bool _enableAppUpdateCheck = bool.fromEnvironment(
+    'ENABLE_APP_UPDATE_CHECK',
+    defaultValue: false,
+  );
+  static const bool _enableWindowsUpdateCheck = bool.fromEnvironment(
+    'ENABLE_WINDOWS_UPDATE_CHECK',
+    defaultValue: false,
+  );
   static const bool isFlutterTest = bool.fromEnvironment('FLUTTER_TEST');
 
   static const String _defaultOneSignalAppId =
@@ -35,7 +47,22 @@ class AppConfig {
 
   static bool get hasOneSignalConfig => oneSignalAppId.isNotEmpty;
 
-  static bool get shouldRunStartupChecks => !isFlutterTest;
+  static bool get shouldRunUpdateChecks {
+    if (isFlutterTest || kIsWeb) {
+      return false;
+    }
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return _enableAppUpdateCheck;
+      case TargetPlatform.windows:
+        return _enableWindowsUpdateCheck;
+      default:
+        return false;
+    }
+  }
+
+  static bool get shouldRunStartupChecks => shouldRunUpdateChecks;
 
   static List<String> get missingRequiredKeys {
     final missing = <String>[];

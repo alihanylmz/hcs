@@ -1,12 +1,14 @@
-# Release Guide
+﻿# Release Guide
 
 ## One-Time Setup
 
 Add these GitHub repository secrets once, then releases can be created by pushing a version tag.
 
+### GitHub repository secrets
+
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY` or `SUPABASE_KEY`
-- `ONESIGNAL_APP_ID` optional
+- `ONESIGNAL_APP_ID` optional for app builds
 - `ANDROID_KEYSTORE_BASE64`
 - `ANDROID_STORE_PASSWORD`
 - `ANDROID_KEY_PASSWORD`
@@ -18,6 +20,38 @@ Helper command for the Android keystore secret:
 
 ```powershell
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("android\app\upload-keystore.jks"))
+```
+
+### Supabase Edge Function secrets
+
+`send-notification` function needs these Supabase project secrets:
+
+- `ONESIGNAL_REST_API_KEY`
+- `ONESIGNAL_APP_ID`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+
+Example:
+
+```powershell
+supabase secrets set ONESIGNAL_REST_API_KEY="<REST_API_KEY>" ONESIGNAL_APP_ID="<ONESIGNAL_APP_ID>" --project-ref <PROJECT_REF>
+```
+
+## Update Checks
+
+App update popup is now disabled by default.
+
+- No popup is shown unless you explicitly enable it.
+- Android update checks only run if you pass:
+
+```powershell
+--dart-define=ENABLE_APP_UPDATE_CHECK=true
+```
+
+- Windows update checks stay off unless you explicitly pass:
+
+```powershell
+--dart-define=ENABLE_WINDOWS_UPDATE_CHECK=true
 ```
 
 ## Versioning
@@ -45,7 +79,7 @@ GitHub Releases is the download source for both Android and Windows.
 
 ## App Update Table
 
-Run `migration_app_versions_platform_support.sql` and insert one row per platform release.
+Run `migration_app_versions_platform_support.sql` and `migration_app_versions_guardrails.sql`, then insert one row per platform release.
 
 ```sql
 insert into public.app_versions (
@@ -76,6 +110,13 @@ insert into public.app_versions (
     false
   );
 ```
+
+Guardrails added by `migration_app_versions_guardrails.sql`:
+
+- only `all`, `android`, `windows` are valid platform values
+- platform values must be lowercase and trimmed
+- `version_name`, `build_number`, and `download_url` cannot be empty
+- duplicate `(platform, build_number)` rows are removed once and blocked going forward
 
 ## Android Signing
 
@@ -123,5 +164,5 @@ git push origin main --tags
 
 Supabase function deploy is also automated:
 
-- `approve-user` is redeployed automatically when `supabase/functions/approve-user/` changes on `main` or `master`.
-- You can also trigger `Deploy Supabase Function` manually from the GitHub Actions tab.
+- `approve-user` and `send-notification` are redeployed automatically when their folders change on `main` or `master`.
+- You can also trigger `Deploy Supabase Functions` manually from the GitHub Actions tab.

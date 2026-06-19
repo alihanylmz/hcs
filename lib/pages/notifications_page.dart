@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/notification_item.dart';
+import '../services/notification_navigation_service.dart';
 import '../services/notification_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/ui/ui.dart';
-import 'ticket_detail_page.dart';
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -32,7 +32,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         _notifications = items;
         _isLoading = false;
       });
-      // Sayfa açıldığında tümünü okundu olarak işaretleyelim mi? 
+      // Sayfa açıldığında tümünü okundu olarak işaretleyelim mi?
       // Kullanıcı deneyimi açısından, kullanıcı tıkladıkça veya "Tümünü Okundu Yap" butonu ile yapmak daha iyi olabilir.
       // Ancak genellikle bildirim ekranına girince okunmuş sayılır.
       // Şimdilik burada hepsini okundu yapalım.
@@ -45,15 +45,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   void _handleNotificationTap(NotificationItem item) {
-    if (item.data != null && item.data!.containsKey('ticket_id')) {
-      final ticketId = item.data!['ticket_id'].toString();
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => TicketDetailPage(ticketId: ticketId),
-        ),
-      );
-    }
+    NotificationNavigationService.openFromData(
+      Navigator.of(context),
+      item.data,
+    );
   }
 
   @override
@@ -69,24 +64,25 @@ class _NotificationsPageState extends State<NotificationsPage> {
         ],
       ),
       body: UiMaxWidth(
-        child: _isLoading
-            ? const UiLoading(message: 'Yükleniyor...')
-            : _notifications.isEmpty
+        child:
+            _isLoading
+                ? const UiLoading(message: 'Yükleniyor...')
+                : _notifications.isEmpty
                 ? const UiEmptyState(
-                    icon: Icons.notifications_none,
-                    title: 'Bildiriminiz bulunmuyor',
-                    subtitle: 'Yeni bildirimler burada görünecek.',
-                  )
+                  icon: Icons.notifications_none,
+                  title: 'Bildiriminiz bulunmuyor',
+                  subtitle: 'Yeni bildirimler burada görünecek.',
+                )
                 : ListView.builder(
-                    itemCount: _notifications.length,
-                    itemBuilder: (context, index) {
-                      final item = _notifications[index];
-                      return _NotificationTile(
-                        item: item,
-                        onTap: () => _handleNotificationTap(item),
-                      );
-                    },
-                  ),
+                  itemCount: _notifications.length,
+                  itemBuilder: (context, index) {
+                    final item = _notifications[index];
+                    return _NotificationTile(
+                      item: item,
+                      onTap: () => _handleNotificationTap(item),
+                    );
+                  },
+                ),
       ),
     );
   }
@@ -96,16 +92,13 @@ class _NotificationTile extends StatelessWidget {
   final NotificationItem item;
   final VoidCallback onTap;
 
-  const _NotificationTile({
-    required this.item,
-    required this.onTap,
-  });
+  const _NotificationTile({required this.item, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isRead = item.isRead;
-    
+
     IconData icon = Icons.notifications;
     Color iconColor = AppColors.corporateNavy;
 
@@ -120,6 +113,34 @@ class _NotificationTile extends StatelessWidget {
         case 'ticket_status_changed':
           icon = Icons.change_circle;
           iconColor = Colors.blue;
+          break;
+        case 'card_created':
+          icon = Icons.add_box_outlined;
+          iconColor = AppColors.corporateBlue;
+          break;
+        case 'card_updated':
+          icon = Icons.edit_note;
+          iconColor = AppColors.corporateBlue;
+          break;
+        case 'card_status_changed':
+          icon = Icons.task_alt_outlined;
+          iconColor = Colors.green;
+          break;
+        case 'card_assigned':
+          icon = Icons.assignment_ind_outlined;
+          iconColor = AppColors.corporateYellow;
+          break;
+        case 'card_comment':
+          icon = Icons.chat_bubble_outline;
+          iconColor = Colors.orange;
+          break;
+        case 'member_invited':
+          icon = Icons.group_add_outlined;
+          iconColor = AppColors.corporateBlue;
+          break;
+        case 'team_mention':
+          icon = Icons.alternate_email;
+          iconColor = AppColors.corporateRed;
           break;
         case 'note_added':
         case 'partner_note_added':
@@ -136,7 +157,7 @@ class _NotificationTile extends StatelessWidget {
     return ListTile(
       onTap: onTap,
       leading: CircleAvatar(
-        backgroundColor: iconColor.withOpacity(0.1),
+        backgroundColor: iconColor.withValues(alpha: 0.1),
         child: Icon(icon, color: iconColor, size: 20),
       ),
       title: Text(
@@ -157,8 +178,7 @@ class _NotificationTile extends StatelessWidget {
           ),
         ],
       ),
-      tileColor: isRead ? null : theme.primaryColor.withOpacity(0.05),
+      tileColor: isRead ? null : theme.primaryColor.withValues(alpha: 0.05),
     );
   }
 }
-

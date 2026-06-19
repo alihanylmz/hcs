@@ -6,9 +6,11 @@ import '../models/card_comment.dart';
 import '../models/card_linked_ticket.dart';
 import '../models/ticket_linked_team_card.dart';
 import '../models/ticket_status.dart';
+import 'notification_service.dart';
 
 class CardService {
   final _supabase = Supabase.instance.client;
+  final NotificationService _notificationService = NotificationService();
   bool? _supportsLinkedTicketingCache;
 
   String? _normalizeLinkedTicketId(String? value) {
@@ -216,6 +218,22 @@ class CardService {
       toAssignee: assigneeId,
     );
 
+    await _notificationService.notifyCardCreated(
+      teamId: teamId,
+      cardId: response['id'].toString(),
+      cardTitle: response['title']?.toString() ?? title,
+      assigneeName: null,
+    );
+
+    if (assigneeId != null && assigneeId.trim().isNotEmpty) {
+      await _notificationService.notifyCardAssigned(
+        teamId: teamId,
+        cardId: response['id'].toString(),
+        cardTitle: response['title']?.toString() ?? title,
+        assigneeId: assigneeId,
+      );
+    }
+
     return KanbanCard.fromJson(response);
   }
 
@@ -223,7 +241,7 @@ class CardService {
     final cardData =
         await _supabase
             .from('cards')
-            .select('team_id, status')
+            .select('team_id, title, status')
             .eq('id', cardId)
             .single();
 
@@ -247,6 +265,14 @@ class CardService {
       fromStatus: oldStatus,
       toStatus: newStatus.toDb,
     );
+
+    await _notificationService.notifyCardStatusChanged(
+      teamId: teamId.toString(),
+      cardId: cardId,
+      cardTitle: cardData['title']?.toString() ?? 'Kart',
+      oldStatus: oldStatus.toString(),
+      newStatus: newStatus.toDb,
+    );
   }
 
   Future<void> updateCardDetails(
@@ -265,11 +291,34 @@ class CardService {
     final cardData =
         await _supabase
             .from('cards')
-            .select('team_id')
+            .select(
+              'team_id, title, description, assignee_id, linked_ticket_id, priority, due_date',
+            )
             .eq('id', cardId)
             .single();
 
     final teamId = cardData['team_id'];
+    final previousTitle = cardData['title']?.toString() ?? 'Kart';
+    final previousDescription = cardData['description']?.toString();
+    final previousAssigneeId = cardData['assignee_id']?.toString();
+    final previousLinkedTicketId = cardData['linked_ticket_id']?.toString();
+    final previousPriority = cardData['priority']?.toString();
+    final previousDueDate = cardData['due_date']?.toString();
+    final nextTitle = title ?? previousTitle;
+    final nextDescription = description ?? previousDescription;
+    final nextAssigneeId = updateAssignee ? assigneeId : previousAssigneeId;
+    final nextLinkedTicketId =
+        updateLinkedTicket ? normalizedLinkedTicketId : previousLinkedTicketId;
+    final nextPriority = priority?.dbValue ?? previousPriority;
+    final nextDueDateIso =
+        updateDueDate ? dueDate?.toUtc().toIso8601String() : previousDueDate;
+    final hasMeaningfulChange =
+        nextTitle != previousTitle ||
+        nextDescription != previousDescription ||
+        nextAssigneeId != previousAssigneeId ||
+        nextLinkedTicketId != previousLinkedTicketId ||
+        nextPriority != previousPriority ||
+        nextDueDateIso != previousDueDate;
 
     try {
       await _supabase
@@ -290,6 +339,32 @@ class CardService {
     }
 
     await _logEvent(teamId: teamId, cardId: cardId, eventType: 'UPDATED');
+
+    if (hasMeaningfulChange) {
+      final recipientUserIds = await _getTeamMemberIds(
+        teamId.toString(),
+        excludeUserIds: {(_supabase.auth.currentUser?.id ?? '').trim()},
+      );
+
+      await _notificationService.notifyCardUpdated(
+        teamId: teamId.toString(),
+        cardId: cardId,
+        cardTitle: nextTitle,
+        recipientUserIds: recipientUserIds,
+      );
+    }
+
+    if (updateAssignee &&
+        nextAssigneeId != null &&
+        nextAssigneeId.isNotEmpty &&
+        nextAssigneeId != previousAssigneeId) {
+      await _notificationService.notifyCardAssigned(
+        teamId: teamId.toString(),
+        cardId: cardId,
+        cardTitle: nextTitle,
+        assigneeId: nextAssigneeId,
+      );
+    }
   }
 
   Future<void> deleteCard(String cardId) async {
@@ -364,6 +439,31 @@ class CardService {
     });
 
     await _logEvent(teamId: teamId, cardId: cardId, eventType: 'COMMENTED');
+
+    final cardDetails =
+        await _supabase
+            .from('cards')
+            .select('title, created_by, assignee_id')
+            .eq('id', cardId)
+            .maybeSingle();
+
+    final recipientUserIds =
+        [
+              cardDetails?['created_by']?.toString(),
+              cardDetails?['assignee_id']?.toString(),
+            ]
+            .where((userId) => userId != null && userId.trim().isNotEmpty)
+            .cast<String>()
+            .where((userId) => userId != user.id)
+            .toSet()
+            .toList();
+
+    await _notificationService.notifyCardCommented(
+      teamId: teamId,
+      cardId: cardId,
+      cardTitle: cardDetails?['title']?.toString() ?? 'Kart',
+      recipientUserIds: recipientUserIds,
+    );
   }
 
   Future<void> updateCardComment(String commentId, String comment) async {
@@ -438,6 +538,24 @@ class CardService {
     }
 
     return profilesById;
+  }
+
+  Future<List<String>> _getTeamMemberIds(
+    String teamId, {
+    Set<String> excludeUserIds = const {},
+  }) async {
+    final response = await _supabase
+        .from('team_members')
+        .select('user_id')
+        .eq('team_id', teamId);
+
+    return (response as List<dynamic>)
+        .map((row) => (row as Map<String, dynamic>)['user_id']?.toString())
+        .where((userId) => userId != null && userId.isNotEmpty)
+        .cast<String>()
+        .where((userId) => !excludeUserIds.contains(userId))
+        .toSet()
+        .toList();
   }
 
   Future<Map<String, String>> _fetchNamesById(

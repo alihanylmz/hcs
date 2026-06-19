@@ -4,26 +4,29 @@ import 'package:file_picker/file_picker.dart';
 
 // Yeni oluşturduğumuz modülleri import ediyoruz
 import '../services/pdf_export_service.dart';
-import '../services/card_service.dart';
+import '../services/fault_record_service.dart';
 import '../services/permission_service.dart';
 import '../services/user_service.dart';
 import '../services/ticket_service.dart'; // <--- Yeni Service
 import '../services/stock_service.dart'; // <--- Stock Service
-import '../models/card.dart';
+import '../models/fault_record.dart';
+import '../models/fault_record_note.dart';
 import '../models/structured_ticket_note.dart';
-import '../models/ticket_linked_team_card.dart';
+import '../models/ticket_backup_record.dart';
+import '../models/ticket_daily_report.dart';
+import '../models/ticket_fault_record.dart';
 import '../models/user_profile.dart';
 import '../models/ticket_part.dart';
 import '../models/ticket_status.dart';
-import 'card_detail_page.dart';
 import '../pages/edit_ticket_page.dart';
-import 'team_home_page.dart';
+import 'fault_record_detail_page.dart';
 import 'signature_page.dart';
 import 'pdf_viewer_page.dart';
 import 'profile_page.dart'; // <--- Eklendi
 import '../theme/app_colors.dart'; // <--- Renkler
 import '../utils/formatters.dart'; // <--- Formatlayıcılar
 import '../widgets/add_note_dialog.dart';
+import '../widgets/ticket_backup_request_dialog.dart';
 
 class TicketDetailPage extends StatefulWidget {
   final String ticketId;
@@ -37,7 +40,7 @@ class TicketDetailPage extends StatefulWidget {
 class _TicketDetailPageState extends State<TicketDetailPage>
     with SingleTickerProviderStateMixin {
   final _ticketService = TicketService();
-  final _cardService = CardService();
+  final _faultRecordService = FaultRecordService();
   final _stockService = StockService(); // Stock Service Eklendi
 
   Map<String, dynamic>? _ticket;
@@ -47,6 +50,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   bool _isUploadingFile = false; // Supabase yükleme durumu
   bool _isHeaderExpanded = false;
   String? _error;
+  bool _isExportingBackup = false;
+  bool _isSavingDailyReport = false;
 
   bool get _canEditTicket =>
       PermissionService.hasPermission(_userProfile, AppPermission.editTicket);
@@ -73,9 +78,10 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   // Kullanılan Parçalar için state
   List<TicketPart> _parts = [];
   bool _partsLoading = false;
-  List<TicketLinkedTeamCard> _linkedTeamCards = [];
-  bool _linkedTeamCardsLoading = false;
-  bool _supportsLinkedTeamCards = true;
+  List<FaultRecord> _linkedFaultRecords = const <FaultRecord>[];
+  List<LinkedFaultNoteEntry> _linkedFaultNoteEntries =
+      const <LinkedFaultNoteEntry>[];
+  bool _linkedFaultsLoading = false;
 
   // Tab controller
   late TabController _tabController;
@@ -148,7 +154,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadTicket();
     _loadUserProfile();
   }
@@ -185,11 +191,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
 
       if (data != null) {
         _loadNotes();
+        _loadLinkedFaults();
         _loadParts(); // Parçaları yükle
-      }
-
-      if (data != null) {
-        _loadLinkedTeamCards();
       }
     } catch (e) {
       if (!mounted) return;
@@ -223,6 +226,33 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     }
   }
 
+  Future<void> _loadLinkedFaults() async {
+    setState(() => _linkedFaultsLoading = true);
+    try {
+      final results = await Future.wait<Object>([
+        _faultRecordService.getLinkedFaultsForTicket(widget.ticketId),
+        _faultRecordService.getLinkedFaultNoteEntries(widget.ticketId),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _linkedFaultRecords = results[0] as List<FaultRecord>;
+          _linkedFaultNoteEntries = results[1] as List<LinkedFaultNoteEntry>;
+          _linkedFaultsLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Bagli arizalar yuklenirken hata: $e');
+      if (mounted) {
+        setState(() {
+          _linkedFaultRecords = const <FaultRecord>[];
+          _linkedFaultNoteEntries = const <LinkedFaultNoteEntry>[];
+          _linkedFaultsLoading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _loadParts() async {
     setState(() => _partsLoading = true);
     try {
@@ -236,88 +266,6 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     } catch (e) {
       debugPrint('Parçalar yüklenirken hata: $e');
       if (mounted) setState(() => _partsLoading = false);
-    }
-  }
-
-  Future<void> _loadLinkedTeamCards() async {
-    setState(() => _linkedTeamCardsLoading = true);
-    try {
-      final supports = await _cardService.supportsLinkedTicketing();
-      if (!supports) {
-        if (!mounted) return;
-        setState(() {
-          _supportsLinkedTeamCards = false;
-          _linkedTeamCards = const [];
-          _linkedTeamCardsLoading = false;
-        });
-        return;
-      }
-
-      final cards = await _cardService.getLinkedCardsForTicket(widget.ticketId);
-      if (!mounted) return;
-      setState(() {
-        _supportsLinkedTeamCards = true;
-        _linkedTeamCards = cards;
-        _linkedTeamCardsLoading = false;
-      });
-    } catch (e) {
-      debugPrint('Takim baglantilari yuklenirken hata: $e');
-      if (!mounted) return;
-      setState(() {
-        _linkedTeamCards = const [];
-        _linkedTeamCardsLoading = false;
-      });
-    }
-  }
-
-  Future<void> _openLinkedTeamBoard(TicketLinkedTeamCard linkedCard) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder:
-            (_) => TeamHomePage(teamId: linkedCard.teamId),
-      ),
-    );
-    if (!mounted) return;
-    await _loadLinkedTeamCards();
-  }
-
-  Future<void> _openLinkedTeamConversation(
-    TicketLinkedTeamCard linkedCard,
-  ) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder:
-            (_) => TeamHomePage(teamId: linkedCard.teamId),
-      ),
-    );
-    if (!mounted) return;
-    await _loadLinkedTeamCards();
-  }
-
-  Future<void> _openLinkedTeamCard(TicketLinkedTeamCard linkedCard) async {
-    try {
-      final card = await _cardService.getCard(linkedCard.cardId);
-      if (!mounted) return;
-
-      final result = await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => CardDetailPage(card: card)));
-
-      if (!mounted) return;
-
-      if (result == 'open_conversation') {
-        await _openLinkedTeamConversation(linkedCard);
-        return;
-      }
-
-      if (result != null) {
-        await _loadLinkedTeamCards();
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Kart acilamadi: $e')));
     }
   }
 
@@ -451,6 +399,234 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       isPartnerNote: _userProfile?.role == 'partner_user',
       initialMode: AddNoteEntryMode.photo,
     );
+  }
+
+  Future<void> _showAddDailyReportDialog() async {
+    if (!_canCurrentUserAddNotes()) return;
+
+    var reportDate = DateTime.now();
+    var customerApproval = false;
+    final technicianController = TextEditingController(
+      text: _userProfile?.displayName ?? '',
+    );
+    final startTimeController = TextEditingController();
+    final endTimeController = TextEditingController();
+    final workDoneController = TextEditingController();
+    final issuesController = TextEditingController();
+    final materialsController = TextEditingController();
+    final nextStepController = TextEditingController();
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> pickDate() async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: reportDate,
+                firstDate: DateTime(2020),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (picked != null) {
+                setDialogState(() => reportDate = picked);
+              }
+            }
+
+            return AlertDialog(
+              title: const Text('Gunluk Rapor Ekle'),
+              content: SizedBox(
+                width: 560,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.calendar_month_outlined),
+                        title: const Text('Rapor tarihi'),
+                        subtitle: Text(_formatDailyReportDate(reportDate)),
+                        trailing: TextButton(
+                          onPressed: pickDate,
+                          child: const Text('Sec'),
+                        ),
+                      ),
+                      TextField(
+                        controller: technicianController,
+                        decoration: const InputDecoration(
+                          labelText: 'Teknisyen / ekip',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: startTimeController,
+                              decoration: const InputDecoration(
+                                labelText: 'Baslangic',
+                                hintText: '09:00',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: endTimeController,
+                              decoration: const InputDecoration(
+                                labelText: 'Bitis',
+                                hintText: '17:30',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: workDoneController,
+                        maxLines: 4,
+                        decoration: const InputDecoration(
+                          labelText: 'Bugun yapilan isler',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: issuesController,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: 'Karsilasilan sorunlar / bekleme sebebi',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: materialsController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'Kullanilan malzemeler',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: nextStepController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'Sonraki adim',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: customerApproval,
+                        onChanged:
+                            (value) =>
+                                setDialogState(() => customerApproval = value),
+                        title: const Text('Musteri gunluk onayi alindi'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed:
+                      _isSavingDailyReport
+                          ? null
+                          : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Iptal'),
+                ),
+                FilledButton.icon(
+                  onPressed:
+                      _isSavingDailyReport
+                          ? null
+                          : () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final navigator = Navigator.of(dialogContext);
+                            final workDone = workDoneController.text.trim();
+                            if (workDone.isEmpty) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Yapilan isler alani zorunlu.'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            setState(() => _isSavingDailyReport = true);
+                            try {
+                              await _ticketService.addDailyReport(
+                                ticketId: widget.ticketId,
+                                report: TicketDailyReport(
+                                  id: '',
+                                  ticketId: widget.ticketId,
+                                  reportDate: reportDate,
+                                  technicianName: technicianController.text,
+                                  startTime: startTimeController.text,
+                                  endTime: endTimeController.text,
+                                  workDone: workDone,
+                                  issues: issuesController.text,
+                                  usedMaterials: materialsController.text,
+                                  nextStep: nextStepController.text,
+                                  customerApproval: customerApproval,
+                                ),
+                              );
+
+                              if (!mounted || !navigator.mounted) return;
+                              navigator.pop();
+                              await _loadNotes();
+                              if (!mounted) return;
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Gunluk rapor kaydedildi.'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            } catch (error) {
+                              if (!mounted) return;
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text('Rapor kaydedilemedi: $error'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            } finally {
+                              if (mounted) {
+                                setState(() => _isSavingDailyReport = false);
+                              }
+                            }
+                          },
+                  icon:
+                      _isSavingDailyReport
+                          ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                          : const Icon(Icons.save_outlined),
+                  label: const Text('Kaydet'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    technicianController.dispose();
+    startTimeController.dispose();
+    endTimeController.dispose();
+    workDoneController.dispose();
+    issuesController.dispose();
+    materialsController.dispose();
+    nextStepController.dispose();
   }
 
   bool _canCurrentUserAddNotes() {
@@ -1859,9 +2035,48 @@ class _TicketDetailPageState extends State<TicketDetailPage>
         .toList();
   }
 
+  List<Map<String, dynamic>> get _serviceTimelineNotes {
+    return _notes
+        .where(
+          (note) =>
+              !TicketFaultRecord.isFaultRecordNote(note) &&
+              !TicketBackupRecord.isBackupRecordNote(note) &&
+              !TicketDailyReport.isDailyReportNote(note),
+        )
+        .toList();
+  }
+
+  List<TicketDailyReport> get _dailyReports {
+    return _notes
+        .where(TicketDailyReport.isDailyReportNote)
+        .map(TicketDailyReport.fromTicketNote)
+        .toList()
+      ..sort((a, b) => b.reportDate.compareTo(a.reportDate));
+  }
+
+  List<TicketFaultRecord> get _legacyFaultRecords {
+    return _notes
+        .where(TicketFaultRecord.isFaultRecordNote)
+        .map(TicketFaultRecord.fromTicketNote)
+        .toList()
+      ..sort((a, b) {
+        final aDate = a.createdAt;
+        final bDate = b.createdAt;
+        if (aDate == null && bDate == null) return 0;
+        if (aDate == null) return 1;
+        if (bDate == null) return -1;
+        return bDate.compareTo(aDate);
+      });
+  }
+
+  TicketBackupSnapshot get _backupSnapshot {
+    return TicketBackupSnapshot.fromNotes(_notes);
+  }
+
   Map<String, dynamic>? _latestNoteRecord() {
-    if (_notes.isEmpty) return null;
-    return _notes.last;
+    final notes = _serviceTimelineNotes;
+    if (notes.isEmpty) return null;
+    return notes.last;
   }
 
   List<String> _extractNoteImages(Map<String, dynamic> note) {
@@ -1878,7 +2093,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
 
   int _totalNoteImageCount() {
     var total = 0;
-    for (final note in _notes) {
+    for (final note in _serviceTimelineNotes) {
       total += _extractNoteImages(note).length;
     }
     return total;
@@ -1932,6 +2147,15 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       default:
         return TicketStatus.descriptionOf(status);
     }
+  }
+
+  Future<void> _openFaultRecordDetail(String faultRecordId) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FaultRecordDetailPage(faultRecordId: faultRecordId),
+      ),
+    );
+    await _loadLinkedFaults();
   }
 
   Widget _buildSummaryMetricCard({
@@ -2181,6 +2405,138 @@ class _TicketDetailPageState extends State<TicketDetailPage>
           child: _buildNotesChatView(),
         ),
       ),
+    );
+  }
+
+  Widget _buildDailyReportsTab() {
+    final reports = _dailyReports;
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1000),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildModernContentCard(
+                title: 'Uzun Sureli Is Gunlugu',
+                icon: Icons.event_note_outlined,
+                children: [
+                  Text(
+                    'BMS, hastane otomasyonu, devreye alma ve cok gunluk saha isleri icin gunluk ilerleme kaydi tutulur.',
+                    style: TextStyle(
+                      color: _secondaryTextColor(context),
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.icon(
+                      onPressed:
+                          _canCurrentUserAddNotes()
+                              ? _showAddDailyReportDialog
+                              : null,
+                      icon: const Icon(Icons.add_task_outlined),
+                      label: const Text('Gunluk rapor ekle'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              if (_notesLoading)
+                const SizedBox(
+                  height: 160,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (reports.isEmpty)
+                _buildModernContentCard(
+                  title: 'Kayit Yok',
+                  icon: Icons.inbox_outlined,
+                  children: [
+                    Text(
+                      'Bu is icin henuz gunluk rapor girilmemis.',
+                      style: TextStyle(color: _secondaryTextColor(context)),
+                    ),
+                  ],
+                )
+              else
+                ...reports.map(
+                  (report) => Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: _buildDailyReportCard(report),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDailyReportCard(TicketDailyReport report) {
+    return _buildModernContentCard(
+      title: report.title,
+      icon: Icons.assignment_turned_in_outlined,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildDailyReportChip(
+              icon: Icons.schedule_outlined,
+              label: report.timeRange,
+              color: AppColors.corporateBlue,
+            ),
+            if (report.technicianName.trim().isNotEmpty)
+              _buildDailyReportChip(
+                icon: Icons.engineering_outlined,
+                label: report.technicianName.trim(),
+                color: AppColors.corporateNavy,
+              ),
+            if (report.customerApproval)
+              _buildDailyReportChip(
+                icon: Icons.verified_outlined,
+                label: 'Musteri onayli',
+                color: AppColors.statusDone,
+              ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _buildInfoRow('Yapilan isler', report.workDone, isMultiLine: true),
+        _buildInfoRow(
+          'Sorun / bekleme',
+          report.issues.isEmpty ? '-' : report.issues,
+          isMultiLine: true,
+        ),
+        _buildInfoRow(
+          'Kullanilan malzeme',
+          report.usedMaterials.isEmpty ? '-' : report.usedMaterials,
+          isMultiLine: true,
+        ),
+        _buildInfoRow(
+          'Sonraki adim',
+          report.nextStep.isEmpty ? '-' : report.nextStep,
+          isMultiLine: true,
+        ),
+        if (report.createdByName != null || report.createdAt != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            [
+              if (report.createdByName != null) report.createdByName!,
+              if (report.createdAt != null)
+                _formatDailyReportDate(report.createdAt!),
+            ].join(' - '),
+            style: TextStyle(
+              color: _secondaryTextColor(context),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -2518,6 +2874,146 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     return cleaned.isEmpty ? 'Aciklama girilmemis.' : cleaned;
   }
 
+  String _buildBackupFileName(Map<String, dynamic> ticket) {
+    final jobCode = (ticket['job_code'] as String? ?? 'is').trim();
+    final title = (ticket['title'] as String? ?? 'yedek').trim();
+    final datePart = DateTime.now().toIso8601String().substring(0, 10);
+    return '${jobCode}_${title}_yedek_$datePart'
+        .replaceAll(RegExp(r'\s+'), '_')
+        .replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+  }
+
+  Future<void> _exportTicketBackup(Map<String, dynamic> ticket) async {
+    if (_isExportingBackup) return;
+
+    final request = await showTicketBackupRequestDialog(
+      context,
+      suggestedFileName: _buildBackupFileName(ticket),
+      latestBackup: _backupSnapshot.latestBackup,
+      currentUserName: _userProfile?.displayName,
+    );
+    if (!mounted || request == null) return;
+
+    setState(() => _isExportingBackup = true);
+    try {
+      final outputPath = await _ticketService.exportTicketBackup(
+        ticketId: widget.ticketId,
+        suggestedFileName: _buildBackupFileName(ticket),
+        requestedBy: request.requestedBy,
+        requestedSavePath: request.requestedSavePath,
+        requestedAt: request.requestedAt,
+      );
+
+      if (!mounted || outputPath == null) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Yedek kaydedildi: $outputPath'),
+          backgroundColor: AppColors.statusDone,
+        ),
+      );
+      await _loadNotes();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Yedek alinamadi: $e'),
+          backgroundColor: AppColors.corporateRed,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isExportingBackup = false);
+      }
+    }
+  }
+
+  Widget _buildBackupStatusSummaryCard(Map<String, dynamic> ticket) {
+    final snapshot = _backupSnapshot;
+    final hasBackup = snapshot.hasBackup;
+    final isStale = snapshot.needsRefresh;
+    final accent = isStale ? AppColors.corporateBlue : AppColors.statusDone;
+    final title =
+        !hasBackup
+            ? 'Henuz yedek alinmadi'
+            : isStale
+            ? 'Ariza sonrasi yedek guncellenmeli'
+            : 'Yedek alindi';
+    final subtitle =
+        !hasBackup
+            ? 'Bu biten is icin secilen klasore PDF yedegi alabilirsiniz.'
+            : snapshot.latestBackup?.backupPath ?? '-';
+    final latestBackup = snapshot.latestBackup;
+
+    return _buildModernContentCard(
+      title: 'Yedek Durumu',
+      icon: Icons.backup_outlined,
+      children: [
+        Row(
+          children: [
+            if (hasBackup)
+              Icon(Icons.check_circle_rounded, color: accent, size: 20),
+            if (hasBackup) const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  color: hasBackup ? accent : _primaryTextColor(context),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          subtitle,
+          style: TextStyle(
+            color: _secondaryTextColor(context),
+            height: 1.45,
+            fontSize: 13,
+          ),
+        ),
+        if (latestBackup?.savedAt != null ||
+            latestBackup?.createdAt != null) ...[
+          const SizedBox(height: 12),
+          _buildInfoRow(
+            'Son yedek',
+            Formatters.date(
+              (latestBackup?.savedAt ?? latestBackup?.createdAt)
+                  ?.toIso8601String(),
+            ),
+          ),
+        ],
+        _buildInfoRow('Talep eden', latestBackup?.requestedBy),
+        _buildInfoRow(
+          'Talep zamani',
+          Formatters.date(latestBackup?.requestedAt?.toIso8601String()),
+        ),
+        _buildInfoRow(
+          'Kayit yolu notu',
+          latestBackup?.requestedSavePath,
+          isMultiLine: true,
+        ),
+        const SizedBox(height: 14),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed:
+                _isExportingBackup ? null : () => _exportTicketBackup(ticket),
+            icon: Icon(
+              hasBackup
+                  ? Icons.system_update_alt_rounded
+                  : Icons.backup_outlined,
+            ),
+            label: Text(hasBackup ? 'Yedegi yenile' : 'Yedek al'),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildSummaryTab(
     Map<String, dynamic> ticket,
     Map<String, dynamic> customer,
@@ -2579,7 +3075,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     icon: Icons.photo_library_outlined,
                     label: 'Surec yogunlugu',
                     value:
-                        '${_notes.length} kayit, ${_totalNoteImageCount()} fotograf',
+                        '${_serviceTimelineNotes.length} kayit, ${_totalNoteImageCount()} fotograf',
                     color: Colors.deepPurple,
                   ),
                 ],
@@ -2628,6 +3124,16 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   ),
                 ],
               ),
+              if (_linkedFaultsLoading ||
+                  _linkedFaultRecords.isNotEmpty ||
+                  _legacyFaultRecords.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                _buildFaultRecordsSummaryCard(),
+              ],
+              if (status == TicketStatus.done || _backupSnapshot.hasBackup) ...[
+                const SizedBox(height: 20),
+                _buildBackupStatusSummaryCard(ticket),
+              ],
               const SizedBox(height: 20),
               _buildModernContentCard(
                 title: 'Surec Ozeti',
@@ -2650,8 +3156,6 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              _buildTeamLinksCard(),
               const SizedBox(height: 20),
               _buildModernContentCard(
                 title: 'Eksik Parca ve Takip',
@@ -2731,224 +3235,209 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     );
   }
 
-  Widget _buildTeamLinksCard() {
+  Widget _buildFaultRecordsSummaryCard() {
+    final ticketStatus = (_ticket?['status'] as String?) ?? '';
     return _buildModernContentCard(
-      title: 'Takim Baglantilari',
-      icon: Icons.groups_2_outlined,
+      title: 'Bagli Ariza Kayitlari',
+      icon: Icons.bug_report_outlined,
       children: [
-        Text(
-          'Bu is emrine bagli ekip kartlari ve hizli gecisler burada toplanir.',
-          style: TextStyle(color: _secondaryTextColor(context), height: 1.5),
-        ),
-        const SizedBox(height: 16),
-        if (_linkedTeamCardsLoading)
-          const SizedBox(
-            height: 72,
+        if (_linkedFaultsLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
             child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          )
-        else if (!_supportsLinkedTeamCards)
-          Text(
-            'Takim kartlarini is emrine baglama ozelligi bu ortamda henuz etkin degil.',
-            style: TextStyle(color: _secondaryTextColor(context), height: 1.5),
-          )
-        else if (_linkedTeamCards.isEmpty)
-          Text(
-            'Bu is emrine bagli takim karti bulunmuyor. Takim panosunda karti bu is emrine bagladiginda burada otomatik gorunecek.',
-            style: TextStyle(color: _secondaryTextColor(context), height: 1.5),
-          )
-        else
-          Column(
-            children:
-                _linkedTeamCards
-                    .map(
-                      (linkedCard) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildLinkedTeamCardTile(linkedCard),
-                      ),
-                    )
-                    .toList(),
           ),
-      ],
-    );
-  }
-
-  Widget _buildLinkedTeamCardTile(TicketLinkedTeamCard linkedCard) {
-    final theme = Theme.of(context);
-    final statusColor = _cardStatusColor(linkedCard.status);
-    final priorityColor = _cardPriorityColor(linkedCard.priority);
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _surfaceMutedColor(context),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _borderColor(context)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withOpacity(
-                    _isDark(context) ? 0.20 : 0.10,
+        ...List.generate(_linkedFaultRecords.length, (index) {
+          final record = _linkedFaultRecords[index];
+          final isTerminalTicket =
+              ticketStatus == TicketStatus.done ||
+              ticketStatus == TicketStatus.archived;
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom:
+                  index == _linkedFaultRecords.length - 1 &&
+                          _legacyFaultRecords.isEmpty
+                      ? 0
+                      : 12,
+            ),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _surfaceMutedColor(context),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _borderColor(context)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            _buildStatusChip(
+                              record.faultCode,
+                              AppColors.corporateRed,
+                            ),
+                            _buildStatusChip(
+                              record.statusLabel,
+                              AppColors.corporateBlue,
+                            ),
+                            if (isTerminalTicket)
+                              _buildStatusChip(
+                                'Bitmis is emrine bagli',
+                                Colors.deepOrange,
+                              ),
+                            Text(
+                              record.title,
+                              style: TextStyle(
+                                color: _primaryTextColor(context),
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      OutlinedButton.icon(
+                        onPressed: () => _openFaultRecordDetail(record.id),
+                        icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                        label: const Text('Detay'),
+                      ),
+                    ],
                   ),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(
-                  Icons.group_work_outlined,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      linkedCard.teamName,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
+                  const SizedBox(height: 8),
+                  Text(
+                    record.body,
+                    style: TextStyle(
+                      color: _primaryTextColor(context),
+                      height: 1.5,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      linkedCard.title,
-                      style: TextStyle(
-                        color: _primaryTextColor(context),
-                        fontWeight: FontWeight.w600,
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildStatusChip(
+                        record.deviceLabel,
+                        AppColors.corporateBlue,
                       ),
-                    ),
-                  ],
-                ),
+                      if ((record.assigneeName ?? '').trim().isNotEmpty)
+                        _buildStatusChip(
+                          'Atanan: ${record.assigneeName!.trim()}',
+                          Colors.indigo,
+                        ),
+                      _buildStatusChip(
+                        (record.createdByName ?? '').trim().isNotEmpty
+                            ? record.createdByName!.trim()
+                            : 'Kayit sahibi yok',
+                        AppColors.corporateYellow,
+                      ),
+                      _buildStatusChip(
+                        Formatters.date(record.createdAt?.toIso8601String()),
+                        Colors.teal,
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildLinkedTeamChip(
-                icon: Icons.view_kanban_outlined,
-                label: linkedCard.boardName,
-                color: AppColors.corporateBlue,
+            ),
+          );
+        }),
+        if (_legacyFaultRecords.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'Eski not yapisindan gelen ariza kayitlari',
+              style: TextStyle(
+                color: _secondaryTextColor(context),
+                fontWeight: FontWeight.w700,
               ),
-              _buildLinkedTeamChip(
-                icon: Icons.sync_alt_rounded,
-                label: linkedCard.status.label,
-                color: statusColor,
-              ),
-              _buildLinkedTeamChip(
-                icon: Icons.flag_outlined,
-                label: linkedCard.priority.label,
-                color: priorityColor,
-              ),
-              if ((linkedCard.assigneeName ?? '').trim().isNotEmpty)
-                _buildLinkedTeamChip(
-                  icon: Icons.person_outline,
-                  label: linkedCard.assigneeName!,
-                  color: AppColors.corporateNavy,
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Son hareket: ${_formatLinkedTeamDate(linkedCard.updatedAt)}',
-            style: TextStyle(color: _secondaryTextColor(context)),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => _openLinkedTeamBoard(linkedCard),
-                icon: const Icon(Icons.dashboard_outlined),
-                label: const Text('Pano'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _openLinkedTeamConversation(linkedCard),
-                icon: const Icon(Icons.forum_outlined),
-                label: const Text('Konusma'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _openLinkedTeamCard(linkedCard),
-                icon: const Icon(Icons.open_in_new_outlined),
-                label: const Text('Karti Ac'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLinkedTeamChip({
-    required IconData icon,
-    required String label,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
             ),
           ),
-        ],
-      ),
+        ...List.generate(_legacyFaultRecords.length, (index) {
+          final record = _legacyFaultRecords[index];
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: index == _legacyFaultRecords.length - 1 ? 0 : 12,
+            ),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _surfaceMutedColor(context),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _borderColor(context)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _buildStatusChip(
+                        record.faultCode,
+                        AppColors.corporateRed,
+                      ),
+                      Text(
+                        record.faultTitle,
+                        style: TextStyle(
+                          color: _primaryTextColor(context),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    record.faultBody,
+                    style: TextStyle(
+                      color: _primaryTextColor(context),
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildStatusChip(
+                        record.deviceLabel,
+                        AppColors.corporateBlue,
+                      ),
+                      if ((record.assigneeName ?? '').trim().isNotEmpty)
+                        _buildStatusChip(
+                          'Atanan: ${record.assigneeName!.trim()}',
+                          Colors.indigo,
+                        ),
+                      _buildStatusChip(
+                        record.createdByName?.trim().isNotEmpty == true
+                            ? record.createdByName!
+                            : 'Kayit sahibi yok',
+                        AppColors.corporateYellow,
+                      ),
+                      _buildStatusChip(
+                        Formatters.date(record.createdAt?.toIso8601String()),
+                        Colors.teal,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
     );
-  }
-
-  Color _cardStatusColor(CardStatus status) {
-    switch (status) {
-      case CardStatus.todo:
-        return AppColors.corporateBlue;
-      case CardStatus.doing:
-        return const Color(0xFFF59E0B);
-      case CardStatus.done:
-        return const Color(0xFF10B981);
-      case CardStatus.sent:
-        return AppColors.corporateNavy;
-    }
-  }
-
-  Color _cardPriorityColor(CardPriority priority) {
-    switch (priority) {
-      case CardPriority.low:
-        return const Color(0xFF10B981);
-      case CardPriority.normal:
-        return const Color(0xFFF59E0B);
-      case CardPriority.high:
-        return AppColors.corporateRed;
-    }
-  }
-
-  String _formatLinkedTeamDate(DateTime value) {
-    final local = value.toLocal();
-    final day = local.day.toString().padLeft(2, '0');
-    final month = local.month.toString().padLeft(2, '0');
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '$day.$month $hour:$minute';
   }
 
   Future<void> _openImagePreview(String url) async {
@@ -3110,6 +3599,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     final theme = Theme.of(context);
     final primaryText = _primaryTextColor(context);
     final secondaryText = _secondaryTextColor(context);
+    final notes = _serviceTimelineNotes;
 
     if (_notesLoading) {
       return const SizedBox(
@@ -3118,7 +3608,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       );
     }
 
-    if (_notes.isEmpty) {
+    if (notes.isEmpty) {
       return _buildModernContentCard(
         title: 'Surec kaydi yok',
         icon: Icons.timeline_outlined,
@@ -3143,8 +3633,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     }
 
     return Column(
-      children: List.generate(_notes.length, (index) {
-        final note = _notes[index];
+      children: List.generate(notes.length, (index) {
+        final note = notes[index];
         final structured = StructuredTicketNote.fromRaw(
           note['note'] as String? ?? '',
         );
@@ -3157,7 +3647,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
         final isPartnerNote = noteType == 'partner_note';
         final isCurrentUser = note['user_id'] == _userProfile?.id;
         final canEditNote = isCurrentUser || _canModerateTicketNotes;
-        final isLast = index == _notes.length - 1;
+        final isLast = index == notes.length - 1;
 
         return Stack(
           children: [
@@ -3353,6 +3843,113 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     );
   }
 
+  Widget _buildLinkedFaultNotesCard() {
+    if (_linkedFaultsLoading) {
+      return _buildModernContentCard(
+        title: 'Bagli ariza notlari',
+        icon: Icons.bug_report_outlined,
+        children: const [
+          Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
+        ],
+      );
+    }
+
+    if (_linkedFaultNoteEntries.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return _buildModernContentCard(
+      title: 'Bagli ariza notlari',
+      icon: Icons.bug_report_outlined,
+      children: [
+        Text(
+          'Is emrine bagli arizalar kendi sayfasinda yasamaya devam eder. Burada sadece o arizalara ait not akisini iliski olarak gorursun.',
+          style: TextStyle(
+            fontSize: 13,
+            color: _primaryTextColor(context),
+            height: 1.45,
+          ),
+        ),
+        const SizedBox(height: 14),
+        ..._linkedFaultNoteEntries.map(_buildLinkedFaultNoteItem),
+      ],
+    );
+  }
+
+  Widget _buildLinkedFaultNoteItem(LinkedFaultNoteEntry entry) {
+    final roleLabel = _roleLabelFor(entry.userRole);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _surfaceMutedColor(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _borderColor(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _buildStatusChip(entry.faultCode, AppColors.corporateRed),
+                    Text(
+                      entry.faultTitle,
+                      style: TextStyle(
+                        color: _primaryTextColor(context),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: () => _openFaultRecordDetail(entry.faultRecordId),
+                icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                label: const Text('Detay'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildStatusChip(
+                Formatters.date(entry.createdAt?.toIso8601String()),
+                Colors.teal,
+              ),
+              _buildStatusChip(
+                (entry.userName ?? '').trim().isEmpty
+                    ? 'Bilinmeyen kullanici'
+                    : entry.userName!.trim(),
+                AppColors.corporateBlue,
+              ),
+              if (roleLabel != null)
+                _buildStatusChip(roleLabel, AppColors.corporateYellow),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            entry.note,
+            style: TextStyle(color: _primaryTextColor(context), height: 1.55),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProcessTab() {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -3381,19 +3978,29 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     runSpacing: 8,
                     children: [
                       _buildStatusChip(
-                        '${_notes.length} kayit',
+                        '${_serviceTimelineNotes.length} kayit',
                         AppColors.corporateNavy,
                       ),
                       _buildStatusChip(
                         '${_totalNoteImageCount()} fotograf',
                         Colors.deepPurple,
                       ),
+                      if (_linkedFaultRecords.isNotEmpty)
+                        _buildStatusChip(
+                          '${_linkedFaultRecords.length} bagli ariza',
+                          Colors.deepOrange,
+                        ),
                     ],
                   ),
                 ],
               ),
               const SizedBox(height: 20),
               _buildProcessTimelineView(),
+              if (_linkedFaultsLoading ||
+                  _linkedFaultNoteEntries.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                _buildLinkedFaultNotesCard(),
+              ],
             ],
           ),
         ),
@@ -3638,7 +4245,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             delegate: _SliverAppBarDelegate(
               TabBar(
                 controller: _tabController,
-                isScrollable: false,
+                isScrollable: true,
                 dividerColor: Colors.transparent,
                 splashBorderRadius: BorderRadius.circular(16),
                 labelColor: Colors.white,
@@ -3660,6 +4267,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 tabs: const [
                   Tab(height: 56, text: 'Ozet'),
                   Tab(height: 56, text: 'Surec'),
+                  Tab(height: 56, text: 'Gunluk'),
                   Tab(height: 56, text: 'Evrak'),
                   Tab(height: 56, text: 'Teknik'),
                 ],
@@ -3673,6 +4281,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
         children: [
           _buildSummaryTab(ticket, customer, status, priority, plannedDate),
           _buildProcessTab(),
+          _buildDailyReportsTab(),
           _buildPaperworkTab(ticket),
           _buildTechnicalTab(ticket, isWide),
         ],
@@ -3682,6 +4291,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
 
   // Kurumsal notlar görünümü - Profesyonel kart yapısı
   Widget _buildNotesChatView() {
+    final notes = _serviceTimelineNotes;
     if (_notesLoading) {
       return const SizedBox(
         height: 200,
@@ -3689,13 +4299,13 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       );
     }
 
-    if (_notes.isEmpty) {
+    if (notes.isEmpty) {
       return const SizedBox.shrink(); // Boş durumda hiçbir şey gösterme (FAB zaten var)
     }
 
     return Column(
       children:
-          _notes.map((note) {
+          notes.map((note) {
             final date = note['created_at'] as String?;
             final profile = note['profiles'] as Map<String, dynamic>?;
             final userName = profile?['full_name'] as String? ?? '-';
@@ -4494,6 +5104,42 @@ class _TicketDetailPageState extends State<TicketDetailPage>
         ),
       ),
     );
+  }
+
+  Widget _buildDailyReportChip({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(_isDark(context) ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDailyReportDate(DateTime value) {
+    final day = value.day.toString().padLeft(2, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    return '$day.$month.${value.year}';
   }
 
   Widget _buildPriorityBadge(String label, String priorityKey) {

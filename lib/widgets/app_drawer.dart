@@ -8,9 +8,7 @@ import '../pages/archived_tickets_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/ticket_list_page.dart';
 import '../pages/login_page.dart';
-import '../pages/partner_management_page.dart';
 import '../pages/fault_codes_page.dart';
-import '../pages/my_teams_page.dart';
 import '../services/permission_service.dart';
 import '../theme/app_colors.dart';
 
@@ -21,7 +19,6 @@ enum AppDrawerPage {
   archived,
   profile,
   faultCodes,
-  myTeams,
   notifications,
   other,
 }
@@ -151,21 +148,6 @@ class AppDrawer extends StatelessWidget {
                         child: ListView(
                           padding: const EdgeInsets.only(bottom: 12),
                           children: [
-                            _NavTile(
-                              label: 'Tak\u0131mlar\u0131m',
-                              icon: Icons.groups_outlined,
-                              active: currentPage == AppDrawerPage.myTeams,
-                              iconMuted: iconMuted,
-                              textColor: textColor,
-                              activeBg: activeBg,
-                              accent: accent,
-                              onTap:
-                                  () => _navigate(
-                                    context,
-                                    AppDrawerPage.myTeams,
-                                    MyTeamsPage(),
-                                  ),
-                            ),
                             // _NavTile(
                             //   label: 'Bildirimler',
                             //   icon: Icons.notifications_outlined,
@@ -370,10 +352,6 @@ class AppDrawer extends StatelessWidget {
       // pushReplacement iOS geri-swipe/back davranÄ±ÅŸÄ±nÄ± bozar; push ile doÄŸal geri hareketi korunur.
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => widget));
     }
-  }
-
-  String _getUserRoleLabel(String? role) {
-    return PermissionService.roleLabel(role).toUpperCase();
   }
 }
 

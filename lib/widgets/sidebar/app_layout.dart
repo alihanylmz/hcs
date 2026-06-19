@@ -13,7 +13,6 @@ enum AppPage {
   archived,
   profile,
   faultCodes,
-  myTeams,
   notifications,
   other,
 }
@@ -45,72 +44,59 @@ class AppLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
     final isWideScreen = screenWidth > 1024;
 
-    final body = DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors:
-              isDark
-                  ? const [
-                    Color(0xFF0B1520),
-                    AppColors.backgroundDark,
-                    Color(0xFF152638),
-                  ]
-                  : const [
-                    Color(0xFFF8FAFD),
-                    AppColors.backgroundGrey,
-                    Color(0xFFECF3FA),
-                  ],
-        ),
-      ),
-      child:
-          isWideScreen
-              ? Row(
-                children: [
-                  RepaintBoundary(
-                    child: Sidebar(
-                      activeMenuItem: _getActiveMenuItem(),
-                      userName: userName,
-                      userRole: userRole,
-                    ),
+    final layoutBody = Stack(
+      children: [
+        const Positioned.fill(child: _DashboardBackdrop()),
+        if (isWideScreen)
+          SafeArea(
+            minimum: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                RepaintBoundary(
+                  child: Sidebar(
+                    activeMenuItem: _getActiveMenuItem(),
+                    userName: userName,
+                    userRole: userRole,
                   ),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        if (showAppBar)
-                          RepaintBoundary(child: _buildDesktopAppBar(context)),
-                        Expanded(child: child),
-                      ],
-                    ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    children: [
+                      if (showAppBar)
+                        RepaintBoundary(child: _buildDesktopAppBar(context)),
+                      if (showAppBar) const SizedBox(height: 20),
+                      Expanded(child: _DesktopContentShell(child: child)),
+                    ],
                   ),
-                ],
-              )
-              : child,
+                ),
+              ],
+            ),
+          )
+        else
+          SafeArea(top: false, child: child),
+      ],
     );
-
-    if (isWideScreen) {
-      return Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        body: body,
-        floatingActionButton: floatingActionButton,
-      );
-    }
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      drawer: AppDrawer(
-        currentPage: _convertToDrawerPage(),
-        userName: userName,
-        userRole: userRole,
-        onProfileReload: onProfileReload,
-      ),
-      appBar: showAppBar ? _buildMobileAppBar(context) : null,
-      body: body,
+      drawer:
+          isWideScreen
+              ? null
+              : AppDrawer(
+                currentPage: _convertToDrawerPage(),
+                userName: userName,
+                userRole: userRole,
+                onProfileReload: onProfileReload,
+              ),
+      appBar:
+          isWideScreen
+              ? null
+              : (showAppBar ? _buildMobileAppBar(context) : null),
+      body: layoutBody,
       floatingActionButton: floatingActionButton,
     );
   }
@@ -120,12 +106,29 @@ class AppLayout extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     return AppBar(
+      toolbarHeight: 76,
       titleSpacing: 0,
-      title: Text(title),
-      leadingWidth: 92,
+      surfaceTintColor: Colors.transparent,
+      title: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _pageLabel(currentPage),
+            style: theme.textTheme.labelMedium?.copyWith(
+              letterSpacing: 1.0,
+              color: isDark ? AppColors.textOnDarkMuted : AppColors.textLight,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ],
+      ),
+      leadingWidth: 88,
       leading: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          const SizedBox(width: 8),
           Builder(
             builder: (buttonContext) {
               return IconButton(
@@ -152,12 +155,13 @@ class AppLayout extends StatelessWidget {
       ),
       backgroundColor:
           isDark
-              ? AppColors.surfaceDarkRaised.withOpacity(0.96)
-              : AppColors.surfaceWhite.withOpacity(0.97),
+              ? AppColors.surfaceDarkRaised.withValues(alpha: 0.94)
+              : Colors.white.withValues(alpha: 0.94),
       elevation: 0,
       actions: [
         _buildThemeToggle(context, compact: true),
         if (actions != null) ...actions!,
+        const SizedBox(width: 8),
       ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
@@ -174,39 +178,80 @@ class AppLayout extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     return Container(
-      height: 76,
-      margin: const EdgeInsets.fromLTRB(18, 18, 18, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      height: 92,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
       decoration: BoxDecoration(
         color:
             isDark
-                ? AppColors.surfaceDarkRaised.withOpacity(0.94)
-                : AppColors.surfaceWhite.withOpacity(0.96),
-        borderRadius: BorderRadius.circular(24),
+                ? AppColors.surfaceDarkRaised.withValues(alpha: 0.92)
+                : Colors.white.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(28),
         border: Border.all(
           color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.10 : 0.035),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.08),
+            blurRadius: 30,
+            offset: const Offset(0, 18),
           ),
         ],
       ),
       child: Row(
         children: [
+          Container(
+            width: 48,
+            height: 48,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color:
+                  isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceAccent,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
+              ),
+            ),
+            child: SvgPicture.asset('assets/images/log.svg'),
+          ),
+          const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.appBarTheme.titleTextStyle,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _pageLabel(currentPage),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    letterSpacing: 1.2,
+                    color:
+                        isDark
+                            ? AppColors.textOnDarkMuted
+                            : AppColors.textLight,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
           ),
+          if (actions != null && actions!.isNotEmpty) ...[
+            const SizedBox(width: 16),
+            Flexible(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: actions!),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
           _buildThemeToggle(context),
-          const SizedBox(width: 12),
-          if (actions != null) ...actions!,
         ],
       ),
     );
@@ -218,7 +263,7 @@ class AppLayout extends StatelessWidget {
         appState?.isDarkMode ??
         (Theme.of(context).brightness == Brightness.dark);
     final backgroundColor =
-        isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceMuted;
+        isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceSoft;
     final borderColor = isDark ? AppColors.borderDark : AppColors.borderSubtle;
     final iconColor =
         isDark ? AppColors.corporateYellow : AppColors.corporateBlue;
@@ -253,13 +298,15 @@ class AppLayout extends StatelessWidget {
                   width: compact ? 28 : 32,
                   height: compact ? 28 : 32,
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF102030) : Colors.white,
+                    color: isDark ? const Color(0xFF0B1220) : Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(isDark ? 0.08 : 0.03),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
+                        color: Colors.black.withValues(
+                          alpha: isDark ? 0.16 : 0.06,
+                        ),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
@@ -275,7 +322,7 @@ class AppLayout extends StatelessWidget {
                     isDark ? 'Koyu' : 'Acik',
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
                       color: labelColor,
                     ),
                   ),
@@ -286,6 +333,27 @@ class AppLayout extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _pageLabel(AppPage page) {
+    switch (page) {
+      case AppPage.ticketList:
+        return 'SERVIS MASASI';
+      case AppPage.dashboard:
+        return 'ANALITIK PANEL';
+      case AppPage.stock:
+        return 'ENVANTER';
+      case AppPage.archived:
+        return 'ARSIV';
+      case AppPage.profile:
+        return 'HESAP';
+      case AppPage.faultCodes:
+        return 'ARIZA REHBERI';
+      case AppPage.notifications:
+        return 'BILDIRIMLER';
+      case AppPage.other:
+        return 'WORKSPACE';
+    }
   }
 
   String _getActiveMenuItem() {
@@ -302,8 +370,6 @@ class AppLayout extends StatelessWidget {
         return 'profile';
       case AppPage.faultCodes:
         return 'fault_codes';
-      case AppPage.myTeams:
-        return 'my_teams';
       case AppPage.notifications:
         return 'notifications';
       case AppPage.other:
@@ -325,12 +391,134 @@ class AppLayout extends StatelessWidget {
         return AppDrawerPage.profile;
       case AppPage.faultCodes:
         return AppDrawerPage.faultCodes;
-      case AppPage.myTeams:
-        return AppDrawerPage.myTeams;
       case AppPage.notifications:
         return AppDrawerPage.notifications;
       case AppPage.other:
         return AppDrawerPage.other;
     }
+  }
+}
+
+class _DesktopContentShell extends StatelessWidget {
+  const _DesktopContentShell({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color:
+            isDark
+                ? AppColors.surfaceDark.withValues(alpha: 0.72)
+                : Colors.white.withValues(alpha: 0.56),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.16 : 0.08),
+            blurRadius: 30,
+            offset: const Offset(0, 18),
+          ),
+        ],
+      ),
+      child: ClipRRect(borderRadius: BorderRadius.circular(32), child: child),
+    );
+  }
+}
+
+class _DashboardBackdrop extends StatelessWidget {
+  const _DashboardBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors:
+                  isDark
+                      ? const [
+                        Color(0xFF020817),
+                        Color(0xFF081225),
+                        Color(0xFF0B1220),
+                      ]
+                      : const [
+                        Color(0xFFF8FBFF),
+                        Color(0xFFF1F5F9),
+                        Color(0xFFEAF1FB),
+                      ],
+            ),
+          ),
+        ),
+        Positioned(
+          top: -120,
+          right: -80,
+          child: _BackdropGlow(
+            size: 320,
+            color: isDark ? const Color(0xFF1D4ED8) : const Color(0xFFBFDBFE),
+          ),
+        ),
+        Positioned(
+          bottom: -140,
+          left: -100,
+          child: _BackdropGlow(
+            size: 360,
+            color: isDark ? const Color(0xFF0F766E) : const Color(0xFFCFFAFE),
+          ),
+        ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.white.withValues(alpha: isDark ? 0.02 : 0.20),
+                Colors.transparent,
+                Colors.transparent,
+                Colors.black.withValues(alpha: isDark ? 0.12 : 0.03),
+              ],
+              stops: const [0.0, 0.24, 0.72, 1.0],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BackdropGlow extends StatelessWidget {
+  const _BackdropGlow({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              color.withValues(alpha: 0.34),
+              color.withValues(alpha: 0.0),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

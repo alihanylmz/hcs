@@ -11,7 +11,8 @@ import '../core/logging/app_logger.dart';
 import '../models/notification_item.dart';
 import 'notification_service_kanban.dart';
 
-typedef OpenTicketCallback = Future<void> Function(String ticketId);
+typedef OpenNotificationCallback =
+    Future<void> Function(Map<String, dynamic> data);
 
 class WindowsBackgroundNotificationService with WindowListener, TrayListener {
   WindowsBackgroundNotificationService._();
@@ -29,7 +30,7 @@ class WindowsBackgroundNotificationService with WindowListener, TrayListener {
   StreamSubscription<AuthState>? _authSubscription;
   RealtimeChannel? _notificationChannel;
 
-  OpenTicketCallback? _onOpenTicket;
+  OpenNotificationCallback? _onOpenNotification;
   String? _subscribedUserId;
   bool _initialized = false;
   bool _isQuitting = false;
@@ -37,12 +38,14 @@ class WindowsBackgroundNotificationService with WindowListener, TrayListener {
 
   bool get _isSupported => !kIsWeb && Platform.isWindows;
 
-  Future<void> initialize({required OpenTicketCallback onOpenTicket}) async {
+  Future<void> initialize({
+    required OpenNotificationCallback onOpenNotification,
+  }) async {
     if (_initialized || !_isSupported) {
       return;
     }
 
-    _onOpenTicket = onOpenTicket;
+    _onOpenNotification = onOpenNotification;
 
     await localNotifier.setup(
       appName: 'istakip_app',
@@ -142,8 +145,7 @@ class WindowsBackgroundNotificationService with WindowListener, TrayListener {
       );
 
       localNotification.onClick = () {
-        final ticketId = notification.data?['ticket_id']?.toString();
-        unawaited(_restoreWindow(ticketId: ticketId));
+        unawaited(_restoreWindow(notificationData: notification.data));
       };
 
       await localNotification.show();
@@ -168,13 +170,15 @@ class WindowsBackgroundNotificationService with WindowListener, TrayListener {
     }
   }
 
-  Future<void> _restoreWindow({String? ticketId}) async {
+  Future<void> _restoreWindow({Map<String, dynamic>? notificationData}) async {
     await windowManager.show();
     await windowManager.restore();
     await windowManager.focus();
 
-    if (ticketId != null && ticketId.isNotEmpty && _onOpenTicket != null) {
-      await _onOpenTicket!(ticketId);
+    if (notificationData != null &&
+        notificationData.isNotEmpty &&
+        _onOpenNotification != null) {
+      await _onOpenNotification!(notificationData);
     }
   }
 

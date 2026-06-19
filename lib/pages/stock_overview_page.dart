@@ -1,7 +1,7 @@
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../models/user_profile.dart';
 import '../services/pdf_export_service.dart';
@@ -52,6 +52,12 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     _userProfile,
     AppPermission.configureStockCatalog,
   );
+
+  bool get _canUseBarcodeScanner =>
+      kIsWeb ||
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
 
   final List<String> _uiCategories = [
     'Tümü',
@@ -197,9 +203,11 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
       final name = _normalizeTurkish(stock['name'] ?? '');
       final shelf = _normalizeTurkish(stock['shelf_location'] ?? '');
       final category = _normalizeTurkish(stock['category'] ?? '');
+      final barcode = _normalizeTurkish(stock['barcode'] ?? '');
       return name.contains(query) ||
           shelf.contains(query) ||
-          category.contains(query);
+          category.contains(query) ||
+          barcode.contains(query);
     }).toList();
   }
 
@@ -425,6 +433,136 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
               pdfGenerator: generator,
             ),
       ),
+    );
+  }
+
+  Future<void> _openBarcodeScanner() async {
+    final scannedCode = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const StockBarcodeScannerPage()),
+    );
+
+    if (!mounted || scannedCode == null || scannedCode.trim().isEmpty) return;
+    await _handleScannedBarcode(scannedCode.trim());
+  }
+
+  Future<void> _handleScannedBarcode(String barcode) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final item = await _stockService.getStockByBarcode(barcode);
+      if (!mounted) return;
+
+      if (item == null) {
+        setState(() {
+          _stockSectionIndex = 1;
+          _searchQuery = barcode;
+        });
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Barkodla eslesen stok bulunamadi: $barcode'),
+            backgroundColor: Colors.orange.shade700,
+          ),
+        );
+        return;
+      }
+
+      await _loadStocks();
+      if (!mounted) return;
+      await _showScannedStockSheet(item, barcode);
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Barkod okunabildi ama stok aranamadı. SQL migration calisti mi? $error',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _showScannedStockSheet(
+    Map<String, dynamic> item,
+    String barcode,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final quantity = _asInt(item['quantity']);
+        final unit = _safeText(item['unit'], fallback: 'adet');
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Barkod eslesti',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: theme.colorScheme.primary.withOpacity(
+                      0.12,
+                    ),
+                    foregroundColor: theme.colorScheme.primary,
+                    child: Icon(
+                      _getIconForCategory(item['category']?.toString()),
+                    ),
+                  ),
+                  title: Text(
+                    _safeText(item['name']),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  subtitle: Text('$quantity $unit stokta - Barkod: $barcode'),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showSmartAddDialog('Diger', editItem: item);
+                      },
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Stok kartini ac'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        setState(() {
+                          _stockSectionIndex = 1;
+                          _searchQuery = barcode;
+                        });
+                      },
+                      icon: const Icon(Icons.search_rounded),
+                      label: const Text('Listede goster'),
+                    ),
+                    if (_isSelectionMode)
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _handleItemSelection(item);
+                        },
+                        icon: const Icon(Icons.playlist_add_check_rounded),
+                        label: const Text('Siparise ekle'),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -792,6 +930,12 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Yeni stok'),
                 ),
+              if (_canUseBarcodeScanner)
+                OutlinedButton.icon(
+                  onPressed: _openBarcodeScanner,
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  label: const Text('Barkod oku'),
+                ),
               OutlinedButton.icon(
                 onPressed: _toggleSelectionMode,
                 icon: Icon(
@@ -851,7 +995,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
               hintText:
                   _stockSectionIndex == 2
                       ? 'Is, musteri veya eksik parca ara...'
-                      : 'Urun, kategori veya raf ara...',
+                      : 'Urun, kategori, raf veya barkod ara...',
               prefixIcon: const Icon(Icons.search_rounded),
             ),
           ),
@@ -1253,6 +1397,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     final unit = _safeText(item['unit'], fallback: 'adet');
     final category = _safeText(item['category'], fallback: 'Diger');
     final shelf = _safeText(item['shelf_location'], fallback: 'Raf yok');
+    final barcode = item['barcode']?.toString().trim() ?? '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1346,6 +1491,12 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                               icon: Icons.tag_rounded,
                               label: 'ID ${item['id']}',
                             ),
+                            if (barcode.isNotEmpty)
+                              _buildMetaChip(
+                                theme,
+                                icon: Icons.qr_code_rounded,
+                                label: barcode,
+                              ),
                           ],
                         ),
                       ],
@@ -1689,6 +1840,7 @@ class _StockFormDialogState extends State<StockFormDialog> {
 
   late TextEditingController _qtyCtrl;
   late TextEditingController _shelfCtrl;
+  late TextEditingController _barcodeCtrl;
   late TextEditingController _criticalCtrl;
   late TextEditingController _manualNameCtrl;
 
@@ -1710,6 +1862,9 @@ class _StockFormDialogState extends State<StockFormDialog> {
     );
     _shelfCtrl = TextEditingController(
       text: item?['shelf_location']?.toString() ?? '',
+    );
+    _barcodeCtrl = TextEditingController(
+      text: item?['barcode']?.toString() ?? '',
     );
     _criticalCtrl = TextEditingController(
       text: item?['critical_level']?.toString() ?? '5',
@@ -1749,6 +1904,7 @@ class _StockFormDialogState extends State<StockFormDialog> {
   void dispose() {
     _qtyCtrl.dispose();
     _shelfCtrl.dispose();
+    _barcodeCtrl.dispose();
     _criticalCtrl.dispose();
     _manualNameCtrl.dispose();
     super.dispose();
@@ -1800,6 +1956,14 @@ class _StockFormDialogState extends State<StockFormDialog> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _barcodeCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Barkod / QR Kodu',
+                  helperText: 'Kamera okutma icin benzersiz kod',
+                ),
               ),
               const SizedBox(height: 10),
               TextFormField(
@@ -2100,6 +2264,10 @@ class _StockFormDialogState extends State<StockFormDialog> {
       'critical_level': critical,
     };
 
+    if (_barcodeCtrl.text.trim().isNotEmpty) {
+      data['barcode'] = _barcodeCtrl.text.trim();
+    }
+
     await widget.onSave(data, isEdit);
     if (mounted) Navigator.pop(context);
   }
@@ -2189,6 +2357,132 @@ class _StockOrderDialogState extends State<StockOrderDialog> {
           child: const Text('Ekle'),
         ),
       ],
+    );
+  }
+}
+
+class StockBarcodeScannerPage extends StatefulWidget {
+  const StockBarcodeScannerPage({super.key});
+
+  @override
+  State<StockBarcodeScannerPage> createState() =>
+      _StockBarcodeScannerPageState();
+}
+
+class _StockBarcodeScannerPageState extends State<StockBarcodeScannerPage> {
+  final MobileScannerController _controller = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    facing: CameraFacing.back,
+  );
+
+  bool _hasResult = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleDetect(BarcodeCapture capture) async {
+    if (_hasResult) return;
+
+    final rawValue = capture.barcodes.firstOrNull?.rawValue?.trim();
+    if (rawValue == null || rawValue.isEmpty) return;
+
+    _hasResult = true;
+    await _controller.stop();
+    if (!mounted) return;
+    Navigator.of(context).pop(rawValue);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: const Text('Barkod Oku'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            tooltip: 'Fener',
+            onPressed: _controller.toggleTorch,
+            icon: const Icon(Icons.flash_on_rounded),
+          ),
+          IconButton(
+            tooltip: 'Kamera degistir',
+            onPressed: _controller.switchCamera,
+            icon: const Icon(Icons.cameraswitch_rounded),
+          ),
+        ],
+      ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          MobileScanner(controller: _controller, onDetect: _handleDetect),
+          IgnorePointer(
+            child: Center(
+              child: Container(
+                width: 260,
+                height: 180,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.white, width: 3),
+                ),
+              ),
+            ),
+          ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 26),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.72),
+                border: Border(
+                  top: BorderSide(color: Colors.white.withOpacity(0.12)),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Barkodu cercevenin icine getirin',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Web tarafinda kamera icin sitenin HTTPS ile acilmasi gerekir.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white.withOpacity(0.72),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                      label: const Text('Vazgec'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(color: Colors.white.withOpacity(0.5)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

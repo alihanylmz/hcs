@@ -1,15 +1,16 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config/app_config.dart';
 import '../core/logging/app_logger.dart';
 import '../models/notification_item.dart';
 import '../models/ticket_status.dart';
 
 /// Push gonderimleri sadece backend function uzerinden yapilir.
 class NotificationService {
-  static const String _oneSignalAppId = 'faeed989-8a81-4fe0-9c73-2eb9ed2144a7';
   static const AppLogger _logger = AppLogger('NotificationService');
 
   SupabaseClient get _supabase => Supabase.instance.client;
+  String get _oneSignalAppId => AppConfig.oneSignalAppId;
 
   Future<bool> _sendNotification({required Map<String, dynamic> body}) async {
     try {
@@ -44,17 +45,23 @@ class NotificationService {
     required String message,
     Map<String, dynamic>? data,
   }) async {
-    if (userIds.isEmpty) return;
+    final normalizedUserIds =
+        userIds
+            .map((userId) => userId.trim())
+            .where((userId) => userId.isNotEmpty)
+            .toSet()
+            .toList();
+    if (normalizedUserIds.isEmpty) return;
 
     try {
       final records =
-          userIds
+          normalizedUserIds
               .map(
                 (userId) => {
                   'user_id': userId,
                   'title': title,
                   'message': message,
-                  'data': data,
+                  'data': data ?? <String, dynamic>{},
                   'is_read': false,
                 },
               )
@@ -64,7 +71,7 @@ class NotificationService {
     } catch (error, stackTrace) {
       _logger.error(
         'save_notifications_to_db_failed',
-        data: {'userCount': userIds.length},
+        data: {'userCount': normalizedUserIds.length},
         error: error,
         stackTrace: stackTrace,
       );
@@ -121,7 +128,7 @@ class NotificationService {
     }
   }
 
-  Future<void> markAsRead(int notificationId) async {
+  Future<void> markAsRead(String notificationId) async {
     try {
       await _supabase
           .from('notifications')
@@ -178,7 +185,14 @@ class NotificationService {
     required String message,
     Map<String, dynamic>? data,
   }) async {
-    if (externalUserIds.isEmpty) {
+    final normalizedUserIds =
+        externalUserIds
+            .map((userId) => userId.trim())
+            .where((userId) => userId.isNotEmpty)
+            .toSet()
+            .toList();
+
+    if (normalizedUserIds.isEmpty) {
       _logger.warning(
         'send_notification_to_external_users_skipped',
         data: {'reason': 'empty_target_list'},
@@ -187,7 +201,7 @@ class NotificationService {
     }
 
     await _saveNotificationsToDb(
-      userIds: externalUserIds,
+      userIds: normalizedUserIds,
       title: title,
       message: message,
       data: data,
@@ -195,7 +209,7 @@ class NotificationService {
 
     final body = {
       'app_id': _oneSignalAppId,
-      'include_external_user_ids': externalUserIds,
+      'include_external_user_ids': normalizedUserIds,
       'headings': {'en': title, 'tr': title},
       'contents': {'en': message, 'tr': message},
       'data': data ?? <String, dynamic>{},
@@ -485,18 +499,21 @@ class NotificationService {
 
   Future<bool> notifyCardCreated({
     required String teamId,
-    required String teamName,
     required String cardId,
     required String cardTitle,
+    String? teamName,
     String? createdByName,
     String? assigneeName,
   }) async {
+    final resolvedTeamName = teamName ?? await _resolveTeamName(teamId);
     final title = 'Yeni Kart Eklendi';
-    final creatorText = createdByName ?? 'Bir uye';
+    final creatorText =
+        createdByName ??
+        await _resolveCurrentUserDisplayName(fallback: 'Bir uye');
     final assigneeText =
         assigneeName != null ? ' ($assigneeName kullanicisina atandi)' : '';
     final message =
-        '$creatorText, $teamName takimina yeni kart ekledi: "$cardTitle"$assigneeText';
+        '$creatorText, $resolvedTeamName takiminda yeni kart olusturdu: "$cardTitle"$assigneeText';
 
     final userIds = await _getTeamMemberIds(teamId, excludeSelf: true);
 
@@ -515,7 +532,7 @@ class NotificationService {
       data: {
         'type': 'card_created',
         'team_id': teamId,
-        'team_name': teamName,
+        'team_name': resolvedTeamName,
         'card_id': cardId,
         'card_title': cardTitle,
       },
@@ -524,11 +541,11 @@ class NotificationService {
 
   Future<bool> notifyCardStatusChanged({
     required String teamId,
-    required String teamName,
     required String cardId,
     required String cardTitle,
     required String oldStatus,
     required String newStatus,
+    String? teamName,
     String? changedByName,
   }) async {
     const statusLabels = {
@@ -540,11 +557,14 @@ class NotificationService {
 
     final oldLabel = statusLabels[oldStatus] ?? oldStatus;
     final newLabel = statusLabels[newStatus] ?? newStatus;
+    final resolvedTeamName = teamName ?? await _resolveTeamName(teamId);
 
     final title = 'Kart Durumu Degisti';
-    final changerText = changedByName ?? 'Bir uye';
+    final changerText =
+        changedByName ??
+        await _resolveCurrentUserDisplayName(fallback: 'Bir uye');
     final message =
-        '$changerText, "$cardTitle" kartini $oldLabel -> $newLabel olarak guncelledi';
+        '$changerText, $resolvedTeamName takimindaki "$cardTitle" kartini $oldLabel -> $newLabel olarak guncelledi';
 
     final userIds = await _getTeamMemberIds(teamId, excludeSelf: true);
 
@@ -557,7 +577,7 @@ class NotificationService {
       data: {
         'type': 'card_status_changed',
         'team_id': teamId,
-        'team_name': teamName,
+        'team_name': resolvedTeamName,
         'card_id': cardId,
         'card_title': cardTitle,
         'old_status': oldStatus,
@@ -568,15 +588,19 @@ class NotificationService {
 
   Future<bool> notifyCardAssigned({
     required String teamId,
-    required String teamName,
     required String cardId,
     required String cardTitle,
     required String assigneeId,
+    String? teamName,
     String? assignedByName,
   }) async {
+    final resolvedTeamName = teamName ?? await _resolveTeamName(teamId);
     final title = 'Kart Size Atandi';
-    final assignerText = assignedByName ?? 'Bir uye';
-    final message = '$assignerText size "$cardTitle" kartini atadi ($teamName)';
+    final assignerText =
+        assignedByName ??
+        await _resolveCurrentUserDisplayName(fallback: 'Bir uye');
+    final message =
+        '$assignerText size "$cardTitle" kartini atadi ($resolvedTeamName)';
 
     return sendNotificationToExternalUsers(
       externalUserIds: [assigneeId],
@@ -585,7 +609,7 @@ class NotificationService {
       data: {
         'type': 'card_assigned',
         'team_id': teamId,
-        'team_name': teamName,
+        'team_name': resolvedTeamName,
         'card_id': cardId,
         'card_title': cardTitle,
       },
@@ -594,13 +618,16 @@ class NotificationService {
 
   Future<bool> notifyMemberInvited({
     required String teamId,
-    required String teamName,
     required String invitedUserId,
+    String? teamName,
     String? invitedByName,
   }) async {
+    final resolvedTeamName = teamName ?? await _resolveTeamName(teamId);
     final title = 'Takima Davet Edildiniz';
-    final inviterText = invitedByName ?? 'Bir kullanici';
-    final message = '$inviterText sizi "$teamName" takimina davet etti';
+    final inviterText =
+        invitedByName ??
+        await _resolveCurrentUserDisplayName(fallback: 'Bir kullanici');
+    final message = '$inviterText sizi "$resolvedTeamName" takimina davet etti';
 
     return sendNotificationToExternalUsers(
       externalUserIds: [invitedUserId],
@@ -609,8 +636,188 @@ class NotificationService {
       data: {
         'type': 'member_invited',
         'team_id': teamId,
-        'team_name': teamName,
+        'team_name': resolvedTeamName,
       },
     );
+  }
+
+  Future<bool> notifyCardUpdated({
+    required String teamId,
+    required String cardId,
+    required String cardTitle,
+    required List<String> recipientUserIds,
+    String? teamName,
+    String? updatedByName,
+    String? updateSummary,
+  }) async {
+    final normalizedRecipients = _normalizeUserIds(recipientUserIds);
+    if (normalizedRecipients.isEmpty) {
+      return false;
+    }
+
+    final resolvedTeamName = teamName ?? await _resolveTeamName(teamId);
+    final actorName =
+        updatedByName ??
+        await _resolveCurrentUserDisplayName(fallback: 'Bir uye');
+    final title = 'Kart Guncellendi';
+    final summaryText =
+        updateSummary?.trim().isNotEmpty == true ? ' ($updateSummary)' : '';
+    final message =
+        '$actorName, $resolvedTeamName takimindaki "$cardTitle" kartini guncelledi$summaryText';
+
+    return sendNotificationToExternalUsers(
+      externalUserIds: normalizedRecipients,
+      title: title,
+      message: message,
+      data: {
+        'type': 'card_updated',
+        'team_id': teamId,
+        'team_name': resolvedTeamName,
+        'card_id': cardId,
+        'card_title': cardTitle,
+      },
+    );
+  }
+
+  Future<bool> notifyCardCommented({
+    required String teamId,
+    required String cardId,
+    required String cardTitle,
+    required List<String> recipientUserIds,
+    String? teamName,
+    String? commentAuthorName,
+  }) async {
+    final normalizedRecipients = _normalizeUserIds(recipientUserIds);
+    if (normalizedRecipients.isEmpty) {
+      return false;
+    }
+
+    final resolvedTeamName = teamName ?? await _resolveTeamName(teamId);
+    final authorName =
+        commentAuthorName ??
+        await _resolveCurrentUserDisplayName(fallback: 'Bir uye');
+    final title = 'Kartta Yeni Yorum';
+    final message =
+        '$authorName, $resolvedTeamName takimindaki "$cardTitle" kartina yorum yapti';
+
+    return sendNotificationToExternalUsers(
+      externalUserIds: normalizedRecipients,
+      title: title,
+      message: message,
+      data: {
+        'type': 'card_comment',
+        'team_id': teamId,
+        'team_name': resolvedTeamName,
+        'card_id': cardId,
+        'card_title': cardTitle,
+      },
+    );
+  }
+
+  Future<bool> notifyTeamMentioned({
+    required String teamId,
+    required String threadId,
+    required String threadTitle,
+    required List<String> mentionedUserIds,
+    String? teamName,
+    String? authorName,
+    String? messagePreview,
+    String? cardId,
+    String? linkedTicketId,
+  }) async {
+    final normalizedRecipients = _normalizeUserIds(mentionedUserIds);
+    if (normalizedRecipients.isEmpty) {
+      return false;
+    }
+
+    final resolvedTeamName = teamName ?? await _resolveTeamName(teamId);
+    final resolvedAuthorName =
+        authorName ?? await _resolveCurrentUserDisplayName(fallback: 'Bir uye');
+    final preview = _truncatePreview(
+      messagePreview?.trim() ?? '',
+      maxLength: 90,
+    );
+    final previewText = preview.isEmpty ? '' : ': "$preview"';
+
+    return sendNotificationToExternalUsers(
+      externalUserIds: normalizedRecipients,
+      title: 'Takim Mentioni',
+      message:
+          '$resolvedAuthorName sizi "$threadTitle" konusmasinda etiketledi$previewText',
+      data: {
+        'type': 'team_mention',
+        'team_id': teamId,
+        'team_name': resolvedTeamName,
+        'thread_id': threadId,
+        'thread_title': threadTitle,
+        if (cardId != null && cardId.trim().isNotEmpty) 'card_id': cardId,
+        if (linkedTicketId != null && linkedTicketId.trim().isNotEmpty)
+          'linked_ticket_id': linkedTicketId,
+      },
+    );
+  }
+
+  List<String> _normalizeUserIds(List<String> userIds) {
+    final currentUserId = _supabase.auth.currentUser?.id;
+    return userIds
+        .map((userId) => userId.trim())
+        .where((userId) => userId.isNotEmpty)
+        .where((userId) => currentUserId == null || userId != currentUserId)
+        .toSet()
+        .toList();
+  }
+
+  Future<String> _resolveTeamName(String teamId) async {
+    try {
+      final team =
+          await _supabase
+              .from('teams')
+              .select('name')
+              .eq('id', teamId)
+              .maybeSingle();
+      final teamName = team?['name']?.toString().trim();
+      if (teamName != null && teamName.isNotEmpty) {
+        return teamName;
+      }
+    } catch (_) {}
+    return 'Takim';
+  }
+
+  Future<String> _resolveCurrentUserDisplayName({
+    required String fallback,
+  }) async {
+    final currentUserId = _supabase.auth.currentUser?.id;
+    if (currentUserId == null) {
+      return fallback;
+    }
+
+    try {
+      final profile =
+          await _supabase
+              .from('profiles')
+              .select('full_name, email')
+              .eq('id', currentUserId)
+              .maybeSingle();
+      final fullName = profile?['full_name']?.toString().trim();
+      if (fullName != null && fullName.isNotEmpty) {
+        return fullName;
+      }
+      final email = profile?['email']?.toString().trim();
+      if (email != null && email.isNotEmpty) {
+        return email;
+      }
+    } catch (_) {}
+
+    return fallback;
+  }
+
+  String _truncatePreview(String value, {required int maxLength}) {
+    if (value.isEmpty) {
+      return '';
+    }
+    if (value.length <= maxLength) {
+      return value;
+    }
+    return '${value.substring(0, maxLength)}...';
   }
 }

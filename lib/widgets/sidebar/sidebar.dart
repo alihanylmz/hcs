@@ -6,7 +6,6 @@ import '../../pages/archived_tickets_page.dart';
 import '../../pages/dashboard_page.dart';
 import '../../pages/fault_codes_page.dart';
 import '../../pages/login_page.dart';
-import '../../pages/my_teams_page.dart';
 import '../../pages/profile_page.dart';
 import '../../pages/stock_overview_page.dart';
 import '../../pages/ticket_list_page.dart';
@@ -34,155 +33,62 @@ class Sidebar extends StatelessWidget {
             ? AppColors.sidebarBackgroundDark
             : AppColors.sidebarBackgroundLight;
     final activeColor =
-        isDark ? AppColors.sidebarActiveDark : AppColors.sidebarActiveLight;
+        isDark ? const Color(0xFF1D4ED8) : const Color(0xFF1E40AF);
     final textColor = AppColors.sidebarText;
     final mutedTextColor = AppColors.sidebarTextMuted;
     final iconColor = AppColors.sidebarTextMuted;
 
     return Container(
-      width: 296,
+      width: 304,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
             baseBg,
-            Color.lerp(baseBg, AppColors.corporateNavy, isDark ? 0.18 : 0.10)!,
+            Color.lerp(baseBg, AppColors.corporateBlue, isDark ? 0.20 : 0.12)!,
           ],
         ),
-        border: Border(
-          right: BorderSide(color: Colors.white.withOpacity(0.07)),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: isDark ? 0.06 : 0.08),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.09),
-            blurRadius: 12,
-            offset: const Offset(3, 0),
+            color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.16),
+            blurRadius: 40,
+            offset: const Offset(10, 20),
           ),
         ],
       ),
       child: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(18, 18, 18, 10),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 12),
+            _buildBrandCard(textColor, mutedTextColor, isDark),
+            if (userName != null) ...[
+              const SizedBox(height: 16),
+              _buildUserCard(textColor, mutedTextColor, isDark),
+            ],
+            const SizedBox(height: 18),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(isDark ? 0.05 : 0.06),
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: Colors.white.withOpacity(0.08)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: SvgPicture.asset('assets/images/log.svg'),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Is Takip',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: textColor,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Servis operasyon merkezi',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: mutedTextColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                'NAVIGASYON',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                  color: mutedTextColor,
                 ),
               ),
             ),
-            if (userName != null) ...[
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(isDark ? 0.05 : 0.06),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withOpacity(0.08)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.person_outline_rounded,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        userName!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: textColor,
-                        ),
-                      ),
-                      if (userRole != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          _getRoleLabel(userRole!),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: mutedTextColor,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: EdgeInsets.zero,
                 children: [
-                  SidebarItem(
-                    icon: Icons.groups_outlined,
-                    label: 'Takimlarim',
-                    isActive: activeMenuItem == 'my_teams',
-                    activeColor: activeColor,
-                    iconColor: iconColor,
-                    textColor: textColor,
-                    onTap: () => _navigate(context, const MyTeamsPage()),
-                  ),
                   SidebarItem(
                     icon: Icons.list_alt_rounded,
                     label: 'Is Listesi',
@@ -238,9 +144,9 @@ class Sidebar extends StatelessWidget {
                     textColor: textColor,
                     onTap: () => _navigate(context, const FaultCodesPage()),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   const SidebarDivider(),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   SidebarItem(
                     icon: Icons.person_outline_rounded,
                     label: 'Profilim',
@@ -255,40 +161,202 @@ class Sidebar extends StatelessWidget {
                     label: 'Cikis Yap',
                     isActive: false,
                     activeColor: AppColors.corporateRed,
-                    iconColor: const Color(0xFFF7A4A0),
-                    textColor: const Color(0xFFF7A4A0),
+                    iconColor: const Color(0xFFFECACA),
+                    textColor: const Color(0xFFFECACA),
                     onTap: () => _handleLogout(context),
                   ),
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Is Takip 2026',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: mutedTextColor,
+            const SizedBox(height: 10),
+            const SidebarDivider(),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Is Takip Workspace',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: textColor,
+                        ),
                       ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Web dashboard temasi',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: mutedTextColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.10),
                     ),
                   ),
-                  Text(
-                    'v1.1.0',
+                  child: Text(
+                    'v1.1.10',
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w800,
                       color: mutedTextColor,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBrandCard(Color textColor, Color mutedTextColor, bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: isDark ? 0.04 : 0.06),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: SvgPicture.asset('assets/images/log.svg'),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  'OPERATIONS',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.0,
+                    color: mutedTextColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'Is Takip',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Servis, stok ve saha operasyonlarini tek ekranda yonetin.',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.45,
+              color: mutedTextColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserCard(Color textColor, Color mutedTextColor, bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: isDark ? 0.04 : 0.05),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.person_outline_rounded,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  userName!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  userRole == null
+                      ? 'Aktif kullanici'
+                      : _getRoleLabel(userRole!),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: mutedTextColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: 10,
+            height: 10,
+            decoration: const BoxDecoration(
+              color: AppColors.statusDone,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ],
       ),
     );
   }

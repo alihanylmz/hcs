@@ -5,6 +5,7 @@ import '../models/commissioning_step.dart';
 import '../models/inverter_reference_value.dart';
 import '../models/quick_parameter.dart';
 import '../models/user_profile.dart';
+import '../pages/fault_card_create_page.dart';
 import '../services/inverter_reference_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_colors.dart';
@@ -333,6 +334,9 @@ class _FaultCodesPageState extends State<FaultCodesPage>
   late final TabController _tabController;
   UserProfile? _currentUser;
 
+  bool get _canCreateFaultRecord =>
+      _currentUser != null && !_currentUser!.isPending;
+
   @override
   void initState() {
     super.initState();
@@ -355,6 +359,31 @@ class _FaultCodesPageState extends State<FaultCodesPage>
     final profile = await _userService.getCurrentUserProfile();
     if (!mounted) return;
     setState(() => _currentUser = profile);
+  }
+
+  Future<void> _showCreateFaultRecordDialog(Map<String, dynamic> fault) async {
+    if (!_canCreateFaultRecord) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Onay bekleyen hesaplar ariza kaydi olusturamaz.'),
+        ),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (_) => FaultCardCreatePage(
+              initialFaultCode:
+                  _text(fault['code']).isEmpty ? '-' : _text(fault['code']),
+              initialTitle: _faultTitle(fault),
+              initialBody: _faultBody(fault),
+              initialDeviceBrand: _text(fault['device_brand']),
+              initialDeviceModel: _text(fault['device_model']),
+            ),
+      ),
+    );
   }
 
   Future<void> _loadAllData() async {
@@ -1463,7 +1492,8 @@ class _FaultCodesPageState extends State<FaultCodesPage>
                             fontSize: 15,
                             height: 1.2,
                             fontWeight: FontWeight.w900,
-                            color: isDark ? Colors.white : const Color(0xFF13304A),
+                            color:
+                                isDark ? Colors.white : const Color(0xFF13304A),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -2356,6 +2386,17 @@ class _FaultCodesPageState extends State<FaultCodesPage>
             ),
             const SizedBox(height: 10),
             Text(body, style: TextStyle(height: 1.6, color: bodyColor)),
+            if (_canCreateFaultRecord) ...[
+              const SizedBox(height: 14),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () => _showCreateFaultRecordDialog(fault),
+                  icon: const Icon(Icons.bug_report_outlined),
+                  label: const Text('Ariza kaydi ac'),
+                ),
+              ),
+            ],
           ],
         ),
       ),

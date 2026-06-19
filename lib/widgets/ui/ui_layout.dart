@@ -6,8 +6,8 @@ class UiPage extends StatelessWidget {
   const UiPage({
     super.key,
     required this.child,
-    this.maxWidth = 1180,
-    this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+    this.maxWidth = 1420,
+    this.padding = const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
     this.center = false,
   });
 
@@ -22,6 +22,8 @@ class UiPage extends StatelessWidget {
     final resolvedPadding =
         screenWidth < 720
             ? const EdgeInsets.symmetric(horizontal: 16, vertical: 16)
+            : screenWidth < 1200
+            ? const EdgeInsets.symmetric(horizontal: 20, vertical: 20)
             : padding;
 
     final body = Padding(
@@ -75,31 +77,33 @@ class UiSection extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (subtitle != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          subtitle!,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            letterSpacing: 1.1,
+                            color:
+                                isDark
+                                    ? AppColors.textOnDarkMuted
+                                    : AppColors.textLight,
+                          ),
+                        ),
+                      ),
                     Text(
                       title,
-                      style: theme.textTheme.titleLarge?.copyWith(
+                      style: theme.textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        subtitle!,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color:
-                              isDark
-                                  ? AppColors.textOnDarkMuted
-                                  : AppColors.textLight,
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
               if (trailing != null) trailing!,
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           child,
         ],
       ),

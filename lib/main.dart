@@ -1,77 +1,47 @@
-import 'dart:io';
+import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:window_manager/window_manager.dart';
 
 import 'config/app_config.dart';
 import 'models/user_profile.dart';
 import 'pages/login_page.dart';
-import 'pages/ticket_detail_page.dart';
 import 'pages/ticket_list_page.dart';
-import 'services/windows_background_notification_service.dart';
+import 'platform/platform_startup_stub.dart'
+    if (dart.library.io) 'platform/platform_startup_io.dart'
+    as platform_startup;
+import 'services/notification_navigation_service.dart';
 import 'services/update_service.dart';
 import 'services/user_service.dart';
 import 'theme/app_theme.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+Future<void> _openNotificationPayload(Map<String, dynamic>? data) async {
+  final navigator = navigatorKey.currentState;
+  if (navigator == null) {
+    return;
+  }
+
+  await NotificationNavigationService.openFromData(navigator, data);
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-    await windowManager.ensureInitialized();
-    const windowOptions = WindowOptions(
-      size: Size(1280, 720),
-      minimumSize: Size(800, 600),
-      center: true,
-      backgroundColor: Colors.transparent,
-      skipTaskbar: false,
-      titleBarStyle: TitleBarStyle.normal,
-    );
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    });
-  }
-
-  if (!kIsWeb &&
-      AppConfig.hasOneSignalConfig &&
-      (Platform.isIOS || Platform.isAndroid)) {
-    OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
-    OneSignal.initialize(AppConfig.oneSignalAppId);
-    OneSignal.Notifications.requestPermission(true);
-
-    OneSignal.Notifications.addClickListener((event) {
-      try {
-        final data = event.notification.additionalData;
-        if (data != null && data.containsKey('ticket_id')) {
-          final ticketId = data['ticket_id'].toString();
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(
-              builder: (context) => TicketDetailPage(ticketId: ticketId),
-            ),
-          );
-        }
-      } catch (e) {
-        debugPrint('Bildirim tıklama hatası: $e');
-      }
-    });
-  }
+  await platform_startup.initializeDesktopWindow();
 
   try {
     await initializeDateFormatting('tr_TR', null);
 
     if (!AppConfig.hasSupabaseConfig) {
       throw Exception(
-        'Eksik konfigürasyon: ${AppConfig.missingRequiredKeys.join(', ')}\n'
-        'Uygulamayı --dart-define ile başlatın.',
+        'Eksik konfigurasyon: ${AppConfig.missingRequiredKeys.join(', ')}\n'
+        'Uygulamayi --dart-define ile baslatin.',
       );
     }
 
@@ -80,22 +50,11 @@ Future<void> main() async {
       anonKey: AppConfig.supabaseAnonKey,
     );
 
-    if (!kIsWeb && Platform.isWindows) {
-      await WindowsBackgroundNotificationService.instance.initialize(
-        onOpenTicket: (ticketId) async {
-          final navigator = navigatorKey.currentState;
-          if (navigator == null) {
-            return;
-          }
+    platform_startup.initializeMobilePush(_openNotificationPayload);
 
-          navigator.push(
-            MaterialPageRoute(
-              builder: (context) => TicketDetailPage(ticketId: ticketId),
-            ),
-          );
-        },
-      );
-    }
+    await platform_startup.initializeWindowsBackgroundNotifications(
+      _openNotificationPayload,
+    );
 
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -105,13 +64,16 @@ Future<void> main() async {
     );
 
     runApp(const IsTakipApp());
-  } catch (e) {
+  } catch (error) {
     runApp(
       MaterialApp(
         debugShowCheckedModeBanner: false,
         home: Scaffold(
           body: Center(
-            child: Text('Başlatma Hatası:\n$e', textAlign: TextAlign.center),
+            child: Text(
+              'Baslatma Hatasi:\n$error',
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
       ),
@@ -190,7 +152,7 @@ class IsTakipAppState extends State<IsTakipApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: navigatorKey,
-      title: 'İş Takip',
+      title: 'Is Takip',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
@@ -239,7 +201,7 @@ class _AuthGateState extends State<AuthGate> {
         if (snapshot.hasError) {
           return const Scaffold(
             body: Center(
-              child: Text('Oturum durumu okunurken bir hata oluştu.'),
+              child: Text('Oturum durumu okunurken bir hata olustu.'),
             ),
           );
         }
@@ -271,7 +233,7 @@ class _AuthGateState extends State<AuthGate> {
             if (userSnapshot.hasError) {
               return const Scaffold(
                 body: Center(
-                  child: Text('Kullanıcı profili yüklenirken bir hata oluştu.'),
+                  child: Text('Kullanici profili yuklenirken bir hata olustu.'),
                 ),
               );
             }
@@ -282,7 +244,7 @@ class _AuthGateState extends State<AuthGate> {
               return const Scaffold(
                 body: Center(
                   child: Text(
-                    'Profiliniz bulunamadı.\nYöneticinizle görüşün.',
+                    'Profiliniz bulunamadi.\nYoneticinizle gorusun.',
                     textAlign: TextAlign.center,
                   ),
                 ),

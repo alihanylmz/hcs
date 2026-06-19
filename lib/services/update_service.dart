@@ -4,6 +4,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/app_config.dart';
 import '../core/logging/app_logger.dart';
 import '../theme/app_colors.dart';
 
@@ -15,7 +16,7 @@ class UpdateService {
   final SupabaseClient _supabase;
 
   Future<void> checkVersion(BuildContext context) async {
-    if (kIsWeb) return;
+    if (kIsWeb || !AppConfig.shouldRunUpdateChecks) return;
 
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -54,42 +55,76 @@ class UpdateService {
     final platformKey = _currentPlatformKey();
 
     if (platformKey != null) {
-      final platformVersion = await _tryFetchPlatformVersion(platformKey);
+      final platformVersion = await _tryFetchPlatformVersion(
+        platform: platformKey,
+        expectedPlatform: platformKey,
+      );
       if (platformVersion != null) {
         return platformVersion;
       }
 
-      final sharedVersion = await _tryFetchPlatformVersion('all');
+      final sharedVersion = await _tryFetchPlatformVersion(
+        platform: 'all',
+        expectedPlatform: platformKey,
+      );
       if (sharedVersion != null) {
         return sharedVersion;
       }
+
+      final fallbackResponse = await _supabase
+          .from('app_versions')
+          .select()
+          .order('build_number', ascending: false)
+          .limit(10);
+
+      final fallbackVersion = _selectCompatibleVersion(
+        rows: fallbackResponse,
+        expectedPlatform: platformKey,
+        sourcePlatform: 'generic_fallback',
+      );
+      if (fallbackVersion != null) {
+        return fallbackVersion;
+      }
+
+      _logger.warning(
+        'no_compatible_platform_update_found',
+        data: {'platform': platformKey},
+      );
+
+      return null;
     }
 
-    final response =
-        await _supabase
-            .from('app_versions')
-            .select()
-            .order('build_number', ascending: false)
-            .limit(1)
-            .maybeSingle();
+    final response = await _supabase
+        .from('app_versions')
+        .select()
+        .order('build_number', ascending: false)
+        .limit(10);
 
-    return response == null ? null : Map<String, dynamic>.from(response);
+    return _selectCompatibleVersion(
+      rows: response,
+      expectedPlatform: null,
+      sourcePlatform: 'fallback',
+    );
   }
 
-  Future<Map<String, dynamic>?> _tryFetchPlatformVersion(
-    String platform,
-  ) async {
+  Future<Map<String, dynamic>?> _tryFetchPlatformVersion({
+    required String platform,
+    required String? expectedPlatform,
+  }) async {
     try {
-      final response =
-          await _supabase
-              .from('app_versions')
-              .select()
-              .eq('platform', platform)
-              .order('build_number', ascending: false)
-              .limit(1)
-              .maybeSingle();
+      final response = await _supabase
+          .from('app_versions')
+          .select()
+          .eq('platform', platform)
+          .order('build_number', ascending: false)
+          .order('created_at', ascending: false)
+          .limit(10);
 
-      return response == null ? null : Map<String, dynamic>.from(response);
+      return _selectCompatibleVersion(
+        rows: response,
+        expectedPlatform: expectedPlatform,
+        sourcePlatform: platform,
+      );
     } on PostgrestException catch (error) {
       if (_isMissingPlatformColumn(error)) {
         return null;
@@ -123,6 +158,83 @@ class UpdateService {
             message.contains('schema cache') ||
             message.contains('does not exist') ||
             error.code == '42703');
+  }
+
+  Map<String, dynamic>? _selectCompatibleVersion({
+    required List<dynamic> rows,
+    required String? expectedPlatform,
+    required String sourcePlatform,
+  }) {
+    for (final row in rows) {
+      final candidate = Map<String, dynamic>.from(row as Map);
+      if (_isCompatibleVersionRecord(candidate, expectedPlatform)) {
+        return candidate;
+      }
+
+      _logger.warning(
+        'skip_incompatible_update_record',
+        data: {
+          'expectedPlatform': expectedPlatform ?? 'any',
+          'recordPlatform': candidate['platform']?.toString() ?? 'unknown',
+          'buildNumber': candidate['build_number']?.toString() ?? 'unknown',
+          'downloadUrl': candidate['download_url']?.toString() ?? '',
+          'sourcePlatform': sourcePlatform,
+        },
+      );
+    }
+
+    return null;
+  }
+
+  bool _isCompatibleVersionRecord(
+    Map<String, dynamic> record,
+    String? expectedPlatform,
+  ) {
+    final buildNumber = _parseBuildNumber(record['build_number']);
+    final downloadUrl = record['download_url']?.toString().trim() ?? '';
+    final recordPlatform =
+        record['platform']?.toString().trim().toLowerCase() ?? '';
+
+    if (buildNumber <= 0 || downloadUrl.isEmpty) {
+      return false;
+    }
+
+    if (expectedPlatform != null &&
+        recordPlatform.isNotEmpty &&
+        recordPlatform != expectedPlatform &&
+        recordPlatform != 'all') {
+      return false;
+    }
+
+    return _isCompatibleDownloadUrl(
+      expectedPlatform: expectedPlatform,
+      url: downloadUrl,
+    );
+  }
+
+  bool _isCompatibleDownloadUrl({
+    required String? expectedPlatform,
+    required String url,
+  }) {
+    if (expectedPlatform == null) {
+      return true;
+    }
+
+    final normalized = url.trim().toLowerCase();
+
+    switch (expectedPlatform) {
+      case 'android':
+        return normalized.endsWith('.apk') ||
+            normalized.startsWith('market://') ||
+            normalized.contains('play.google.com');
+      case 'windows':
+        return normalized.endsWith('.exe') ||
+            normalized.endsWith('.zip') ||
+            normalized.endsWith('.appinstaller') ||
+            normalized.endsWith('.msix');
+      default:
+        return true;
+    }
   }
 
   bool _shouldUseWindowsAppInstaller(String url) {

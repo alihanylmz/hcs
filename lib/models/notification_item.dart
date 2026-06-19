@@ -1,5 +1,5 @@
 class NotificationItem {
-  final int id;
+  final String id;
   final String userId;
   final String title;
   final String message;
@@ -19,11 +19,14 @@ class NotificationItem {
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
     return NotificationItem(
-      id: json['id'] as int,
+      id: json['id'].toString(),
       userId: json['user_id'] as String,
       title: json['title'] as String,
       message: json['message'] as String,
-      data: json['data'] as Map<String, dynamic>?,
+      data:
+          json['data'] is Map
+              ? Map<String, dynamic>.from(json['data'] as Map)
+              : null,
       isRead: json['is_read'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
     );
@@ -40,4 +43,3 @@ class NotificationItem {
     };
   }
 }
-

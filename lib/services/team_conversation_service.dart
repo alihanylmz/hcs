@@ -3,12 +3,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/team_message.dart';
 import '../models/team_thread.dart';
+import 'notification_service.dart';
 
 class TeamConversationService {
   TeamConversationService({SupabaseClient? client})
     : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
+  final NotificationService _notificationService = NotificationService();
 
   String? get _currentUserId => _client.auth.currentUser?.id;
 
@@ -492,6 +494,8 @@ class TeamConversationService {
       return;
     }
 
+    final thread = await getThreadById(threadId);
+
     final inserted =
         await _client
             .from('team_messages')
@@ -524,6 +528,16 @@ class TeamConversationService {
                 )
                 .toList(),
           );
+
+      await _notificationService.notifyTeamMentioned(
+        teamId: teamId,
+        threadId: threadId,
+        threadTitle: thread?.title ?? 'Takim Konusmasi',
+        mentionedUserIds: uniqueMentions.toList(),
+        messagePreview: trimmedBody,
+        cardId: thread?.cardId,
+        linkedTicketId: thread?.ticketId,
+      );
     }
 
     await markThreadRead(threadId, lastReadMessageId: messageId);

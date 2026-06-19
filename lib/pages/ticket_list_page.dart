@@ -3,12 +3,17 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:intl/intl.dart';
 
+import '../models/fault_record.dart';
 import '../main.dart';
+import '../pages/fault_record_detail_page.dart';
 import '../services/general_report_service.dart';
+import '../services/fault_record_service.dart';
 import '../services/notification_service.dart';
+import '../services/notification_navigation_service.dart';
 import '../pages/archived_tickets_page.dart';
 import '../pages/dashboard_page.dart';
 import '../pages/edit_ticket_page.dart';
+import '../pages/fault_card_create_page.dart';
 import '../pages/login_page.dart';
 import '../pages/new_ticket_page.dart';
 import '../pages/stock_overview_page.dart';
@@ -94,6 +99,7 @@ class _TicketActionButton extends StatelessWidget {
 class _TicketListPageState extends State<TicketListPage> {
   late Future<List<Map<String, dynamic>>> _ticketsFuture;
   final DateFormat _shortDateFormatter = DateFormat('dd.MM.yyyy');
+  final FaultRecordService _faultRecordService = FaultRecordService();
 
   final TextEditingController _searchController = TextEditingController();
   String _searchText = '';
@@ -211,15 +217,13 @@ class _TicketListPageState extends State<TicketListPage> {
                 child: NotificationsDropdown(
                   width: panelWidth,
                   onClose: _closeNotificationsDropdown,
-                  onOpenTicket: (ticketId) {
-                    Navigator.of(context)
-                        .push(
-                          MaterialPageRoute(
-                            builder:
-                                (_) => TicketDetailPage(ticketId: ticketId),
-                          ),
-                        )
-                        .then((_) => _refresh());
+                  onNavigate: (data) async {
+                    await NotificationNavigationService.openFromData(
+                      Navigator.of(context),
+                      data,
+                    );
+                    if (!mounted) return;
+                    _refresh();
                   },
                 ),
               ),
@@ -402,7 +406,17 @@ class _TicketListPageState extends State<TicketListPage> {
         .limit(_pageLimit);
 
     final List data = response as List;
-    return data.cast<Map<String, dynamic>>();
+    final tickets =
+        data.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+    final summaries = await _faultRecordService.getTicketLinkSummaries(
+      tickets.map((ticket) => ticket['id'].toString()).toList(),
+    );
+
+    for (final ticket in tickets) {
+      ticket['_fault_link_summary'] = summaries[ticket['id'].toString()];
+    }
+
+    return tickets;
   }
 
   Future<void> _refresh() async {
@@ -410,6 +424,44 @@ class _TicketListPageState extends State<TicketListPage> {
     setState(() {
       _ticketsFuture = _fetchTickets();
     });
+  }
+
+  FaultTicketLinkSummary? _faultSummaryOf(Map<String, dynamic> ticket) {
+    return ticket['_fault_link_summary'] as FaultTicketLinkSummary?;
+  }
+
+  bool _shouldRoutePrimaryDetailToFault(Map<String, dynamic> ticket) {
+    final summary = _faultSummaryOf(ticket);
+    final status = ticket['status']?.toString() ?? '';
+    return summary?.hasLinkedFaults == true &&
+        (status == 'done' || status == 'archived');
+  }
+
+  Future<void> _openTicketDetailPage(Map<String, dynamic> ticket) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TicketDetailPage(ticketId: ticket['id'].toString()),
+      ),
+    );
+    await _refresh();
+  }
+
+  Future<void> _openPrimaryDetail(Map<String, dynamic> ticket) async {
+    final summary = _faultSummaryOf(ticket);
+    if (_shouldRoutePrimaryDetailToFault(ticket) &&
+        summary?.latestFaultId != null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder:
+              (_) =>
+                  FaultRecordDetailPage(faultRecordId: summary!.latestFaultId!),
+        ),
+      );
+      await _refresh();
+      return;
+    }
+
+    await _openTicketDetailPage(ticket);
   }
 
   void _invalidateFilteredCache() {
@@ -1270,26 +1322,26 @@ class _TicketListPageState extends State<TicketListPage> {
     Map<String, dynamic> ticket, {
     required bool isWide,
   }) {
+    final routedToFault = _shouldRoutePrimaryDetailToFault(ticket);
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       alignment: isWide ? WrapAlignment.end : WrapAlignment.start,
       children: [
         _TicketActionButton(
-          label: 'Detay',
-          icon: Icons.visibility_outlined,
-          onTap:
-              () => Navigator.of(context)
-                  .push(
-                    MaterialPageRoute(
-                      builder:
-                          (_) => TicketDetailPage(
-                            ticketId: ticket['id'].toString(),
-                          ),
-                    ),
-                  )
-                  .then((_) => _refresh()),
+          label: routedToFault ? 'Ariza Detay' : 'Detay',
+          icon:
+              routedToFault
+                  ? Icons.bug_report_outlined
+                  : Icons.visibility_outlined,
+          onTap: () => _openPrimaryDetail(ticket),
         ),
+        if (routedToFault)
+          _TicketActionButton(
+            label: 'Is Emri',
+            icon: Icons.assignment_outlined,
+            onTap: () => _openTicketDetailPage(ticket),
+          ),
         _TicketActionButton(
           label: 'PDF',
           icon: Icons.picture_as_pdf_outlined,
@@ -1855,6 +1907,7 @@ class _TicketListPageState extends State<TicketListPage> {
       );
     }
 
+    final faultSummary = _faultSummaryOf(ticket);
     final metaWrap = Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -1885,6 +1938,18 @@ class _TicketListPageState extends State<TicketListPage> {
             icon: Icons.precision_manufacturing_outlined,
             text: deviceBrand,
             color: AppColors.corporateYellow,
+          ),
+        if (faultSummary?.hasLinkedFaults == true)
+          _buildMetaChipModern(
+            label:
+                (status == 'done' || status == 'archived')
+                    ? 'Ariza takibi var'
+                    : '${faultSummary!.faultCount} ariza',
+            color:
+                (status == 'done' || status == 'archived')
+                    ? Colors.deepOrange
+                    : AppColors.corporateRed,
+            icon: Icons.report_problem_outlined,
           ),
       ],
     );
@@ -2059,7 +2124,7 @@ class _TicketListPageState extends State<TicketListPage> {
                   backgroundColor: Colors.grey,
                   child: Icon(Icons.build, color: Colors.white),
                 ),
-                title: const Text('Diğer / Arıza'),
+                title: const Text('Diger Is Emri'),
                 onTap: () {
                   Navigator.pop(ctx);
                   Navigator.of(context)
@@ -2067,6 +2132,23 @@ class _TicketListPageState extends State<TicketListPage> {
                         MaterialPageRoute(
                           builder:
                               (_) => const NewTicketPage(deviceType: 'other'),
+                        ),
+                      )
+                      .then((_) => _refresh());
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.redAccent,
+                  child: Icon(Icons.bug_report, color: Colors.white),
+                ),
+                title: const Text('Ariza Kaydi Ac'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(
+                          builder: (_) => const FaultCardCreatePage(),
                         ),
                       )
                       .then((_) => _refresh());
@@ -2176,13 +2258,7 @@ class _TicketListPageState extends State<TicketListPage> {
       floatingActionButton:
           _canCreateTickets
               ? FloatingActionButton.extended(
-                onPressed: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const NewTicketPage()),
-                  );
-                  _refresh();
-                },
+                onPressed: () => _showDeviceSelection(context),
                 label: const Text('Yeni İş Emri'),
                 icon: const Icon(Icons.add),
                 backgroundColor:

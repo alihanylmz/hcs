@@ -29,31 +29,39 @@ class UiCard extends StatelessWidget {
     final surface = switch (tone) {
       UiCardTone.base => theme.cardColor,
       UiCardTone.muted =>
-        isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceSoft,
+        isDark ? const Color(0xFF13203A) : const Color(0xFFF8FBFF),
       UiCardTone.accent =>
-        isDark ? const Color(0xFF183149) : AppColors.surfaceAccent,
+        isDark ? const Color(0xFF0F2140) : const Color(0xFFEEF4FF),
       UiCardTone.success =>
-        isDark ? const Color(0xFF14362E) : const Color(0xFFF1FBF6),
+        isDark ? const Color(0xFF082D24) : const Color(0xFFF0FDF4),
       UiCardTone.danger =>
-        isDark ? const Color(0xFF3A2024) : const Color(0xFFFFF4F3),
+        isDark ? const Color(0xFF33161C) : const Color(0xFFFEF2F2),
     };
 
     final border = switch (tone) {
       UiCardTone.base => isDark ? AppColors.borderDark : AppColors.borderSubtle,
       UiCardTone.muted =>
-        isDark ? AppColors.borderDark : AppColors.borderSubtle,
+        isDark ? const Color(0xFF243657) : const Color(0xFFDCE7F7),
       UiCardTone.accent =>
         isDark
-            ? AppColors.corporateBlue.withOpacity(0.26)
-            : AppColors.corporateBlue.withOpacity(0.14),
+            ? AppColors.corporateBlue.withValues(alpha: 0.34)
+            : AppColors.corporateBlue.withValues(alpha: 0.18),
       UiCardTone.success =>
         isDark
-            ? AppColors.statusDone.withOpacity(0.32)
-            : AppColors.statusDone.withOpacity(0.18),
+            ? AppColors.statusDone.withValues(alpha: 0.34)
+            : AppColors.statusDone.withValues(alpha: 0.20),
       UiCardTone.danger =>
         isDark
-            ? AppColors.corporateRed.withOpacity(0.36)
-            : AppColors.corporateRed.withOpacity(0.18),
+            ? AppColors.corporateRed.withValues(alpha: 0.34)
+            : AppColors.corporateRed.withValues(alpha: 0.20),
+    };
+
+    final shadowColor = switch (tone) {
+      UiCardTone.base => Colors.black,
+      UiCardTone.muted => AppColors.corporateNavy,
+      UiCardTone.accent => AppColors.corporateBlue,
+      UiCardTone.success => AppColors.statusDone,
+      UiCardTone.danger => AppColors.corporateRed,
     };
 
     return Material(
@@ -65,9 +73,9 @@ class UiCard extends StatelessWidget {
           border: Border.all(color: border),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.10 : 0.035),
-              blurRadius: isDark ? 10 : 8,
-              offset: const Offset(0, 3),
+              color: shadowColor.withValues(alpha: isDark ? 0.18 : 0.08),
+              blurRadius: isDark ? 28 : 22,
+              offset: const Offset(0, 14),
             ),
           ],
         ),

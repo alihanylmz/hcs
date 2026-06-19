@@ -1,4 +1,4 @@
-﻿name: Deploy Supabase Function
+name: Deploy Supabase Functions
 
 on:
   workflow_dispatch:
@@ -8,14 +8,21 @@ on:
       - master
     paths:
       - "supabase/functions/approve-user/**"
+      - "supabase/functions/send-notification/**"
       - ".github/workflows/deploy_supabase.yml"
 
 jobs:
-  deploy-approve-user:
+  deploy-functions:
     runs-on: ubuntu-latest
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    strategy:
+      fail-fast: false
+      matrix:
+        function_name:
+          - approve-user
+          - send-notification
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,5 +43,5 @@ jobs:
         with:
           version: latest
 
-      - name: Deploy approve-user
-        run: supabase functions deploy approve-user --project-ref "$SUPABASE_PROJECT_REF" --use-api
+      - name: Deploy ${{ matrix.function_name }}
+        run: supabase functions deploy "${{ matrix.function_name }}" --project-ref "$SUPABASE_PROJECT_REF" --use-api

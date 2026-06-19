@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/fault_record.dart';
+import '../models/ticket_backup_record.dart';
+import '../pages/fault_record_detail_page.dart';
 import '../services/pdf_export_service.dart';
+import '../services/fault_record_service.dart';
 import '../services/permission_service.dart';
+import '../services/ticket_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/ticket_backup_request_dialog.dart';
 import '../widgets/sidebar/app_layout.dart';
 import '../widgets/ui/ui.dart';
 import 'edit_ticket_page.dart';
@@ -23,6 +29,8 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
   late Future<List<Map<String, dynamic>>> _ticketsFuture;
 
   final TextEditingController _searchController = TextEditingController();
+  final TicketService _ticketService = TicketService();
+  final FaultRecordService _faultRecordService = FaultRecordService();
   final UserService _userService = UserService();
 
   String _searchText = '';
@@ -85,13 +93,39 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
         .order('created_at', ascending: false);
 
     final List data = response as List;
-    return data.cast<Map<String, dynamic>>();
+    final tickets =
+        data.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+    final ticketIds = tickets.map((ticket) => ticket['id'].toString()).toList();
+    final backupStates = await _ticketService.getBackupStatusForTickets(
+      ticketIds,
+    );
+    final faultSummaries = await _faultRecordService.getTicketLinkSummaries(
+      ticketIds,
+    );
+
+    for (final ticket in tickets) {
+      ticket['_backup_status'] = backupStates[ticket['id'].toString()];
+      ticket['_fault_link_summary'] = faultSummaries[ticket['id'].toString()];
+    }
+
+    return tickets;
   }
 
   Future<void> _refresh() async {
     setState(() {
       _ticketsFuture = _fetchArchivedTickets();
     });
+  }
+
+  FaultTicketLinkSummary? _faultSummaryOf(Map<String, dynamic> ticket) {
+    return ticket['_fault_link_summary'] as FaultTicketLinkSummary?;
+  }
+
+  bool _shouldRoutePrimaryDetailToFault(Map<String, dynamic> ticket) {
+    final summary = _faultSummaryOf(ticket);
+    final status = ticket['status']?.toString() ?? '';
+    return summary?.hasLinkedFaults == true &&
+        (status == 'done' || status == 'archived');
   }
 
   bool get _canManageTickets => PermissionService.roleHasPermission(
@@ -136,11 +170,31 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
     await _refresh();
   }
 
-  Future<void> _openDetail(String ticketId) async {
+  Future<void> _openTicketDetail(Map<String, dynamic> ticket) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => TicketDetailPage(ticketId: ticketId)),
+      MaterialPageRoute(
+        builder: (_) => TicketDetailPage(ticketId: ticket['id'].toString()),
+      ),
     );
     await _refresh();
+  }
+
+  Future<void> _openDetail(Map<String, dynamic> ticket) async {
+    final summary = _faultSummaryOf(ticket);
+    if (_shouldRoutePrimaryDetailToFault(ticket) &&
+        summary?.latestFaultId != null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder:
+              (_) =>
+                  FaultRecordDetailPage(faultRecordId: summary!.latestFaultId!),
+        ),
+      );
+      await _refresh();
+      return;
+    }
+
+    await _openTicketDetail(ticket);
   }
 
   Future<void> _editTicket(String ticketId) async {
@@ -167,6 +221,34 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
         backgroundColor: isError ? AppColors.corporateRed : null,
       ),
     );
+  }
+
+  Future<void> _takeBackup(Map<String, dynamic> ticket) async {
+    final ticketId = ticket['id'].toString();
+    final backupSnapshot = ticket['_backup_status'] as TicketBackupSnapshot?;
+    final request = await showTicketBackupRequestDialog(
+      context,
+      suggestedFileName: _buildBackupFileName(ticket),
+      latestBackup: backupSnapshot?.latestBackup,
+      currentUserName: _userName,
+    );
+    if (!mounted || request == null) return;
+
+    try {
+      final outputPath = await _ticketService.exportTicketBackup(
+        ticketId: ticketId,
+        suggestedFileName: _buildBackupFileName(ticket),
+        requestedBy: request.requestedBy,
+        requestedSavePath: request.requestedSavePath,
+        requestedAt: request.requestedAt,
+      );
+
+      if (!mounted || outputPath == null) return;
+      _showSnack('Yedek kaydedildi: $outputPath');
+      await _refresh();
+    } catch (e) {
+      _showSnack('Yedek alinamadi: $e', isError: true);
+    }
   }
 
   String _statusLabel(String status) {
@@ -271,6 +353,61 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
     }).length;
   }
 
+  int _backedUpCount(List<Map<String, dynamic>> tickets) {
+    return tickets.where((ticket) {
+      final snapshot = ticket['_backup_status'] as TicketBackupSnapshot?;
+      return snapshot?.state != TicketBackupIndicatorState.none;
+    }).length;
+  }
+
+  int _staleBackupCount(List<Map<String, dynamic>> tickets) {
+    return tickets.where((ticket) {
+      final snapshot = ticket['_backup_status'] as TicketBackupSnapshot?;
+      return snapshot?.state == TicketBackupIndicatorState.staleAfterFault;
+    }).length;
+  }
+
+  String _buildBackupFileName(Map<String, dynamic> ticket) {
+    final jobCode = (ticket['job_code'] as String? ?? 'is').trim();
+    final title = (ticket['title'] as String? ?? 'yedek').trim();
+    final datePart = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final rawName = '${jobCode}_${title}_yedek_$datePart';
+    return rawName
+        .replaceAll(RegExp(r'\s+'), '_')
+        .replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+  }
+
+  Color _backupStateColor(TicketBackupIndicatorState state) {
+    switch (state) {
+      case TicketBackupIndicatorState.staleAfterFault:
+        return AppColors.corporateBlue;
+      case TicketBackupIndicatorState.backedUp:
+        return AppColors.statusDone;
+      case TicketBackupIndicatorState.none:
+        return AppColors.textLight;
+    }
+  }
+
+  String _backupStateLabel(TicketBackupIndicatorState state) {
+    switch (state) {
+      case TicketBackupIndicatorState.staleAfterFault:
+        return 'Ariza sonrasi guncellenmeli';
+      case TicketBackupIndicatorState.backedUp:
+        return 'Yedek alindi';
+      case TicketBackupIndicatorState.none:
+        return 'Yedek yok';
+    }
+  }
+
+  Widget _buildBackupChip(TicketBackupSnapshot snapshot) {
+    final color = _backupStateColor(snapshot.state);
+    return _buildInfoChip(
+      icon: Icons.check_circle_rounded,
+      label: _backupStateLabel(snapshot.state),
+      color: color,
+    );
+  }
+
   Widget _buildSummaryCard({
     required String label,
     required String value,
@@ -363,6 +500,8 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
     final highPriorityCount =
         tickets.where((ticket) => ticket['priority'] == 'high').length;
     final recentCount = _recentArchiveCount(tickets);
+    final backedUpCount = _backedUpCount(tickets);
+    final staleCount = _staleBackupCount(tickets);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
@@ -427,6 +566,24 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
                       value: filteredTickets.length.toString(),
                       icon: Icons.filter_alt_outlined,
                       color: AppColors.statusDone,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 220,
+                    child: _buildSummaryCard(
+                      label: 'Yedegi alinan',
+                      value: backedUpCount.toString(),
+                      icon: Icons.check_circle_outline,
+                      color: AppColors.statusDone,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 220,
+                    child: _buildSummaryCard(
+                      label: 'Ariza sonrasi',
+                      value: staleCount.toString(),
+                      icon: Icons.bug_report_outlined,
+                      color: AppColors.corporateBlue,
                     ),
                   ),
                 ],
@@ -522,6 +679,9 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
     final archivedDate = _formatDate(ticket['archived_at'] as String?);
     final priorityColor = _priorityColor(priority);
     final id = ticket['id'].toString();
+    final backupSnapshot = ticket['_backup_status'] as TicketBackupSnapshot?;
+    final faultSummary = _faultSummaryOf(ticket);
+    final latestBackup = backupSnapshot?.latestBackup;
 
     final meta = Wrap(
       spacing: 8,
@@ -547,6 +707,14 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
           label: 'Arsiv: $archivedDate',
           color: AppColors.statusArchived,
         ),
+        if (faultSummary?.hasLinkedFaults == true)
+          _buildInfoChip(
+            icon: Icons.report_problem_outlined,
+            label: 'Ariza takibi var',
+            color: Colors.deepOrange,
+          ),
+        if (backupSnapshot != null && backupSnapshot.hasBackup)
+          _buildBackupChip(backupSnapshot),
       ],
     );
 
@@ -640,7 +808,7 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
     );
 
     final sidePanel = Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -676,61 +844,193 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        PopupMenuButton<String>(
-          tooltip: 'Islemler',
-          onSelected: (value) {
-            switch (value) {
-              case 'detail':
-                _openDetail(id);
-                break;
-              case 'edit':
-                _editTicket(id);
-                break;
-              case 'delete':
-                _deleteTicket(id);
-                break;
-            }
-          },
-          itemBuilder: (context) {
-            final items = <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(
-                value: 'detail',
-                child: Text('Detayi ac'),
-              ),
-            ];
-
-            if (_canManageTickets) {
-              items.add(
-                const PopupMenuItem<String>(
-                  value: 'edit',
-                  child: Text('Duzenle'),
-                ),
-              );
-              items.add(
-                const PopupMenuItem<String>(
-                  value: 'delete',
-                  child: Text('Sil'),
-                ),
-              );
-            }
-
-            return items;
-          },
-          child: Container(
-            width: 42,
-            height: 42,
+        if (backupSnapshot != null && backupSnapshot.hasBackup) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color:
-                  isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceSoft,
-              borderRadius: BorderRadius.circular(14),
+              color: _backupStateColor(backupSnapshot.state).withOpacity(0.10),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
+                color: _backupStateColor(
+                  backupSnapshot.state,
+                ).withOpacity(0.18),
               ),
             ),
-            child: Icon(
-              Icons.more_horiz_rounded,
-              color: isDark ? AppColors.textOnDark : AppColors.textDark,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle_rounded,
+                      size: 18,
+                      color: _backupStateColor(backupSnapshot.state),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _backupStateLabel(backupSnapshot.state),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: _backupStateColor(backupSnapshot.state),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  backupSnapshot.latestBackup?.backupPath ?? '-',
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.4,
+                    color:
+                        isDark
+                            ? AppColors.textOnDarkMuted
+                            : AppColors.textLight,
+                  ),
+                ),
+                if (latestBackup?.requestedBy?.trim().isNotEmpty == true) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Talep eden: ${latestBackup!.requestedBy}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.4,
+                      color:
+                          isDark
+                              ? AppColors.textOnDarkMuted
+                              : AppColors.textLight,
+                    ),
+                  ),
+                ],
+                if (latestBackup?.requestedAt != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Talep zamani: ${DateFormat('dd.MM.yyyy HH:mm').format(latestBackup!.requestedAt!.toLocal())}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.4,
+                      color:
+                          isDark
+                              ? AppColors.textOnDarkMuted
+                              : AppColors.textLight,
+                    ),
+                  ),
+                ],
+                if (latestBackup?.savedAt != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Kaydedildi: ${DateFormat('dd.MM.yyyy HH:mm').format(latestBackup!.savedAt!.toLocal())}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.4,
+                      color:
+                          isDark
+                              ? AppColors.textOnDarkMuted
+                              : AppColors.textLight,
+                    ),
+                  ),
+                ],
+                if (latestBackup?.requestedSavePath?.trim().isNotEmpty ==
+                    true) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Kayit yolu notu: ${latestBackup!.requestedSavePath}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.4,
+                      color:
+                          isDark
+                              ? AppColors.textOnDarkMuted
+                              : AppColors.textLight,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: () => _takeBackup(ticket),
+          icon: Icon(
+            backupSnapshot?.hasBackup == true
+                ? Icons.system_update_alt_rounded
+                : Icons.backup_outlined,
+          ),
+          label: Text(
+            backupSnapshot?.hasBackup == true ? 'Yedegi yenile' : 'Yedek al',
+          ),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: PopupMenuButton<String>(
+            tooltip: 'Islemler',
+            onSelected: (value) {
+              switch (value) {
+                case 'detail':
+                  _openDetail(ticket);
+                  break;
+                case 'edit':
+                  _editTicket(id);
+                  break;
+                case 'delete':
+                  _deleteTicket(id);
+                  break;
+              }
+            },
+            itemBuilder: (context) {
+              final items = <PopupMenuEntry<String>>[
+                PopupMenuItem<String>(
+                  value: 'detail',
+                  child: Text(
+                    _shouldRoutePrimaryDetailToFault(ticket)
+                        ? 'Ariza detayini ac'
+                        : 'Detayi ac',
+                  ),
+                ),
+              ];
+
+              if (_canManageTickets) {
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: 'edit',
+                    child: Text('Duzenle'),
+                  ),
+                );
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Text('Sil'),
+                  ),
+                );
+              }
+
+              return items;
+            },
+            child: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color:
+                    isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceSoft,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
+                ),
+              ),
+              child: Icon(
+                Icons.more_horiz_rounded,
+                color: isDark ? AppColors.textOnDark : AppColors.textDark,
+              ),
             ),
           ),
         ),
@@ -738,7 +1038,7 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
     );
 
     return UiCard(
-      onTap: () => _openDetail(id),
+      onTap: () => _openDetail(ticket),
       child:
           isWide
               ? Row(
@@ -746,7 +1046,7 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
                 children: [
                   Expanded(child: details),
                   const SizedBox(width: 18),
-                  SizedBox(width: 140, child: sidePanel),
+                  SizedBox(width: 220, child: sidePanel),
                 ],
               )
               : Column(

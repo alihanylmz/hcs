@@ -50,6 +50,57 @@ class TicketRepository {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  Future<List<Map<String, dynamic>>> getNotesByTypesForTickets(
+    List<String> ticketIds,
+    List<String> noteTypes,
+  ) async {
+    if (ticketIds.isEmpty || noteTypes.isEmpty) {
+      return const <Map<String, dynamic>>[];
+    }
+
+    final response = await _supabase
+        .from('ticket_notes')
+        .select(
+          'id, ticket_id, note, note_type, created_at, profiles(full_name)',
+        )
+        .inFilter('ticket_id', ticketIds.map(_resolveId).toList())
+        .inFilter('note_type', noteTypes)
+        .order('created_at', ascending: true);
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<List<Map<String, dynamic>>> searchTicketsForFaultLink(
+    String query, {
+    int limit = 20,
+  }) async {
+    final trimmedQuery = query.trim();
+    dynamic request = _supabase.from('tickets').select('''
+          id,
+          job_code,
+          title,
+          status,
+          created_at
+        ''');
+
+    if (trimmedQuery.isNotEmpty) {
+      final sanitizedQuery = trimmedQuery
+          .replaceAll('%', r'\%')
+          .replaceAll(',', ' ')
+          .replaceAll('(', ' ')
+          .replaceAll(')', ' ');
+      request = request.or(
+        'job_code.ilike.%$sanitizedQuery%,title.ilike.%$sanitizedQuery%',
+      );
+    }
+
+    final response = await request
+        .order('created_at', ascending: false)
+        .limit(limit);
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+
   Future<void> addNote({
     required String ticketId,
     required String note,

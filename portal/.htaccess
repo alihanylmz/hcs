@@ -1,0 +1,14 @@
+AddType image/svg+xml .svg .svgz
+AddEncoding gzip .svgz
+AddDefaultCharset UTF-8
+AddType "text/html; charset=UTF-8" .html .htm
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|htm)$">
+    Header set Content-Type "text/html; charset=UTF-8"
+  </FilesMatch>
+
+  <FilesMatch "\.(svg|svgz)$">
+    Header set Cache-Control "public, max-age=604800"
+  </FilesMatch>
+</IfModule>

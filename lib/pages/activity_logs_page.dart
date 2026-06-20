@@ -551,6 +551,8 @@ class _ActivityTimelineTile extends StatelessWidget {
                   children: [
                     Text(
                       actor.isEmpty ? 'Sistem' : actor,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.textDark,
                         fontSize: 15,
@@ -559,6 +561,8 @@ class _ActivityTimelineTile extends StatelessWidget {
                     ),
                     Text(
                       action.isEmpty ? 'işlem yaptı' : action,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.textDark,
                         fontSize: 15,
@@ -580,6 +584,8 @@ class _ActivityTimelineTile extends StatelessWidget {
                     ),
                     child: Text(
                       note,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.textDark,
                         fontWeight: FontWeight.w600,

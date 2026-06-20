@@ -158,6 +158,30 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     return Theme.of(context).colorScheme.primary;
   }
 
+  bool _isProjectTicket(Map<String, dynamic> ticket) {
+    return '${ticket['job_type'] ?? 'service'}' == 'project';
+  }
+
+  String _projectStatusLabel(String? status) {
+    switch (status) {
+      case 'planned':
+        return 'Planlandi';
+      case 'in_progress':
+        return 'Devam ediyor';
+      case 'waiting':
+        return 'Beklemede';
+      case 'testing':
+        return 'Test asamasinda';
+      case 'missing':
+        return 'Eksik bekliyor';
+      case 'done':
+        return 'Tamamlandi';
+      case 'cancelled':
+        return 'Iptal edildi';
+    }
+    return status == null || status.isEmpty ? 'Planlandi' : status;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1457,11 +1481,19 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     final secondaryText = _secondaryTextColor(context);
     final borderColor = _borderColor(context);
     final createdAt = Formatters.date(ticket['created_at']);
+    final isProject = _isProjectTicket(ticket);
     final plannedLabel =
-        plannedDate == null
+        isProject
+            ? Formatters.date(ticket['project_due_date'] ?? plannedDate)
+            : plannedDate == null
             ? 'Planlama bekleniyor'
             : Formatters.date(plannedDate);
-    final ownerLabel = _resolveTechnicianLabel(ticket);
+    final ownerLabel =
+        isProject
+            ? ticket['responsible_user_id'] == null
+                ? 'Atanmadi'
+                : 'Sorumlu atanmis'
+            : _resolveTechnicianLabel(ticket);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
@@ -1498,7 +1530,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'IS EMRI OZETI',
+                              isProject ? 'PROJE OZETI' : 'IS EMRI OZETI',
                               style: theme.textTheme.labelLarge?.copyWith(
                                 color: secondaryText,
                                 letterSpacing: 1.1,
@@ -1527,7 +1559,9 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              TicketStatus.descriptionOf(status),
+                              isProject
+                                  ? 'Uzun sureli proje takip isi.'
+                                  : TicketStatus.descriptionOf(status),
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: secondaryText,
                               ),
@@ -1544,7 +1578,11 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                         alignment: WrapAlignment.end,
                         children: [
                           _buildStatusChip(
-                            TicketStatus.labelOf(status),
+                            isProject
+                                ? _projectStatusLabel(
+                                  ticket['project_status'] as String?,
+                                )
+                                : TicketStatus.labelOf(status),
                             _getStatusColor(status),
                           ),
                           _buildPriorityBadge(
@@ -1568,7 +1606,12 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     ),
                     _buildHeaderInfoPanel(
                       title: 'Son durum',
-                      value: TicketStatus.labelOf(status),
+                      value:
+                          isProject
+                              ? _projectStatusLabel(
+                                ticket['project_status'] as String?,
+                              )
+                              : TicketStatus.labelOf(status),
                       icon: Icons.track_changes_outlined,
                     ),
                     _buildHeaderInfoPanel(
@@ -2852,6 +2895,129 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     );
   }
 
+  Widget _buildProjectDetailTab(
+    Map<String, dynamic> ticket,
+    Map<String, dynamic> customer,
+  ) {
+    final assignedUsers =
+        (ticket['assigned_user_ids'] as List?)?.whereType<String>().toList() ??
+        const <String>[];
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1000),
+          child: Column(
+            children: [
+              _buildModernContentCard(
+                title: 'Proje Bilgileri',
+                icon: Icons.account_tree_outlined,
+                children: [
+                  Wrap(
+                    spacing: 20,
+                    runSpacing: 10,
+                    children: [
+                      _buildInfoRow(
+                        'Proje tipi',
+                        ticket['project_type'] as String?,
+                        isInline: true,
+                      ),
+                      _buildInfoRow(
+                        'Proje durumu',
+                        _projectStatusLabel(
+                          ticket['project_status'] as String?,
+                        ),
+                        isInline: true,
+                      ),
+                      _buildInfoRow(
+                        'Musteri',
+                        customer['name'] as String?,
+                        isInline: true,
+                      ),
+                      _buildInfoRow(
+                        'Lokasyon',
+                        ticket['project_location'] as String?,
+                        isInline: true,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 20,
+                    runSpacing: 10,
+                    children: [
+                      _buildInfoRow(
+                        'Baslangic',
+                        Formatters.date(ticket['project_start_date']),
+                        isInline: true,
+                      ),
+                      _buildInfoRow(
+                        'Planlanan bitis',
+                        Formatters.date(ticket['project_due_date']),
+                        isInline: true,
+                      ),
+                      _buildInfoRow(
+                        'Sorumlu',
+                        ticket['responsible_user_id'] == null
+                            ? 'Atanmadi'
+                            : 'Sorumlu atanmis',
+                        isInline: true,
+                      ),
+                      _buildInfoRow(
+                        'Ekip',
+                        assignedUsers.isEmpty
+                            ? 'Atanan ekip yok'
+                            : '${assignedUsers.length} kisi atanmis',
+                        isInline: true,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildModernContentCard(
+                title: 'Proje Aciklamasi',
+                icon: Icons.notes_outlined,
+                children: [
+                  Text(
+                    Formatters.safeText(ticket['description']).isEmpty
+                        ? 'Proje aciklamasi girilmemis.'
+                        : Formatters.safeText(ticket['description']),
+                    style: TextStyle(
+                      color: _primaryTextColor(context),
+                      height: 1.55,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildModernContentCard(
+                title: 'Ic Notlar',
+                icon: Icons.lock_outline,
+                children: [
+                  Text(
+                    Formatters.safeText(ticket['internal_notes']).isEmpty
+                        ? 'Ic not bulunmuyor.'
+                        : Formatters.safeText(ticket['internal_notes']),
+                    style: TextStyle(
+                      color: _primaryTextColor(context),
+                      height: 1.55,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildPartsSection(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPartsSection() {
     if (_partsLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -4015,6 +4181,164 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     );
   }
 
+  Widget _buildProjectSummaryTab(
+    Map<String, dynamic> ticket,
+    Map<String, dynamic> customer,
+    String priority,
+  ) {
+    final latestNote = _latestNoteRecord();
+    final latestStructuredNote = StructuredTicketNote.fromRaw(
+      latestNote?['note'] as String? ?? '',
+    );
+    final latestAuthor =
+        ((latestNote?['profiles'] as Map<String, dynamic>?)?['full_name']
+            as String?) ??
+        'Henuz kayit yok';
+    final latestDate = latestNote?['created_at'] as String?;
+    final projectStatus = _projectStatusLabel(
+      ticket['project_status'] as String?,
+    );
+    final assignedUsers =
+        (ticket['assigned_user_ids'] as List?)?.whereType<String>().toList() ??
+        const <String>[];
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1000),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _buildSummaryMetricCard(
+                    icon: Icons.business_outlined,
+                    label: 'Musteri',
+                    value: (customer['name'] as String?) ?? 'Musteri yok',
+                    color: AppColors.corporateNavy,
+                  ),
+                  _buildSummaryMetricCard(
+                    icon: Icons.account_tree_outlined,
+                    label: 'Proje tipi',
+                    value:
+                        (ticket['project_type'] as String?) ?? 'Proje tipi yok',
+                    color: Colors.indigo,
+                  ),
+                  _buildSummaryMetricCard(
+                    icon: Icons.flag_outlined,
+                    label: 'Proje durumu',
+                    value: projectStatus,
+                    color: Colors.teal,
+                  ),
+                  _buildSummaryMetricCard(
+                    icon: Icons.groups_outlined,
+                    label: 'Ekip',
+                    value:
+                        assignedUsers.isEmpty
+                            ? 'Atanan ekip yok'
+                            : '${assignedUsers.length} kisi',
+                    color: Colors.deepPurple,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildModernContentCard(
+                title: 'Proje Ozeti',
+                icon: Icons.assignment_outlined,
+                children: [
+                  Text(
+                    Formatters.safeText(ticket['description']).isEmpty
+                        ? 'Proje aciklamasi girilmemis.'
+                        : Formatters.safeText(ticket['description']),
+                    style: TextStyle(
+                      color: _primaryTextColor(context),
+                      height: 1.55,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildStatusChip(projectStatus, _getStatusColor('open')),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.corporateYellow.withOpacity(0.14),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          _priorityLabels[priority] ?? priority,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildModernContentCard(
+                title: 'Proje Takip Ozeti',
+                icon: Icons.route_outlined,
+                children: [
+                  _buildInfoRow(
+                    'Son kayit',
+                    latestStructuredNote.hasAnyContent
+                        ? latestStructuredNote.summary
+                        : 'Henuz proje gunlugu kaydi eklenmemis.',
+                    isMultiLine: true,
+                  ),
+                  _buildInfoRow('Son guncelleyen', latestAuthor),
+                  _buildInfoRow('Son guncelleme', Formatters.date(latestDate)),
+                  _buildInfoRow(
+                    'Baslangic',
+                    Formatters.date(ticket['project_start_date']),
+                  ),
+                  _buildInfoRow(
+                    'Planlanan bitis',
+                    Formatters.date(ticket['project_due_date']),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildDetailDisclosure(
+                title: 'Proje detaylarini goster',
+                icon: Icons.unfold_more_outlined,
+                children: [
+                  _buildInfoRow(
+                    'Lokasyon',
+                    ticket['project_location'] as String?,
+                  ),
+                  _buildInfoRow(
+                    'Ic not',
+                    ticket['internal_notes'] as String?,
+                    isMultiLine: true,
+                  ),
+                  _buildInfoRow(
+                    'Olusturma tarihi',
+                    Formatters.date(ticket['created_at']),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildProcessTab() {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -4284,6 +4608,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     final priority = ticket['priority'] as String? ?? 'normal';
     final plannedDate = ticket['planned_date'] as String?;
     final isWide = MediaQuery.of(context).size.width > 960;
+    final isProject = _isProjectTicket(ticket);
 
     return NestedScrollView(
       headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
@@ -4329,13 +4654,13 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
-                tabs: const [
-                  Tab(height: 56, text: 'Ozet'),
-                  Tab(height: 56, text: 'Surec'),
-                  Tab(height: 56, text: 'Gunluk'),
-                  Tab(height: 56, text: 'Evrak'),
-                  Tab(height: 56, text: 'Teknik'),
-                  Tab(height: 56, text: 'Loglar'),
+                tabs: [
+                  const Tab(height: 56, text: 'Ozet'),
+                  const Tab(height: 56, text: 'Surec'),
+                  const Tab(height: 56, text: 'Gunluk'),
+                  const Tab(height: 56, text: 'Evrak'),
+                  Tab(height: 56, text: isProject ? 'Proje' : 'Teknik'),
+                  const Tab(height: 56, text: 'Loglar'),
                 ],
               ),
             ),
@@ -4345,11 +4670,21 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildSummaryTab(ticket, customer, status, priority, plannedDate),
+          isProject
+              ? _buildProjectSummaryTab(ticket, customer, priority)
+              : _buildSummaryTab(
+                ticket,
+                customer,
+                status,
+                priority,
+                plannedDate,
+              ),
           _buildProcessTab(),
           _buildDailyReportsTab(),
           _buildPaperworkTab(ticket),
-          _buildTechnicalTab(ticket, isWide),
+          isProject
+              ? _buildProjectDetailTab(ticket, customer)
+              : _buildTechnicalTab(ticket, isWide),
           _buildActivityLogsTab(),
         ],
       ),

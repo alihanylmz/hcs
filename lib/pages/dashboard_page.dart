@@ -1601,6 +1601,18 @@ class _DashboardPageState extends State<DashboardPage> {
           Colors.teal,
           subtitle: 'Tamamlandi ama imza eksik',
         ),
+        _buildStatCard(
+          'Hareket Merkezi',
+          'Aç',
+          Icons.event_note_rounded,
+          AppColors.corporateNavy,
+          subtitle: 'Kullanici hareketleri ve notlar',
+          onTap: () {
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ActivityLogsPage()));
+          },
+        ),
       ],
     );
   }
@@ -2486,27 +2498,41 @@ class _DashboardPageState extends State<DashboardPage> {
     IconData icon,
     Color color, {
     String? subtitle,
+    VoidCallback? onTap,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return _buildPanelCard(
+    final content = _buildPanelCard(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(icon, color: color, size: 22),
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const Spacer(),
+              if (onTap != null)
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  color: _mutedText(isDark),
+                  size: 20,
+                ),
+            ],
           ),
           const Spacer(),
           Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w800,
@@ -2516,6 +2542,8 @@ class _DashboardPageState extends State<DashboardPage> {
           const SizedBox(height: 6),
           Text(
             title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 14,
               color: isDark ? Colors.white : AppColors.corporateNavy,
@@ -2526,6 +2554,8 @@ class _DashboardPageState extends State<DashboardPage> {
             const SizedBox(height: 4),
             Text(
               subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 12,
                 color: _mutedText(isDark),
@@ -2534,6 +2564,17 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ],
         ],
+      ),
+    );
+
+    if (onTap == null) return content;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: content,
       ),
     );
   }

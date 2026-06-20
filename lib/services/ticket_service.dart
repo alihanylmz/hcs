@@ -10,6 +10,7 @@ import '../features/tickets/data/ticket_repository.dart';
 import '../models/ticket_backup_record.dart';
 import '../models/ticket_daily_report.dart';
 import '../models/ticket_fault_record.dart';
+import 'activity_log_service.dart';
 import 'fault_record_service.dart';
 import 'pdf_export_service.dart';
 
@@ -41,9 +42,34 @@ class TicketService {
   final TicketRepository _repository;
   final TicketNotificationCoordinator _notificationCoordinator;
   final FaultRecordService _faultRecordService;
+  final ActivityLogService _activityLogService = ActivityLogService();
 
   Future<Map<String, dynamic>?> getTicket(String ticketId) {
     return _repository.getTicket(ticketId);
+  }
+
+  void _logJobActivitySafely({
+    required String ticketId,
+    required String activityType,
+    required String message,
+    Map<String, dynamic>? ticket,
+  }) {
+    _activityLogService
+        .addJobActivity(
+          jobId: ticketId,
+          activityType: activityType,
+          message: message,
+          workCode: ticket?['job_code']?.toString(),
+          jobType: ticket?['job_type']?.toString(),
+        )
+        .catchError((Object error, StackTrace stackTrace) {
+          _logger.error(
+            'activity_log_failed',
+            data: {'ticketId': ticketId, 'activityType': activityType},
+            error: error,
+            stackTrace: stackTrace,
+          );
+        });
   }
 
   Future<void> updateTicket(
@@ -68,6 +94,35 @@ class TicketService {
               stackTrace: stackTrace,
             );
           });
+    }
+
+    final oldStatus = oldTicket?['status']?.toString();
+    final newStatus = payload['status']?.toString();
+    if (oldTicket != null &&
+        newStatus != null &&
+        newStatus.isNotEmpty &&
+        oldStatus != newStatus) {
+      _logJobActivitySafely(
+        ticketId: ticketId,
+        activityType:
+            newStatus == 'done' ? 'ticket_completed' : 'status_changed',
+        message:
+            newStatus == 'done'
+                ? 'Is tamamlandi'
+                : 'Is durumu degistirildi: $newStatus',
+        ticket: oldTicket,
+      );
+    }
+
+    if (oldTicket != null &&
+        (payload.containsKey('responsible_user_id') ||
+            payload.containsKey('assigned_user_ids'))) {
+      _logJobActivitySafely(
+        ticketId: ticketId,
+        activityType: 'user_assigned',
+        message: 'Is kullaniciya atandi',
+        ticket: oldTicket,
+      );
     }
   }
 
@@ -135,6 +190,18 @@ class TicketService {
       note: note,
       noteType: 'service_note',
       imageUrls: imageUrls,
+    );
+
+    final ticket = await _repository.getTicket(ticketId);
+    _logJobActivitySafely(
+      ticketId: ticketId,
+      activityType:
+          imageUrls == null || imageUrls.isEmpty ? 'note_added' : 'photo_added',
+      message:
+          imageUrls == null || imageUrls.isEmpty
+              ? 'Ise not eklendi'
+              : 'Fotograf eklendi',
+      ticket: ticket,
     );
 
     _notificationCoordinator

@@ -4,9 +4,11 @@ import 'package:file_picker/file_picker.dart'; // Eklendi
 import 'package:flutter_svg/flutter_svg.dart'; // Eklendi
 import '../services/stock_service.dart'; // StockService eklendi
 import '../services/notification_service.dart'; // Bildirim servisi
-import '../services/user_service.dart'; // Kullanıcı servisi
+import '../services/user_service.dart'; // KullanÄ±cÄ± servisi
 import '../services/partner_service.dart'; // Partner Service eklendi
 import '../models/partner.dart'; // Partner Model eklendi
+import '../models/user_profile.dart';
+import '../services/activity_log_service.dart';
 import '../theme/app_colors.dart';
 import '../services/permission_service.dart';
 
@@ -30,11 +32,12 @@ class _NewTicketPageState extends State<NewTicketPage> {
   // Listeler artik StockService'den aliniyor
   final StockService _stockService = StockService();
   List<String> _availableDriveBrands =
-      []; // Veritabanindan y�klenen s�r�c� markalari
+      []; // Veritabanindan yï¿½klenen sï¿½rï¿½cï¿½ markalari
 
   // Partner Firmalar
   final PartnerService _partnerService = PartnerService();
   List<Partner> _partners = [];
+  List<UserProfile> _users = [];
   int? _selectedPartnerId;
   bool _canAssignPartner = false; // Sadece admin/manager atayabilir
   bool _canManageDraftTickets = false;
@@ -44,12 +47,14 @@ class _NewTicketPageState extends State<NewTicketPage> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _jobCodeController = TextEditingController();
+  final _projectLocationController = TextEditingController();
+  final _internalNotesController = TextEditingController();
   // _aspiratorKwController ve _vantKwController kaldirildi (artik dropdown)
   final _kompresor1KwController = TextEditingController();
   final _kompresor2KwController = TextEditingController();
   final _heaterKwController = TextEditingController(); // Yeni: Isitici kW
 
-  // Jet Fan / Otopark Sistemi I�in Yeni Controller'lar
+  // Jet Fan / Otopark Sistemi Iï¿½in Yeni Controller'lar
   // _zoneCountController kaldirildi, yerine _selectedZoneCount ve _zoneFanCounts kullanilacak
   final _jetFanCountController = TextEditingController();
   // _bidirectionalFanCountController kaldirildi
@@ -80,15 +85,16 @@ class _NewTicketPageState extends State<NewTicketPage> {
   double? _selectedHmiSize;
 
   String? _selectedAspiratorBrand;
-  String? _selectedAspiratorModel; // Aspirat�r i�in model
+  String? _selectedAspiratorModel; // Aspiratï¿½r iï¿½in model
   double? _selectedAspiratorKw;
   List<String> _availableAspiratorModels =
-      []; // Aspirat�r markasina g�re modeller
+      []; // Aspiratï¿½r markasina gï¿½re modeller
 
   String? _selectedVantBrand;
-  String? _selectedVantModel; // Vantilat�r i�in model
+  String? _selectedVantModel; // Vantilatï¿½r iï¿½in model
   double? _selectedVantKw;
-  List<String> _availableVantModels = []; // Vantilat�r markasina g�re modeller
+  List<String> _availableVantModels =
+      []; // Vantilatï¿½r markasina gï¿½re modeller
 
   String _selectedTandem = 'yok';
   String _heaterExists = 'Yok'; // Yeni: Isitici var mi yok mu
@@ -101,12 +107,18 @@ class _NewTicketPageState extends State<NewTicketPage> {
   bool _rotor = false;
   bool _brulor = false;
 
-  // Is baslangi� durumu: taslak mi, aktif mi?
+  // Is baslangiï¿½ durumu: taslak mi, aktif mi?
   bool _createAsDraft = false;
+  String _jobType = 'service';
+  String _projectType = 'BMS';
+  String _projectStatus = 'planned';
+  String? _responsibleUserId;
+  final Set<String> _assignedUserIds = {};
 
   DateTime? _plannedDate;
-  PlatformFile? _selectedPdf; // Se�ilen PDF dosyasi
-  bool _isUploading = false;
+  DateTime? _projectStartDate;
+  DateTime? _projectDueDate;
+  PlatformFile? _selectedPdf; // Seï¿½ilen PDF dosyasi
 
   bool _isSaving = false;
   String? _errorMessage;
@@ -116,20 +128,21 @@ class _NewTicketPageState extends State<NewTicketPage> {
     super.initState();
     _loadDriveBrands();
     _checkUserPermission();
-    _loadPartners(); // Partnerleri yükle
+    _loadUsers();
+    _loadPartners(); // Partnerleri yÃ¼kle
 
     if (widget.deviceType == 'santral') {
       _selectedDeviceModel = 'Klima Santrali';
     } else if (widget.deviceType == 'jet_fan') {
       _selectedDeviceModel = 'Jet Fan';
     } else if (widget.deviceType == 'other') {
-      _selectedDeviceModel = 'Diğer / Arıza';
+      _selectedDeviceModel = 'DiÄŸer / ArÄ±za';
     }
   }
 
   Future<void> _loadDriveBrands() async {
     try {
-      final brands = await _stockService.getBrandsByCategory('Sürücü');
+      final brands = await _stockService.getBrandsByCategory('SÃ¼rÃ¼cÃ¼');
       // Sadece veritabanindan gelenleri kullan
       final allBrands = brands;
       if (mounted) {
@@ -152,7 +165,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
       final userService = UserService();
       final profile = await userService.getCurrentUserProfile();
 
-      // Sadece Admin ve Y�neticiler partner atayabilir
+      // Sadece Admin ve Yï¿½neticiler partner atayabilir
       if (PermissionService.hasPermission(
         profile,
         AppPermission.assignTicketPartner,
@@ -166,7 +179,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
         }
       }
     } catch (e) {
-      debugPrint('Partner yükleme hatası: $e');
+      debugPrint('Partner yÃ¼kleme hatasÄ±: $e');
     }
   }
 
@@ -187,7 +200,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
     }
 
     try {
-      final models = await _stockService.getBrandModels(brand, 'Sürücü');
+      final models = await _stockService.getBrandModels(brand, 'SÃ¼rÃ¼cÃ¼');
       if (mounted) {
         setState(() {
           if (isAspirator) {
@@ -232,7 +245,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Bu kullanıcı tipi yeni iş emri oluşturamaz.'),
+          content: Text('Bu kullanÄ±cÄ± tipi yeni iÅŸ emri oluÅŸturamaz.'),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 3),
         ),
@@ -241,11 +254,24 @@ class _NewTicketPageState extends State<NewTicketPage> {
     }
   }
 
+  Future<void> _loadUsers() async {
+    try {
+      final users = await UserService().getAllUsers();
+      if (!mounted) return;
+      setState(() => _users = users);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _users = []);
+    }
+  }
+
   @override
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
     _jobCodeController.dispose();
+    _projectLocationController.dispose();
+    _internalNotesController.dispose();
     _kompresor1KwController.dispose();
     _kompresor2KwController.dispose();
     _heaterKwController.dispose();
@@ -290,12 +316,30 @@ class _NewTicketPageState extends State<NewTicketPage> {
     }
   }
 
+  Future<void> _pickProjectDate({required bool isStart}) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: (isStart ? _projectStartDate : _projectDueDate) ?? now,
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 3650)),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (isStart) {
+        _projectStartDate = picked;
+      } else {
+        _projectDueDate = picked;
+      }
+    });
+  }
+
   Future<void> _pickPdf() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
-        withData: true, // Web i�in gerekli
+        withData: true, // Web iï¿½in gerekli
       );
 
       if (result != null) {
@@ -304,9 +348,9 @@ class _NewTicketPageState extends State<NewTicketPage> {
         });
       }
     } catch (e) {
-      debugPrint('Dosya seçme hatası: $e');
+      debugPrint('Dosya seÃ§me hatasÄ±: $e');
       setState(() {
-        _errorMessage = 'Dosya seçilirken hata oluştu: $e';
+        _errorMessage = 'Dosya seÃ§ilirken hata oluÅŸtu: $e';
       });
     }
   }
@@ -335,7 +379,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
     final supabase = Supabase.instance.client;
 
     try {
-      // 1) M�steri olustur
+      // 1) Mï¿½steri olustur
       final customerInsert =
           await supabase
               .from('customers')
@@ -349,23 +393,28 @@ class _NewTicketPageState extends State<NewTicketPage> {
               .maybeSingle();
 
       if (customerInsert == null) {
-        throw Exception('Müşteri oluşturulamadı.');
+        throw Exception('MÃ¼ÅŸteri oluÅŸturulamadÄ±.');
       }
 
       final customerId = customerInsert['id'];
 
-      final komp1Kw = _parseDouble(_kompresor1KwController.text);
-      final komp2Kw = _parseDouble(_kompresor2KwController.text);
+      final isProject = _jobType == 'project';
+      final komp1Kw =
+          isProject ? null : _parseDouble(_kompresor1KwController.text);
+      final komp2Kw =
+          isProject ? null : _parseDouble(_kompresor2KwController.text);
       // Isitici verilerini hazirla
       final heaterKw =
-          (_heaterExists == 'Var')
+          (!isProject && _heaterExists == 'Var')
               ? _parseDouble(_heaterKwController.text)
               : null;
       final heaterStage =
-          (_heaterExists == 'Var') ? _selectedIsiticiKademe : 'yok';
+          (!isProject && _heaterExists == 'Var')
+              ? _selectedIsiticiKademe
+              : 'yok';
 
       // Jet Fan Verileri
-      final zoneCount = _selectedZoneCount;
+      final zoneCount = isProject ? null : _selectedZoneCount;
       // Zone detaylarini al
       final List<Map<String, dynamic>> zoneDetails = [];
       for (int i = 0; i < _zoneFanCountControllers.length; i++) {
@@ -375,11 +424,12 @@ class _NewTicketPageState extends State<NewTicketPage> {
         });
       }
 
-      final jetFanCount = _parseInt(_jetFanCountController.text);
+      final jetFanCount =
+          isProject ? null : _parseInt(_jetFanCountController.text);
       // bidirectCount artik kullanilmiyor
       // inverterCount artik kullanilmiyor
       final inverterBrand =
-          _inverterBrandController.text.trim().isEmpty
+          isProject || _inverterBrandController.text.trim().isEmpty
               ? null
               : _inverterBrandController.text.trim();
 
@@ -392,7 +442,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
       String? pdfUrl;
 
-      // PDF Y�kleme Islemi
+      // PDF Yï¿½kleme Islemi
       if (_selectedPdf != null) {
         try {
           final fileBytes = _selectedPdf!.bytes;
@@ -416,11 +466,11 @@ class _NewTicketPageState extends State<NewTicketPage> {
                 .getPublicUrl(fileName);
           }
         } catch (e) {
-          debugPrint('PDF yükleme hatası: $e');
-          // PDF y�klenemese bile is emri a�ilsin mi?
-          // Kullanıcıya hata g�sterip duralim simdilik.
+          debugPrint('PDF yÃ¼kleme hatasÄ±: $e');
+          // PDF yï¿½klenemese bile is emri aï¿½ilsin mi?
+          // KullanÄ±cÄ±ya hata gï¿½sterip duralim simdilik.
           throw Exception(
-            'PDF yüklenirken hata oluştu: $e. (Lütfen "ticket-files" adında bir bucket olduğundan emin olun)',
+            'PDF yÃ¼klenirken hata oluÅŸtu: $e. (LÃ¼tfen "ticket-files" adÄ±nda bir bucket olduÄŸundan emin olun)',
           );
         }
       }
@@ -439,36 +489,61 @@ class _NewTicketPageState extends State<NewTicketPage> {
                 'description': finalDescription,
                 'customer_id': customerId,
                 'priority': 'normal',
-                // Taslak se�ildiyse draft, aksi halde open
-                'status': _createAsDraft ? 'draft' : 'open',
+                // Taslak seï¿½ildiyse draft, aksi halde open
+                'status':
+                    _createAsDraft
+                        ? 'draft'
+                        : (isProject
+                            ? (_projectStatus == 'done'
+                                ? 'done'
+                                : _projectStatus == 'cancelled'
+                                ? 'cancelled'
+                                : 'open')
+                            : 'open'),
                 'partner_id': _selectedPartnerId, // Partner ID Eklendi
                 'planned_date': _plannedDate?.toIso8601String(),
+                'job_type': _jobType,
+                'project_type': isProject ? _projectType : null,
+                'project_status': isProject ? _projectStatus : 'planned',
+                'project_location':
+                    isProject ? _projectLocationController.text.trim() : null,
+                'responsible_user_id': isProject ? _responsibleUserId : null,
+                'assigned_user_ids':
+                    isProject
+                        ? _assignedUserIds.toList(growable: false)
+                        : <String>[],
+                'project_start_date':
+                    isProject ? _projectStartDate?.toIso8601String() : null,
+                'project_due_date':
+                    isProject ? _projectDueDate?.toIso8601String() : null,
+                'internal_notes':
+                    isProject ? _internalNotesController.text.trim() : null,
                 'job_code':
                     _jobCodeController.text.trim().isEmpty
                         ? null
                         : _jobCodeController.text.trim(),
-                'device_model': _selectedDeviceModel,
-                'device_brand': _selectedDeviceBrand,
-                'plc_model': _selectedPlcModel,
-                'hmi_brand': _selectedHmiBrand,
-                'hmi_size': _selectedHmiSize,
-                'aspirator_kw': _selectedAspiratorKw,
-                'aspirator_brand': _selectedAspiratorBrand,
-                'vant_kw': _selectedVantKw,
-                'vant_brand': _selectedVantBrand,
+                'device_model': isProject ? null : _selectedDeviceModel,
+                'device_brand': isProject ? null : _selectedDeviceBrand,
+                'plc_model': isProject ? null : _selectedPlcModel,
+                'hmi_brand': isProject ? null : _selectedHmiBrand,
+                'hmi_size': isProject ? null : _selectedHmiSize,
+                'aspirator_kw': isProject ? null : _selectedAspiratorKw,
+                'aspirator_brand': isProject ? null : _selectedAspiratorBrand,
+                'vant_kw': isProject ? null : _selectedVantKw,
+                'vant_brand': isProject ? null : _selectedVantBrand,
                 'kompresor_kw_1': komp1Kw,
                 'kompresor_kw_2': komp2Kw,
                 'tandem': _selectedTandem,
                 'isitici_kademe':
-                    heaterStage, // G�ncellendi: Mantiksal kontrol eklendi
+                    heaterStage, // Gï¿½ncellendi: Mantiksal kontrol eklendi
                 'isitici_kw':
-                    heaterKw, // G�ncellendi: Mantiksal kontrol eklendi
-                'dx': _dx,
-                'sulu_batarya': _suluBatarya,
-                'karisim_damper': _karisimDamper,
-                'nemlendirici': _nemlendirici,
-                'rotor': _rotor,
-                'brulor': _brulor,
+                    heaterKw, // Gï¿½ncellendi: Mantiksal kontrol eklendi
+                'dx': isProject ? false : _dx,
+                'sulu_batarya': isProject ? false : _suluBatarya,
+                'karisim_damper': isProject ? false : _karisimDamper,
+                'nemlendirici': isProject ? false : _nemlendirici,
+                'rotor': isProject ? false : _rotor,
+                'brulor': isProject ? false : _brulor,
                 'zone_count': zoneCount,
                 'jetfan_count': jetFanCount,
                 'bidirectional_jetfan_count': null, // Artik kullanilmiyor
@@ -479,11 +554,18 @@ class _NewTicketPageState extends State<NewTicketPage> {
               .select()
               .single();
 
-      final ticketId = ticketInsert['id'];
+      final ticketId = ticketInsert['id'] as String;
+      await ActivityLogService().addJobActivity(
+        jobId: ticketId,
+        activityType: 'ticket_created',
+        message: isProject ? 'Proje isi olusturuldu' : 'Servis isi olusturuldu',
+        workCode: ticketInsert['job_code']?.toString(),
+        jobType: _jobType,
+      );
 
-      // --- STOKTAN D�??ME VE EKSIK KONTROL� (KALDIRILDI) ---
-      // Artik yeni is emri olustururken otomatik stok d�sm�yoruz.
-      // Kullanıcı is emri detayindan manuel olarak par�a eklemeli.
+      // --- STOKTAN Dï¿½??ME VE EKSIK KONTROLï¿½ (KALDIRILDI) ---
+      // Artik yeni is emri olustururken otomatik stok dï¿½smï¿½yoruz.
+      // KullanÄ±cÄ± is emri detayindan manuel olarak parï¿½a eklemeli.
       /*
       try {
         final stockService = StockService();
@@ -495,15 +577,15 @@ class _NewTicketPageState extends State<NewTicketPage> {
       */
       // ---------------------------
 
-      // --- BILDIRIM G�NDERME ---
-      // Eger is taslak olarak olusturulmadiysa (aktif is ise) bildirim g�nder.
+      // --- BILDIRIM Gï¿½NDERME ---
+      // Eger is taslak olarak olusturulmadiysa (aktif is ise) bildirim gï¿½nder.
       // Taslak isler daha sonra durum degistiginde (draft -> open) yeni is emri gibi bildirilecek.
       if (!_createAsDraft) {
         try {
           final notificationService = NotificationService();
           final userService = UserService();
           final currentUser = await userService.getCurrentUserProfile();
-          final userName = currentUser?.fullName ?? 'Kullanıcı';
+          final userName = currentUser?.fullName ?? 'KullanÄ±cÄ±';
 
           await notificationService.notifyTicketCreated(
             ticketId: ticketId.toString(),
@@ -516,7 +598,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
           );
         } catch (notifErr) {
           debugPrint(
-            'Bildirim gönderme hatası (kritik değil, işlem devam ediyor): $notifErr',
+            'Bildirim gÃ¶nderme hatasÄ± (kritik deÄŸil, iÅŸlem devam ediyor): $notifErr',
           );
         }
       }
@@ -541,7 +623,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
     }
   }
 
-  // --- ARAY�Z (BUILD METODU) ---
+  // --- ARAYï¿½Z (BUILD METODU) ---
 
   @override
   Widget build(BuildContext context) {
@@ -567,7 +649,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
           ],
         ),
         title: Text(
-          'YENİ İŞ EMRİ',
+          'YENÄ° Ä°Å EMRÄ°',
           style: TextStyle(
             color: textColor, // Baslik rengi
             fontSize: 16,
@@ -610,7 +692,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                       ),
                     ),
 
-                  // --- �ST B�L�M: I?? VE M�??TERI BILGILERI ---
+                  // --- ï¿½ST Bï¿½Lï¿½M: I?? VE Mï¿½??TERI BILGILERI ---
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -618,11 +700,13 @@ class _NewTicketPageState extends State<NewTicketPage> {
                         flex: isWide ? 3 : 1,
                         child: Column(
                           children: [
-                            // İş Bilgileri KARTI
+                            // Ä°ÅŸ Bilgileri KARTI
                             _buildContentCard(
-                              title: 'İş Bilgileri',
+                              title: 'Ä°ÅŸ Bilgileri',
                               icon: Icons.work_outline,
                               children: [
+                                _buildJobTypeSelector(),
+                                const SizedBox(height: 16),
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -630,8 +714,8 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                       flex: 2,
                                       child: _buildTextField(
                                         controller: _titleController,
-                                        label: 'İş Başlığı',
-                                        hint: 'Örn: Klima Bakımı',
+                                        label: 'Ä°ÅŸ BaÅŸlÄ±ÄŸÄ±',
+                                        hint: 'Ã–rn: Klima BakÄ±mÄ±',
                                         isRequired: true,
                                       ),
                                     ),
@@ -640,7 +724,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                       flex: 1,
                                       child: _buildTextField(
                                         controller: _jobCodeController,
-                                        label: 'İş Kodu',
+                                        label: 'Ä°ÅŸ Kodu',
                                         hint: 'H-001-23',
                                       ),
                                     ),
@@ -649,8 +733,8 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                 const SizedBox(height: 16),
                                 _buildTextField(
                                   controller: _descriptionController,
-                                  label: 'İş Açıklaması',
-                                  hint: 'Yapılacak işlemlerin detayları...',
+                                  label: 'Ä°ÅŸ AÃ§Ä±klamasÄ±',
+                                  hint: 'YapÄ±lacak iÅŸlemlerin detaylarÄ±...',
                                   maxLines: 3,
                                 ),
                                 const SizedBox(height: 16),
@@ -669,7 +753,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                       const SizedBox(width: 8),
                                       const Expanded(
                                         child: Text(
-                                          'Bu işi taslak (gizli) olarak kaydet (teknisyenler görmez, sonradan açıldığında bildirim gider).',
+                                          'Bu iÅŸi taslak (gizli) olarak kaydet (teknisyenler gÃ¶rmez, sonradan aÃ§Ä±ldÄ±ÄŸÄ±nda bildirim gider).',
                                           style: TextStyle(
                                             fontSize: 11,
                                             color: _textLight,
@@ -681,7 +765,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                 const SizedBox(height: 16),
                                 _buildDatePicker(),
                                 const SizedBox(height: 16),
-                                // PDF Se�ici
+                                // PDF Seï¿½ici
                                 InkWell(
                                   onTap: _pickPdf,
                                   borderRadius: BorderRadius.circular(8),
@@ -711,7 +795,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               const Text(
-                                                'Ek Doküman (PDF)',
+                                                'Ek DokÃ¼man (PDF)',
                                                 style: TextStyle(
                                                   fontSize: 11,
                                                   color: _textLight,
@@ -721,7 +805,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                               Text(
                                                 _selectedPdf != null
                                                     ? _selectedPdf!.name
-                                                    : 'Dosya seçilmedi',
+                                                    : 'Dosya seÃ§ilmedi',
                                                 style: TextStyle(
                                                   color:
                                                       _selectedPdf != null
@@ -759,26 +843,31 @@ class _NewTicketPageState extends State<NewTicketPage> {
                             ),
                             const SizedBox(height: 24),
 
-                            // M�??TERI BILGILERI KARTI
+                            // Mï¿½??TERI BILGILERI KARTI
+                            if (_jobType == 'project') ...[
+                              _buildProjectInfoCard(),
+                              const SizedBox(height: 24),
+                            ],
+
                             _buildContentCard(
-                              title: 'Müşteri Bilgileri',
+                              title: 'MÃ¼ÅŸteri Bilgileri',
                               icon: Icons.person_outline,
                               children: [
-                                // --- PARTNER FIRMA SE�IMI (Sadece Yetkililer I�in) ---
+                                // --- PARTNER FIRMA SEï¿½IMI (Sadece Yetkililer Iï¿½in) ---
                                 if (_canAssignPartner &&
                                     _partners.isNotEmpty) ...[
                                   _buildDropdown<int?>(
                                     // int? yapildi (bos olabilir)
-                                    label: 'Partner Firma Ataması (Opsiyonel)',
+                                    label: 'Partner Firma AtamasÄ± (Opsiyonel)',
                                     value: _selectedPartnerId,
                                     items: [
                                       null,
                                       ..._partners.map((p) => p.id),
-                                    ], // Null (Bos) se�enek
+                                    ], // Null (Bos) seï¿½enek
                                     itemLabelBuilder: (val) {
                                       if (val == null)
-                                        return 'Atama Yapılmayacak (Doğrudan Müşteri)';
-                                      // firstWhere orElse d�zeltmesi: null d�nmemeli
+                                        return 'Atama YapÄ±lmayacak (DoÄŸrudan MÃ¼ÅŸteri)';
+                                      // firstWhere orElse dï¿½zeltmesi: null dï¿½nmemeli
                                       final p = _partners.firstWhere(
                                         (element) => element.id == val,
                                         orElse:
@@ -793,7 +882,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                       setState(() {
                                         _selectedPartnerId = val;
                                         if (val != null) {
-                                          // Partner se�ildiyse cihaz markasini otomatik ayarla
+                                          // Partner seï¿½ildiyse cihaz markasini otomatik ayarla
                                           final p = _partners.firstWhere(
                                             (e) => e.id == val,
                                             orElse:
@@ -816,7 +905,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                                     Expanded(
                                       child: _buildTextField(
                                         controller: _customerNameController,
-                                        label: 'Müşteri Adı / Firma',
+                                        label: 'MÃ¼ÅŸteri AdÄ± / Firma',
                                         icon: Icons.business,
                                         isRequired: true,
                                       ),
@@ -845,10 +934,14 @@ class _NewTicketPageState extends State<NewTicketPage> {
                         ),
                       ),
 
-                      if (isWide && widget.deviceType != 'other')
+                      if (isWide &&
+                          widget.deviceType != 'other' &&
+                          _jobType == 'service')
                         const SizedBox(width: 24),
 
-                      if (isWide && widget.deviceType != 'other')
+                      if (isWide &&
+                          widget.deviceType != 'other' &&
+                          _jobType == 'service')
                         Expanded(
                           flex: 2,
                           child:
@@ -867,8 +960,10 @@ class _NewTicketPageState extends State<NewTicketPage> {
                     ],
                   ),
 
-                  // Mobil g�r�n�m i�in teknik detaylari alta al
-                  if (!isWide && widget.deviceType != 'other') ...[
+                  // Mobil gï¿½rï¿½nï¿½m iï¿½in teknik detaylari alta al
+                  if (!isWide &&
+                      widget.deviceType != 'other' &&
+                      _jobType == 'service') ...[
                     const SizedBox(height: 24),
                     if (widget.deviceType == 'jet_fan')
                       _buildJetFanInfoCard()
@@ -923,28 +1018,28 @@ class _NewTicketPageState extends State<NewTicketPage> {
   }
 
   Widget _buildJetFanInfoCard() {
-    // 0-15 arasi se�im listesi
+    // 0-15 arasi seï¿½im listesi
     final countOptions = List.generate(16, (index) => index);
 
-    // 1-15 Zone Se�imi (0 olamaz, en az 1 olabilir ama opsiyonel olsun diye 0-15 koyuyoruz)
+    // 1-15 Zone Seï¿½imi (0 olamaz, en az 1 olabilir ama opsiyonel olsun diye 0-15 koyuyoruz)
     final zoneOptions = List.generate(16, (index) => index);
 
     return _buildContentCard(
       title: 'Jet Fan Sistem Bilgileri',
       icon: Icons.wind_power,
       children: [
-        // �ST B�L�M: Genel Sayilar
+        // ï¿½ST Bï¿½Lï¿½M: Genel Sayilar
         Row(
           children: [
             Expanded(
               child: _buildDropdown<int>(
-                label: 'Zone Sayısı',
+                label: 'Zone SayÄ±sÄ±',
                 value: _selectedZoneCount,
                 items: zoneOptions,
                 onChanged: (val) {
                   setState(() {
                     _selectedZoneCount = val ?? 0;
-                    // Controller listesini g�ncelle
+                    // Controller listesini gï¿½ncelle
                     if (_selectedZoneCount > _zoneFanCountControllers.length) {
                       for (
                         int i = _zoneFanCountControllers.length;
@@ -954,7 +1049,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                         _zoneFanCountControllers.add(TextEditingController());
                       }
                     } else {
-                      // Fazlaliklari dispose et ve listeden �ikar
+                      // Fazlaliklari dispose et ve listeden ï¿½ikar
                       for (
                         int i = _zoneFanCountControllers.length - 1;
                         i >= _selectedZoneCount;
@@ -984,7 +1079,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
         if (_zoneFanCountControllers.isNotEmpty) ...[
           const SizedBox(height: 16),
           const Text(
-            'Zone Bazlı Fan Sayıları',
+            'Zone BazlÄ± Fan SayÄ±larÄ±',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,
@@ -1001,7 +1096,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: _buildTextField(
                   controller: _zoneFanCountControllers[index],
-                  label: '${index + 1}. Zone Jet Fan Sayısı',
+                  label: '${index + 1}. Zone Jet Fan SayÄ±sÄ±',
                   isNumeric: true,
                 ),
               );
@@ -1015,7 +1110,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
         // --- DUMAN TAHLIYE FANLARI ---
         Text(
-          'Duman Tahliye Fanları',
+          'Duman Tahliye FanlarÄ±',
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.bold,
@@ -1024,13 +1119,13 @@ class _NewTicketPageState extends State<NewTicketPage> {
         ),
         const SizedBox(height: 8),
         _buildDropdown<int>(
-          label: 'Duman Tahliye Fanı Sayısı',
+          label: 'Duman Tahliye FanÄ± SayÄ±sÄ±',
           value: _smokeFanCount,
           items: countOptions,
           onChanged: (val) {
             setState(() {
               _smokeFanCount = val ?? 0;
-              // Listeyi g�ncelle
+              // Listeyi gï¿½ncelle
               if (_smokeFanCount > _smokeFans.length) {
                 for (int i = _smokeFans.length; i < _smokeFanCount; i++) {
                   _smokeFans.add({'brand': null, 'kw': null});
@@ -1065,7 +1160,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                     // Marka
                     Expanded(
                       child: _buildDropdown<String>(
-                        label: 'İnverter Markası',
+                        label: 'Ä°nverter MarkasÄ±',
                         value: _smokeFans[index]['brand'],
                         items: _availableDriveBrands,
                         onChanged: (val) {
@@ -1077,7 +1172,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                     // kW
                     Expanded(
                       child: _buildDropdown<double>(
-                        label: 'Güç (kW)',
+                        label: 'GÃ¼Ã§ (kW)',
                         value: _smokeFans[index]['kw'],
                         items: StockService.kwValues,
                         itemLabelBuilder: (val) => '$val kW',
@@ -1099,7 +1194,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
         // --- TAZE HAVA FANLARI ---
         Text(
-          'Taze Hava Fanları',
+          'Taze Hava FanlarÄ±',
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.bold,
@@ -1108,13 +1203,13 @@ class _NewTicketPageState extends State<NewTicketPage> {
         ),
         const SizedBox(height: 8),
         _buildDropdown<int>(
-          label: 'Taze Hava Fanı Sayısı',
+          label: 'Taze Hava FanÄ± SayÄ±sÄ±',
           value: _freshFanCount,
           items: countOptions,
           onChanged: (val) {
             setState(() {
               _freshFanCount = val ?? 0;
-              // Listeyi g�ncelle
+              // Listeyi gï¿½ncelle
               if (_freshFanCount > _freshFans.length) {
                 for (int i = _freshFans.length; i < _freshFanCount; i++) {
                   _freshFans.add({'brand': null, 'kw': null});
@@ -1149,7 +1244,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                     // Marka
                     Expanded(
                       child: _buildDropdown<String>(
-                        label: 'İnverter Markası',
+                        label: 'Ä°nverter MarkasÄ±',
                         value: _freshFans[index]['brand'],
                         items: _availableDriveBrands,
                         onChanged: (val) {
@@ -1161,7 +1256,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                     // kW
                     Expanded(
                       child: _buildDropdown<double>(
-                        label: 'Güç (kW)',
+                        label: 'GÃ¼Ã§ (kW)',
                         value: _freshFans[index]['kw'],
                         items: StockService.kwValues,
                         itemLabelBuilder: (val) => '$val kW',
@@ -1179,7 +1274,165 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
         const SizedBox(height: 24),
         // En alttaki Inverter Sayisi alani kaldirildi.
-        // Eger genel marka se�imi isteniyorsa buraya eklenebilir ama talep edilmedi.
+        // Eger genel marka seï¿½imi isteniyorsa buraya eklenebilir ama talep edilmedi.
+      ],
+    );
+  }
+
+  Widget _buildJobTypeSelector() {
+    return Row(
+      children: [
+        Expanded(
+          child: _JobTypeOption(
+            title: 'Servis Ä°ÅŸi',
+            subtitle: 'Klima, bakÄ±m, arÄ±za ve tek seferlik saha iÅŸleri',
+            icon: Icons.build_circle_outlined,
+            selected: _jobType == 'service',
+            onTap: () => setState(() => _jobType = 'service'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _JobTypeOption(
+            title: 'Proje Ä°ÅŸi',
+            subtitle: 'BMS, SCADA, otomasyon ve uzun sÃ¼reli iÅŸler',
+            icon: Icons.account_tree_outlined,
+            selected: _jobType == 'project',
+            onTap: () => setState(() => _jobType = 'project'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProjectInfoCard() {
+    return _buildContentCard(
+      title: 'Proje Takip Bilgileri',
+      icon: Icons.account_tree_outlined,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildDropdown<String>(
+                label: 'Proje Tipi',
+                value: _projectType,
+                items: const [
+                  'BMS',
+                  'SCADA',
+                  'PLC/HMI',
+                  'Pano Revizyonu',
+                  'BACnet/Modbus',
+                  'Devreye Alma',
+                  'DiÄŸer',
+                ],
+                onChanged:
+                    (value) => setState(() => _projectType = value ?? 'BMS'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildDropdown<String>(
+                label: 'Proje Durumu',
+                value: _projectStatus,
+                items: const [
+                  'planned',
+                  'in_progress',
+                  'waiting',
+                  'testing',
+                  'missing',
+                  'done',
+                  'cancelled',
+                ],
+                itemLabels: const {
+                  'planned': 'PlanlandÄ±',
+                  'in_progress': 'Devam ediyor',
+                  'waiting': 'Beklemede',
+                  'testing': 'Test aÅŸamasÄ±nda',
+                  'missing': 'Eksik bekliyor',
+                  'done': 'TamamlandÄ±',
+                  'cancelled': 'Ä°ptal edildi',
+                },
+                onChanged:
+                    (value) =>
+                        setState(() => _projectStatus = value ?? 'planned'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          controller: _projectLocationController,
+          label: 'Lokasyon',
+          icon: Icons.location_on_outlined,
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildDropdown<String>(
+                label: 'Sorumlu KullanÄ±cÄ±',
+                value: _responsibleUserId,
+                items: _users.map((user) => user.id).toList(),
+                itemLabelBuilder: (id) {
+                  final user = _users.firstWhere(
+                    (item) => item.id == id,
+                    orElse: () => UserProfile(id: id, role: UserRole.user),
+                  );
+                  return user.displayName;
+                },
+                onChanged:
+                    (value) => setState(() => _responsibleUserId = value),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final user in _users)
+              FilterChip(
+                label: Text(user.displayName),
+                selected: _assignedUserIds.contains(user.id),
+                onSelected: (selected) {
+                  setState(() {
+                    if (selected) {
+                      _assignedUserIds.add(user.id);
+                    } else {
+                      _assignedUserIds.remove(user.id);
+                    }
+                  });
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _ProjectDateBox(
+                label: 'BaÅŸlangÄ±Ã§ Tarihi',
+                date: _projectStartDate,
+                onTap: () => _pickProjectDate(isStart: true),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _ProjectDateBox(
+                label: 'Planlanan BitiÅŸ',
+                date: _projectDueDate,
+                onTap: () => _pickProjectDate(isStart: false),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          controller: _internalNotesController,
+          label: 'Ä°Ã§ Notlar',
+          maxLines: 3,
+        ),
       ],
     );
   }
@@ -1203,7 +1456,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                   'Elektrostatik',
                   'Heat-Pump',
                   'Jet Fan',
-                  'Diğer / Arıza',
+                  'DiÄŸer / ArÄ±za',
                 ],
                 onChanged: (val) => setState(() => _selectedDeviceModel = val),
                 isRequired: true,
@@ -1225,7 +1478,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
                   'ABB FBX',
                   'ABB CBX',
                   'ABB CBT',
-                ], // G�ncellendi
+                ], // Gï¿½ncellendi
                 onChanged: (val) => setState(() => _selectedPlcModel = val),
               ),
             ),
@@ -1233,7 +1486,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
         ),
         const SizedBox(height: 16),
 
-        // HMI B�l�m�
+        // HMI Bï¿½lï¿½mï¿½
         const Text(
           'HMI Ekran Bilgileri',
           style: TextStyle(
@@ -1256,10 +1509,10 @@ class _NewTicketPageState extends State<NewTicketPage> {
             const SizedBox(width: 12),
             Expanded(
               child: _buildDropdown<double>(
-                label: 'Ekran Boyutu (inç)',
+                label: 'Ekran Boyutu (inÃ§)',
                 value: _selectedHmiSize,
                 items: StockService.hmiSizes,
-                itemLabelBuilder: (val) => '$val inç',
+                itemLabelBuilder: (val) => '$val inÃ§',
                 onChanged: (val) => setState(() => _selectedHmiSize = val),
               ),
             ),
@@ -1267,9 +1520,9 @@ class _NewTicketPageState extends State<NewTicketPage> {
         ),
         const SizedBox(height: 16),
 
-        // Aspirat�r B�l�m�
+        // Aspiratï¿½r Bï¿½lï¿½mï¿½
         const Text(
-          'Aspiratör Sürücü Bilgileri',
+          'AspiratÃ¶r SÃ¼rÃ¼cÃ¼ Bilgileri',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
@@ -1291,7 +1544,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
               ),
             ),
             const SizedBox(width: 12),
-            // Model se�imi (sadece modeller varsa g�ster)
+            // Model seï¿½imi (sadece modeller varsa gï¿½ster)
             if (_selectedAspiratorBrand != null &&
                 _availableAspiratorModels.isNotEmpty)
               Expanded(
@@ -1307,7 +1560,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
             Expanded(
               child: _buildDropdown<dynamic>(
                 // dynamic yapildi
-                label: 'Güç (kW)',
+                label: 'GÃ¼Ã§ (kW)',
                 value: _selectedAspiratorKw,
                 items: [null, ...StockService.kwValues], // Yok (null) eklendi
                 itemLabelBuilder: (val) => val == null ? 'Yok' : '$val kW',
@@ -1319,9 +1572,9 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
         const SizedBox(height: 16),
 
-        // Vantilat�r B�l�m�
+        // Vantilatï¿½r Bï¿½lï¿½mï¿½
         const Text(
-          'Vantilatör Sürücü Bilgileri',
+          'VantilatÃ¶r SÃ¼rÃ¼cÃ¼ Bilgileri',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
@@ -1343,7 +1596,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
               ),
             ),
             const SizedBox(width: 12),
-            // Model se�imi (sadece modeller varsa g�ster)
+            // Model seï¿½imi (sadece modeller varsa gï¿½ster)
             if (_selectedVantBrand != null && _availableVantModels.isNotEmpty)
               Expanded(
                 child: _buildDropdown(
@@ -1357,7 +1610,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
             Expanded(
               child: _buildDropdown<dynamic>(
                 // dynamic yapildi
-                label: 'Güç (kW)',
+                label: 'GÃ¼Ã§ (kW)',
                 value: _selectedVantKw,
                 items: [null, ...StockService.kwValues], // Yok (null) eklendi
                 itemLabelBuilder: (val) => val == null ? 'Yok' : '$val kW',
@@ -1372,7 +1625,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
         const SizedBox(height: 16),
 
         const Text(
-          'Kompresör Güçleri',
+          'KompresÃ¶r GÃ¼Ã§leri',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
@@ -1425,20 +1678,20 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
   Widget _buildHeaterInfoCard() {
     return _buildContentCard(
-      title: 'Isıtıcı Bilgileri',
+      title: 'IsÄ±tÄ±cÄ± Bilgileri',
       icon: Icons.whatshot,
       children: [
         Row(
           children: [
             Expanded(
               child: _buildDropdown(
-                label: 'Isıtıcı Mevcut mu?',
+                label: 'IsÄ±tÄ±cÄ± Mevcut mu?',
                 value: _heaterExists,
                 items: const ['Yok', 'Var'],
                 onChanged: (val) {
                   setState(() {
                     _heaterExists = val!;
-                    // Eger Yok se�ilirse diger alanlari sifirla
+                    // Eger Yok seï¿½ilirse diger alanlari sifirla
                     if (_heaterExists == 'Yok') {
                       _selectedIsiticiKademe = 'yok';
                       _heaterKwController.clear();
@@ -1455,11 +1708,11 @@ class _NewTicketPageState extends State<NewTicketPage> {
             children: [
               Expanded(
                 child: _buildDropdown(
-                  label: 'Isıtıcı Kademesi',
+                  label: 'IsÄ±tÄ±cÄ± Kademesi',
                   value: _selectedIsiticiKademe,
                   items: const ['yok', '1', '2', '3', '4', '5', '6'],
                   itemLabels: const {
-                    'yok': 'Seçiniz',
+                    'yok': 'SeÃ§iniz',
                     '1': '1 Kademe',
                     '2': '2 Kademe',
                     '3': '3 Kademe',
@@ -1475,7 +1728,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
               Expanded(
                 child: _buildTextField(
                   controller: _heaterKwController,
-                  label: 'Isıtıcı Güç',
+                  label: 'IsÄ±tÄ±cÄ± GÃ¼Ã§',
                   isNumeric: true,
                   suffixText: 'kW',
                 ),
@@ -1489,7 +1742,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
 
   Widget _buildHardwareFeaturesCard() {
     return _buildContentCard(
-      title: 'Donanım Kontrolü',
+      title: 'DonanÄ±m KontrolÃ¼',
       icon: Icons.check_box_outlined,
       children: [
         Wrap(
@@ -1503,7 +1756,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
               (val) => setState(() => _suluBatarya = val),
             ),
             _buildFeatureChip(
-              'Karışım Damper',
+              'KarÄ±ÅŸÄ±m Damper',
               _karisimDamper,
               (val) => setState(() => _karisimDamper = val),
             ),
@@ -1518,7 +1771,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
               (val) => setState(() => _rotor = val),
             ),
             _buildFeatureChip(
-              'Brülör',
+              'BrÃ¼lÃ¶r',
               _brulor,
               (val) => setState(() => _brulor = val),
             ),
@@ -1535,7 +1788,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
     required IconData icon,
     required List<Widget> children,
   }) {
-    // Tema kontrol�
+    // Tema kontrolï¿½
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF1E293B) : _surfaceWhite;
     final textColor = isDark ? Colors.white : _corporateNavy;
@@ -1599,7 +1852,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
     String? suffixText,
     TextInputType? keyboardType,
   }) {
-    // Tema kontrol�
+    // Tema kontrolï¿½
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final fillColor =
         isDark ? const Color(0xFF334155) : _backgroundGrey.withOpacity(0.5);
@@ -1645,7 +1898,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
           isRequired
               ? (val) {
                 if (val == null || val.trim().isEmpty) {
-                  return '$label alanı zorunludur.';
+                  return '$label alanÄ± zorunludur.';
                 }
                 return null;
               }
@@ -1662,26 +1915,26 @@ class _NewTicketPageState extends State<NewTicketPage> {
     required Function(T?) onChanged,
     bool isRequired = false,
   }) {
-    // Eger gelen deger listede yoksa null yap (Hata vermemesi i�in)
+    // Eger gelen deger listede yoksa null yap (Hata vermemesi iï¿½in)
     T? safeValue;
     if (value != null) {
       try {
-        // Listede eslesen degerin kendisini al (Referans g�venligi i�in)
+        // Listede eslesen degerin kendisini al (Referans gï¿½venligi iï¿½in)
         safeValue = items.firstWhere((item) => item == value);
       } catch (_) {
         safeValue = null;
       }
     }
 
-    // Tema kontrol� - Dark mode uyumlulugu i�in
+    // Tema kontrolï¿½ - Dark mode uyumlulugu iï¿½in
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Dropdown arka plan rengi: Dark mode'da koyu gri, Light mode'da beyaz
     final dropdownColor = isDark ? const Color(0xFF1E293B) : _surfaceWhite;
-    // Input alani dolgu rengi: Dark mode'da daha a�ik gri, Light mode'da �ok a�ik gri
+    // Input alani dolgu rengi: Dark mode'da daha aï¿½ik gri, Light mode'da ï¿½ok aï¿½ik gri
     final fillColor =
         isDark ? const Color(0xFF334155) : _backgroundGrey.withOpacity(0.5);
 
-    // Se�ili metin rengi:
+    // Seï¿½ili metin rengi:
     final textColor = isDark ? Colors.white : Colors.black;
 
     return DropdownButtonFormField<T>(
@@ -1732,8 +1985,9 @@ class _NewTicketPageState extends State<NewTicketPage> {
       validator:
           isRequired
               ? (val) {
-                if (val == null) return '$label seçilmelidir.';
-                if (val is String && val.isEmpty) return '$label seçilmelidir.';
+                if (val == null) return '$label seÃ§ilmelidir.';
+                if (val is String && val.isEmpty)
+                  return '$label seÃ§ilmelidir.';
                 return null;
               }
               : null,
@@ -1741,7 +1995,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
         color: textColor,
         fontSize: 14,
         fontWeight: FontWeight.w500,
-      ), // Se�ili �ge rengi
+      ), // Seï¿½ili ï¿½ge rengi
     );
   }
 
@@ -1784,7 +2038,7 @@ class _NewTicketPageState extends State<NewTicketPage> {
   Widget _buildDatePicker() {
     final dateText =
         _plannedDate == null
-            ? 'Tarih seçilmedi'
+            ? 'Tarih seÃ§ilmedi'
             : '${_plannedDate!.day}.${_plannedDate!.month}.${_plannedDate!.year}';
 
     return InkWell(
@@ -1825,6 +2079,149 @@ class _NewTicketPageState extends State<NewTicketPage> {
             ),
             const Spacer(),
             const Icon(Icons.arrow_drop_down, color: _textLight),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _JobTypeOption extends StatelessWidget {
+  const _JobTypeOption({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color:
+              selected
+                  ? AppColors.corporateNavy.withValues(alpha: 0.08)
+                  : AppColors.surfaceSoft,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? AppColors.corporateNavy : AppColors.borderSubtle,
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: selected ? AppColors.corporateNavy : AppColors.textLight,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textDark,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textLight,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProjectDateBox extends StatelessWidget {
+  const _ProjectDateBox({
+    required this.label,
+    required this.date,
+    required this.onTap,
+  });
+
+  final String label;
+  final DateTime? date;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final text =
+        date == null
+            ? 'Tarih seÃ§ilmedi'
+            : '${date!.day}.${date!.month}.${date!.year}';
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceSoft,
+          border: Border.all(color: AppColors.borderSubtle),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.calendar_today_outlined,
+              color: AppColors.textLight,
+              size: 18,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppColors.textLight,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    text,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color:
+                          date == null
+                              ? AppColors.textLight
+                              : AppColors.textDark,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),

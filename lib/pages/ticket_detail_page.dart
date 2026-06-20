@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 
-// Yeni oluşturduğumuz modülleri import ediyoruz
+// Yeni oluÃ…Å¸turduÃ„Å¸umuz modÃƒÂ¼lleri import ediyoruz
 import '../services/pdf_export_service.dart';
 import '../services/fault_record_service.dart';
 import '../services/permission_service.dart';
 import '../services/user_service.dart';
 import '../services/ticket_service.dart'; // <--- Yeni Service
+import '../services/activity_log_service.dart';
 import '../services/stock_service.dart'; // <--- Stock Service
 import '../models/fault_record.dart';
 import '../models/fault_record_note.dart';
@@ -24,7 +25,7 @@ import 'signature_page.dart';
 import 'pdf_viewer_page.dart';
 import 'profile_page.dart'; // <--- Eklendi
 import '../theme/app_colors.dart'; // <--- Renkler
-import '../utils/formatters.dart'; // <--- Formatlayıcılar
+import '../utils/formatters.dart'; // <--- FormatlayÃ„Â±cÃ„Â±lar
 import '../widgets/add_note_dialog.dart';
 import '../widgets/ticket_backup_request_dialog.dart';
 
@@ -42,16 +43,22 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   final _ticketService = TicketService();
   final _faultRecordService = FaultRecordService();
   final _stockService = StockService(); // Stock Service Eklendi
+  final _activityLogService = ActivityLogService();
 
   Map<String, dynamic>? _ticket;
   UserProfile? _userProfile;
   bool _loading = true;
   bool _isUpdating = false;
-  bool _isUploadingFile = false; // Supabase yükleme durumu
+  bool _isUploadingFile = false; // Supabase yÃƒÂ¼kleme durumu
   bool _isHeaderExpanded = false;
   String? _error;
   bool _isExportingBackup = false;
   bool _isSavingDailyReport = false;
+  bool _activityLogsLoading = false;
+  bool _isSavingActivityNote = false;
+  final _activityNoteController = TextEditingController();
+  List<Map<String, dynamic>> _activityLogs = [];
+  String? _activityUserFilter;
 
   bool get _canEditTicket =>
       PermissionService.hasPermission(_userProfile, AppPermission.editTicket);
@@ -71,11 +78,11 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     AppPermission.moderateTicketNotes,
   );
 
-  // Teknisyen notları için state
+  // Teknisyen notlarÃ„Â± iÃƒÂ§in state
   List<Map<String, dynamic>> _notes = [];
   bool _notesLoading = false;
 
-  // Kullanılan Parçalar için state
+  // KullanÃ„Â±lan ParÃƒÂ§alar iÃƒÂ§in state
   List<TicketPart> _parts = [];
   bool _partsLoading = false;
   List<FaultRecord> _linkedFaultRecords = const <FaultRecord>[];
@@ -86,22 +93,22 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   // Tab controller
   late TabController _tabController;
 
-  // --- UI İÇİN SABİTLER ---
+  // --- UI Ã„Â°Ãƒâ€¡Ã„Â°N SABÃ„Â°TLER ---
   // ignore: unused_field
   static const Map<String, String> _statusLabels = {
-    'open': 'Açık',
-    'panel_done_stock': 'Panosu Yapıldı Stokta',
-    'panel_done_sent': 'Panosu Yapıldı Gönderildi',
+    'open': 'AÃƒÂ§Ã„Â±k',
+    'panel_done_stock': 'Panosu YapÃ„Â±ldÃ„Â± Stokta',
+    'panel_done_sent': 'Panosu YapÃ„Â±ldÃ„Â± GÃƒÂ¶nderildi',
     'in_progress': 'Serviste',
-    'done': 'İş Tamamlandı',
-    'archived': 'Arşivde',
-    'cancelled': 'İptal',
+    'done': 'Ã„Â°Ã…Å¸ TamamlandÃ„Â±',
+    'archived': 'ArÃ…Å¸ivde',
+    'cancelled': 'Ã„Â°ptal',
   };
 
   static const Map<String, String> _priorityLabels = {
-    'low': 'Düşük Öncelik',
-    'normal': 'Normal Öncelik',
-    'high': 'Yüksek Öncelik',
+    'low': 'DÃƒÂ¼Ã…Å¸ÃƒÂ¼k Ãƒâ€“ncelik',
+    'normal': 'Normal Ãƒâ€“ncelik',
+    'high': 'YÃƒÂ¼ksek Ãƒâ€“ncelik',
   };
 
   bool _isDark(BuildContext context) {
@@ -154,13 +161,14 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _loadTicket();
     _loadUserProfile();
   }
 
   @override
   void dispose() {
+    _activityNoteController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -170,7 +178,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     if (mounted) setState(() => _userProfile = profile);
   }
 
-  // --- VERİTABANI İŞLEMLERİ (Artık Service Kullanıyor) ---
+  // --- VERÃ„Â°TABANI Ã„Â°Ã…ÂLEMLERÃ„Â° (ArtÃ„Â±k Service KullanÃ„Â±yor) ---
 
   Future<void> _loadTicket() async {
     if (!mounted) return;
@@ -185,14 +193,15 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       setState(() {
         _ticket = data;
         if (data == null) {
-          _error = 'İş bulunamadı.';
+          _error = 'Ã„Â°Ã…Å¸ bulunamadÃ„Â±.';
         }
       });
 
       if (data != null) {
         _loadNotes();
         _loadLinkedFaults();
-        _loadParts(); // Parçaları yükle
+        _loadParts(); // ParÃƒÂ§alarÃ„Â± yÃƒÂ¼kle
+        _loadActivityLogs();
       }
     } catch (e) {
       if (!mounted) return;
@@ -221,7 +230,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
         });
       }
     } catch (e) {
-      debugPrint('Notlar yüklenirken hata: $e');
+      debugPrint('Notlar yÃƒÂ¼klenirken hata: $e');
       if (mounted) setState(() => _notesLoading = false);
     }
   }
@@ -264,8 +273,64 @@ class _TicketDetailPageState extends State<TicketDetailPage>
         });
       }
     } catch (e) {
-      debugPrint('Parçalar yüklenirken hata: $e');
+      debugPrint('ParÃƒÂ§alar yÃƒÂ¼klenirken hata: $e');
       if (mounted) setState(() => _partsLoading = false);
+    }
+  }
+
+  Future<void> _loadActivityLogs() async {
+    if (!mounted) return;
+    setState(() => _activityLogsLoading = true);
+    try {
+      final logs = await _activityLogService.fetchLogsForJob(
+        jobId: widget.ticketId,
+        workCode: _ticket?['job_code']?.toString(),
+      );
+      if (mounted) {
+        setState(() {
+          _activityLogs = logs;
+          _activityLogsLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Is loglari yuklenirken hata: $e');
+      if (mounted) setState(() => _activityLogsLoading = false);
+    }
+  }
+
+  Future<void> _addActivityNote() async {
+    final note = _activityNoteController.text.trim();
+    if (note.isEmpty || _isSavingActivityNote) return;
+
+    setState(() => _isSavingActivityNote = true);
+    try {
+      await _activityLogService.addJobManualNote(
+        jobId: widget.ticketId,
+        note: note,
+        workCode: _ticket?['job_code']?.toString(),
+        jobType: _ticket?['job_type']?.toString(),
+      );
+      _activityNoteController.clear();
+      await _loadActivityLogs();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Kisa not is loglarina eklendi'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Log notu eklenemedi: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSavingActivityNote = false);
     }
   }
 
@@ -278,19 +343,19 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          title: const Text('Servis Notunu Düzenle'),
+          title: const Text('Servis Notunu DÃƒÂ¼zenle'),
           content: TextField(
             controller: controller,
             maxLines: 4,
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
-              hintText: 'Servis notunu güncelleyin',
+              hintText: 'Servis notunu gÃƒÂ¼ncelleyin',
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('İptal'),
+              child: const Text('Ã„Â°ptal'),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -303,7 +368,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     await _loadNotes();
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Servis notu güncellendi'),
+                        content: Text('Servis notu gÃƒÂ¼ncellendi'),
                         backgroundColor: Colors.green,
                       ),
                     );
@@ -359,7 +424,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       builder:
           (context) => AddNoteDialog(
             ticketId: widget.ticketId,
-            onSuccess: _loadNotes, // Başarılı olunca notları yenile
+            onSuccess: _loadNotes, // BaÃ…Å¸arÃ„Â±lÃ„Â± olunca notlarÃ„Â± yenile
           ),
     );
   }
@@ -371,7 +436,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       builder:
           (context) => AddNoteDialog(
             ticketId: widget.ticketId,
-            isPartnerNote: true, // Partner notu olarak işaretle
+            isPartnerNote: true, // Partner notu olarak iÃ…Å¸aretle
             onSuccess: _loadNotes,
           ),
     );
@@ -762,20 +827,20 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     final userService = UserService();
     final userProfile = await userService.getCurrentUserProfile();
 
-    // 1. TEKNİSYEN İMZASI KONTROLÜ (PROFiLDEN)
+    // 1. TEKNÃ„Â°SYEN Ã„Â°MZASI KONTROLÃƒÅ“ (PROFiLDEN)
     if (userProfile?.signatureData == null) {
       final shouldGoToSetup = await showDialog<bool>(
         context: context,
         builder:
             (ctx) => AlertDialog(
-              title: const Text('Profil İmzası Eksik'),
+              title: const Text('Profil Ã„Â°mzasÃ„Â± Eksik'),
               content: const Text(
-                'PDF raporu oluşturabilmek için profilinize bir imza eklemeniz gerekmektedir. Şimdi eklemek ister misiniz?',
+                'PDF raporu oluÃ…Å¸turabilmek iÃƒÂ§in profilinize bir imza eklemeniz gerekmektedir. Ã…Âimdi eklemek ister misiniz?',
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('İptal'),
+                  child: const Text('Ã„Â°ptal'),
                 ),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(ctx, true),
@@ -783,7 +848,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     backgroundColor: AppColors.corporateNavy,
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text('İmza Ayarla'),
+                  child: const Text('Ã„Â°mza Ayarla'),
                 ),
               ],
             ),
@@ -795,14 +860,14 @@ class _TicketDetailPageState extends State<TicketDetailPage>
           context,
           MaterialPageRoute(builder: (_) => ProfilePage()),
         );
-        // Profil sayfasından döndüğünde tekrar kontrol etmek için metodu durduruyoruz
+        // Profil sayfasÃ„Â±ndan dÃƒÂ¶ndÃƒÂ¼Ã„Å¸ÃƒÂ¼nde tekrar kontrol etmek iÃƒÂ§in metodu durduruyoruz
         return;
       } else {
-        return; // İşlemi iptal et
+        return; // Ã„Â°Ã…Å¸lemi iptal et
       }
     }
 
-    // 2. MÜŞTERİ İMZASI KONTROLÜ
+    // 2. MÃƒÅ“Ã…ÂTERÃ„Â° Ã„Â°MZASI KONTROLÃƒÅ“
     final hasCustomerSignature = _ticket!['signature_data'] != null;
 
     if (!hasCustomerSignature) {
@@ -810,14 +875,14 @@ class _TicketDetailPageState extends State<TicketDetailPage>
         context: context,
         builder:
             (ctx) => AlertDialog(
-              title: const Text('Müşteri İmzası Eksik'),
+              title: const Text('MÃƒÂ¼Ã…Å¸teri Ã„Â°mzasÃ„Â± Eksik'),
               content: const Text(
-                'Müşteri imzası atılmamış. İmza sayfasına yönlendirilsin mi?',
+                'MÃƒÂ¼Ã…Å¸teri imzasÃ„Â± atÃ„Â±lmamÃ„Â±Ã…Å¸. Ã„Â°mza sayfasÃ„Â±na yÃƒÂ¶nlendirilsin mi?',
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Hayır, İmzasız Devam Et'),
+                  child: const Text('HayÃ„Â±r, Ã„Â°mzasÃ„Â±z Devam Et'),
                 ),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(ctx, true),
@@ -825,25 +890,25 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     backgroundColor: AppColors.corporateNavy,
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text('İmzaya Git'),
+                  child: const Text('Ã„Â°mzaya Git'),
                 ),
               ],
             ),
       );
 
       if (shouldGoToSign == true) {
-        _openSignaturePage(); // Müşteri imzasına yönlendir
+        _openSignaturePage(); // MÃƒÂ¼Ã…Å¸teri imzasÃ„Â±na yÃƒÂ¶nlendir
         return;
       }
     }
 
-    // PDF oluşturma işlemi devam eder...
+    // PDF oluÃ…Å¸turma iÃ…Å¸lemi devam eder...
     final jobCode = Formatters.safeText(_ticket!['job_code']);
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder:
             (_) => PdfViewerPage(
-              title: 'İş Emri: $jobCode',
+              title: 'Ã„Â°Ã…Å¸ Emri: $jobCode',
               pdfFileName: 'Is_Emri_$jobCode.pdf',
               pdfGenerator:
                   () => PdfExportService.generateSingleTicketPdfBytes(
@@ -903,7 +968,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-        throw 'Dosya açılamadı';
+        throw 'Dosya aÃƒÂ§Ã„Â±lamadÃ„Â±';
       }
     } catch (e) {
       if (mounted) {
@@ -916,9 +981,9 @@ class _TicketDetailPageState extends State<TicketDetailPage>
 
   String? _extractPdfUrl(String? description) {
     if (description == null) return null;
-    // Regex: Linkin sonundaki nokta, virgül vb. noktalama işaretlerini almaz.
+    // Regex: Linkin sonundaki nokta, virgÃƒÂ¼l vb. noktalama iÃ…Å¸aretlerini almaz.
     final regex = RegExp(
-      r'Ekli PDF Dosyası: (https?://[^\s]+?)(?=[.,;:]?(\s|$))',
+      r'Ekli PDF DosyasÃ„Â±: (https?://[^\s]+?)(?=[.,;:]?(\s|$))',
     );
     final match = regex.firstMatch(description);
     return match?.group(1);
@@ -926,9 +991,9 @@ class _TicketDetailPageState extends State<TicketDetailPage>
 
   List<Map<String, String>> _extractFileLinks(String? description) {
     if (description == null) return [];
-    // Format: Program Dosyası ([NAME]): [URL]
+    // Format: Program DosyasÃ„Â± ([NAME]): [URL]
     final regex = RegExp(
-      r'Program Dosyası \((.*?)\): (https?://[^\s]+?)(?=[.,;:]?(\s|$))',
+      r'Program DosyasÃ„Â± \((.*?)\): (https?://[^\s]+?)(?=[.,;:]?(\s|$))',
     );
     final matches = regex.allMatches(description);
     return matches
@@ -960,9 +1025,10 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       );
 
       if (fileUrl != null) {
-        // Supabase'deki bilet açıklamasını güncelle
+        // Supabase'deki bilet aÃƒÂ§Ã„Â±klamasÃ„Â±nÃ„Â± gÃƒÂ¼ncelle
         final oldDesc = _ticket?['description'] as String? ?? '';
-        final newLinkLine = '\nProgram Dosyası (${pickedFile.name}): $fileUrl';
+        final newLinkLine =
+            '\nProgram DosyasÃ„Â± (${pickedFile.name}): $fileUrl';
         final newDesc = '$oldDesc$newLinkLine';
 
         await _updateTicketLocal({'description': newDesc});
@@ -970,13 +1036,13 @@ class _TicketDetailPageState extends State<TicketDetailPage>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Dosya yüklendi.'),
+              content: Text('Dosya yÃƒÂ¼klendi.'),
               backgroundColor: Colors.green,
             ),
           );
         }
       } else {
-        throw 'Yükleme başarısız oldu.';
+        throw 'YÃƒÂ¼kleme baÃ…Å¸arÃ„Â±sÃ„Â±z oldu.';
       }
     } catch (e) {
       if (mounted) {
@@ -1009,7 +1075,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     }
   }
 
-  // --- ARAYÜZ (BUILD METODU) ---
+  // --- ARAYÃƒÅ“Z (BUILD METODU) ---
 
   @override
   Widget build(BuildContext context) {
@@ -1039,7 +1105,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   // ignore: unused_element
   Widget? _buildFloatingActionButton() {
     final isPartnerUser = _userProfile?.role == 'partner_user';
-    // Sadece partner kullanıcıları, admin, manager ve teknisyenler not ekleyebilir
+    // Sadece partner kullanÃ„Â±cÃ„Â±larÃ„Â±, admin, manager ve teknisyenler not ekleyebilir
     if (!_canCurrentUserAddNotes()) {
       return null;
     }
@@ -1067,7 +1133,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     );
   }
 
-  // --- YENİ HEADER VE TAB YAPISI METODLARI ---
+  // --- YENÃ„Â° HEADER VE TAB YAPISI METODLARI ---
 
   Widget? _buildModernFloatingActionButton() {
     final isPartnerUser = _userProfile?.role == 'partner_user';
@@ -1110,17 +1176,18 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Üst satır: Başlık ve Status/Priority
+          // ÃƒÅ“st satÃ„Â±r: BaÃ…Å¸lÃ„Â±k ve Status/Priority
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Sol taraf: Başlık ve bilgiler
+              // Sol taraf: BaÃ…Å¸lÃ„Â±k ve bilgiler
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      ticket['title'] as String? ?? 'Başlıksız İş',
+                      ticket['title'] as String? ??
+                          'BaÃ…Å¸lÃ„Â±ksÃ„Â±z Ã„Â°Ã…Å¸',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -1142,11 +1209,12 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                           ),
                         ),
                         const Text(
-                          '·',
+                          'Ã‚Â·',
                           style: TextStyle(color: AppColors.textLight),
                         ),
                         Text(
-                          customer['name'] as String? ?? 'Müşteri Adı Yok',
+                          customer['name'] as String? ??
+                              'MÃƒÂ¼Ã…Å¸teri AdÃ„Â± Yok',
                           style: TextStyle(fontSize: 13, color: secondaryText),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1156,7 +1224,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 ),
               ),
               const SizedBox(width: 12),
-              // Sağ taraf: Status ve Priority
+              // SaÃ„Å¸ taraf: Status ve Priority
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -1185,12 +1253,12 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             runSpacing: 4,
             children: [
               Text(
-                'Oluşturma: ${Formatters.date(ticket['created_at'])}',
+                'OluÃ…Å¸turma: ${Formatters.date(ticket['created_at'])}',
                 style: TextStyle(fontSize: 11, color: secondaryText),
               ),
               if (plannedDate != null) ...[
                 const Text(
-                  '·',
+                  'Ã‚Â·',
                   style: TextStyle(color: AppColors.textLight, fontSize: 11),
                 ),
                 Text(
@@ -1201,7 +1269,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             ],
           ),
           const SizedBox(height: 12),
-          // Aksiyon butonları - Wrap kullanarak responsive yap
+          // Aksiyon butonlarÃ„Â± - Wrap kullanarak responsive yap
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -1235,7 +1303,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
               if (_canEditTicket)
                 _buildHeaderActionButton(
                   icon: Icons.edit_outlined,
-                  label: 'Düzenle',
+                  label: 'DÃƒÂ¼zenle',
                   onPressed: () async {
                     await Navigator.of(context).push(
                       MaterialPageRoute(
@@ -1249,7 +1317,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
               if (_canManageTicketSignatures)
                 _buildHeaderActionButton(
                   icon: Icons.edit_document,
-                  label: 'İmzalar',
+                  label: 'Ã„Â°mzalar',
                   onPressed: () => _showSignatureMenu(),
                 ),
               _buildHeaderActionButton(
@@ -1260,7 +1328,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             ],
           ),
           const SizedBox(height: 16),
-          // Durum, Öncelik, Planlanan Tarih - Multi-action bar
+          // Durum, Ãƒâ€“ncelik, Planlanan Tarih - Multi-action bar
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -1274,7 +1342,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 SizedBox(
                   width: isWide ? 180 : double.infinity,
                   child: _buildCompactDropdown(
-                    label: 'İş Durumu',
+                    label: 'Ã„Â°Ã…Å¸ Durumu',
                     value: status,
                     items: _availableStatusItems(status),
                     onChanged:
@@ -1287,7 +1355,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 SizedBox(
                   width: isWide ? 180 : double.infinity,
                   child: _buildCompactDropdown(
-                    label: 'Öncelik',
+                    label: 'Ãƒâ€“ncelik',
                     value: priority,
                     items: _priorityLabels,
                     onChanged:
@@ -1332,7 +1400,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                     ),
                                   ),
                                   Text(
-                                    Formatters.date(plannedDate) ?? 'Seçiniz',
+                                    Formatters.date(plannedDate) ??
+                                        'SeÃƒÂ§iniz',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w600,
                                       color: AppColors.textDark,
@@ -1453,7 +1522,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              '${customer['name'] as String? ?? 'Musteri bilgisi yok'}  •  ${Formatters.safeText(ticket['job_code'])}',
+                              '${customer['name'] as String? ?? 'Musteri bilgisi yok'}  Ã¢â‚¬Â¢  ${Formatters.safeText(ticket['job_code'])}',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: secondaryText,
                               ),
@@ -1943,8 +2012,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   ),
                   title: Text(
                     hasCustomerSignature
-                        ? 'Müşteri İmzası Düzenle'
-                        : 'Müşteri İmzası',
+                        ? 'MÃƒÂ¼Ã…Å¸teri Ã„Â°mzasÃ„Â± DÃƒÂ¼zenle'
+                        : 'MÃƒÂ¼Ã…Å¸teri Ã„Â°mzasÃ„Â±',
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -1958,8 +2027,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   ),
                   title: Text(
                     hasTechnicianSignature
-                        ? 'Teknisyen İmzası Düzenle'
-                        : 'Teknisyen İmzası',
+                        ? 'Teknisyen Ã„Â°mzasÃ„Â± DÃƒÂ¼zenle'
+                        : 'Teknisyen Ã„Â°mzasÃ„Â±',
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -1990,7 +2059,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Bu ekran görüntüleme modundadır. Değişiklik yapmak için merkez ile iletişime geçin.',
+              'Bu ekran gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼leme modundadÃ„Â±r. DeÃ„Å¸iÃ…Å¸iklik yapmak iÃƒÂ§in merkez ile iletiÃ…Å¸ime geÃƒÂ§in.',
               style: TextStyle(
                 fontSize: 12,
                 color: accent,
@@ -2009,18 +2078,24 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     }
 
     return description
-            .replaceAll(RegExp(r'Ekli PDF DosyasÄ±: https?://[^\s]+'), '')
             .replaceAll(
-              RegExp(r'Program DosyasÄ± \((.*?)\): https?://[^\s]+'),
+              RegExp(r'Ekli PDF DosyasÃƒâ€Ã‚Â±: https?://[^\s]+'),
+              '',
+            )
+            .replaceAll(
+              RegExp(r'Program DosyasÃƒâ€Ã‚Â± \((.*?)\): https?://[^\s]+'),
               '',
             )
             .trim()
             .isEmpty
         ? 'Aciklama girilmemis.'
         : description
-            .replaceAll(RegExp(r'Ekli PDF DosyasÄ±: https?://[^\s]+'), '')
             .replaceAll(
-              RegExp(r'Program DosyasÄ± \((.*?)\): https?://[^\s]+'),
+              RegExp(r'Ekli PDF DosyasÃƒâ€Ã‚Â±: https?://[^\s]+'),
+              '',
+            )
+            .replaceAll(
+              RegExp(r'Program DosyasÃƒâ€Ã‚Â± \((.*?)\): https?://[^\s]+'),
               '',
             )
             .trim();
@@ -2264,13 +2339,13 @@ class _TicketDetailPageState extends State<TicketDetailPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Müşteri Kartı
+              // MÃƒÂ¼Ã…Å¸teri KartÃ„Â±
               _buildModernContentCard(
-                title: 'Müşteri Bilgileri',
+                title: 'MÃƒÂ¼Ã…Å¸teri Bilgileri',
                 icon: Icons.business,
                 children: [
                   _buildInfoRow(
-                    'Müşteri Adı',
+                    'MÃƒÂ¼Ã…Å¸teri AdÃ„Â±',
                     customer['name'] as String?,
                     isBold: true,
                   ),
@@ -2287,21 +2362,21 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 ],
               ),
               const SizedBox(height: 20),
-              // İş Açıklaması
+              // Ã„Â°Ã…Å¸ AÃƒÂ§Ã„Â±klamasÃ„Â±
               _buildModernContentCard(
-                title: 'İş Emri Açıklaması',
+                title: 'Ã„Â°Ã…Å¸ Emri AÃƒÂ§Ã„Â±klamasÃ„Â±',
                 icon: Icons.assignment_outlined,
                 children: [
                   Builder(
                     builder: (context) {
                       final rawDesc =
                           ticket['description'] as String? ??
-                          'Açıklama girilmemiş.';
+                          'AÃƒÂ§Ã„Â±klama girilmemiÃ…Å¸.';
                       final pdfUrl = _extractPdfUrl(rawDesc);
                       final cleanDesc =
                           rawDesc
                               .replaceAll(
-                                RegExp(r'Ekli PDF Dosyası: https?://[^\s]+'),
+                                RegExp(r'Ekli PDF DosyasÃ„Â±: https?://[^\s]+'),
                                 '',
                               )
                               .trim();
@@ -2311,7 +2386,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                         children: [
                           Text(
                             cleanDesc.isEmpty
-                                ? 'Açıklama girilmemiş.'
+                                ? 'AÃƒÂ§Ã„Â±klama girilmemiÃ…Å¸.'
                                 : cleanDesc,
                             style: const TextStyle(
                               color: AppColors.textDark,
@@ -2353,16 +2428,16 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 ],
               ),
               const SizedBox(height: 20),
-              // İmzalar
+              // Ã„Â°mzalar
               _buildModernContentCard(
-                title: 'İmzalar',
+                title: 'Ã„Â°mzalar',
                 icon: Icons.edit_document,
                 children: [
                   Row(
                     children: [
                       Expanded(
                         child: _buildSignatureCard(
-                          title: 'Müşteri Onayı',
+                          title: 'MÃƒÂ¼Ã…Å¸teri OnayÃ„Â±',
                           name:
                               ticket['signature_name'] != null
                                   ? '${ticket['signature_name']} ${ticket['signature_surname'] ?? ''}'
@@ -2555,13 +2630,13 @@ class _TicketDetailPageState extends State<TicketDetailPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Dosya Yükleme Butonu (Supabase)
+              // Dosya YÃƒÂ¼kleme Butonu (Supabase)
               _buildModernContentCard(
-                title: 'Dosya Yükle (Supabase)',
+                title: 'Dosya YÃƒÂ¼kle (Supabase)',
                 icon: Icons.cloud_upload_outlined,
                 children: [
                   Text(
-                    'Program veya dokümanları Supabase depolama alanına yükleyip iş detayına ekleyebilirsiniz.',
+                    'Program veya dokÃƒÂ¼manlarÃ„Â± Supabase depolama alanÃ„Â±na yÃƒÂ¼kleyip iÃ…Å¸ detayÃ„Â±na ekleyebilirsiniz.',
                     style: TextStyle(fontSize: 12, color: AppColors.textLight),
                   ),
                   const SizedBox(height: 16),
@@ -2582,8 +2657,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                               : const Icon(Icons.upload_file),
                       label: Text(
                         _isUploadingFile
-                            ? 'Yükleniyor...'
-                            : 'Supabase\'e Yükle',
+                            ? 'YÃƒÂ¼kleniyor...'
+                            : 'Supabase\'e YÃƒÂ¼kle',
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.corporateNavy,
@@ -2596,10 +2671,10 @@ class _TicketDetailPageState extends State<TicketDetailPage>
               ),
               const SizedBox(height: 20),
 
-              // Yüklenen Dosyalar
+              // YÃƒÂ¼klenen Dosyalar
               if (fileLinks.isNotEmpty) ...[
                 _buildModernContentCard(
-                  title: 'Yüklenen Dosyalar',
+                  title: 'YÃƒÂ¼klenen Dosyalar',
                   icon: Icons.terminal_outlined,
                   children:
                       fileLinks.map((link) {
@@ -2632,10 +2707,10 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 const SizedBox(height: 20),
               ],
 
-              // Ekli PDF - Sadece gömülü PDF göster
+              // Ekli PDF - Sadece gÃƒÂ¶mÃƒÂ¼lÃƒÂ¼ PDF gÃƒÂ¶ster
               if (pdfUrl != null)
                 _buildModernContentCard(
-                  title: 'Ekli PDF Dosyası',
+                  title: 'Ekli PDF DosyasÃ„Â±',
                   icon: Icons.attach_file,
                   children: [
                     OutlinedButton.icon(
@@ -2661,14 +2736,14 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 )
               else if (fileLinks.isEmpty)
                 _buildModernContentCard(
-                  title: 'Dokümanlar',
+                  title: 'DokÃƒÂ¼manlar',
                   icon: Icons.folder_outlined,
                   children: [
                     const Center(
                       child: Padding(
                         padding: EdgeInsets.all(20.0),
                         child: Text(
-                          'Ekli doküman bulunmamaktadır.',
+                          'Ekli dokÃƒÂ¼man bulunmamaktadÃ„Â±r.',
                           style: TextStyle(
                             color: AppColors.textLight,
                             fontSize: 14,
@@ -2694,7 +2769,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
           constraints: const BoxConstraints(maxWidth: 1000),
           child: Column(
             children: [
-              // Stok Kullanımı (Yeni)
+              // Stok KullanÃ„Â±mÃ„Â± (Yeni)
               _buildPartsSection(),
               const SizedBox(height: 20),
 
@@ -2717,7 +2792,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                         isInline: true,
                       ),
                       _buildInfoRow(
-                        'Isıtıcı Kademe',
+                        'IsÃ„Â±tÃ„Â±cÃ„Â± Kademe',
                         ticket['isitici_kademe'] as String?,
                         isInline: true,
                       ),
@@ -2725,7 +2800,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'Güç Tüketim Değerleri',
+                    'GÃƒÂ¼ÃƒÂ§ TÃƒÂ¼ketim DeÃ„Å¸erleri',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -2742,22 +2817,22 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     childAspectRatio: 1.5,
                     children: [
                       _buildTechMetricBox(
-                        'Aspiratör',
+                        'AspiratÃƒÂ¶r',
                         ticket['aspirator_kw'],
                         'kW',
                       ),
                       _buildTechMetricBox(
-                        'Vantilatör',
+                        'VantilatÃƒÂ¶r',
                         ticket['vant_kw'],
                         'kW',
                       ),
                       _buildTechMetricBox(
-                        'Kompresör 1',
+                        'KompresÃƒÂ¶r 1',
                         ticket['kompresor_kw_1'],
                         'kW',
                       ),
                       _buildTechMetricBox(
-                        'Kompresör 2',
+                        'KompresÃƒÂ¶r 2',
                         ticket['kompresor_kw_2'],
                         'kW',
                       ),
@@ -2765,7 +2840,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'Donanım Kontrol Listesi',
+                    'DonanÃ„Â±m Kontrol Listesi',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -2779,8 +2854,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     children: _buildFeatureChips(ticket),
                   ),
                 ],
-              ), // _buildModernContentCard'ın kapanışı
-            ], // Column'un kapanışı
+              ), // _buildModernContentCard'Ã„Â±n kapanÃ„Â±Ã…Å¸Ã„Â±
+            ], // Column'un kapanÃ„Â±Ã…Å¸Ã„Â±
           ),
         ),
       ),
@@ -2794,11 +2869,11 @@ class _TicketDetailPageState extends State<TicketDetailPage>
 
     if (_parts.isEmpty) {
       return _buildModernContentCard(
-        title: 'Kullanılan Malzemeler',
+        title: 'KullanÃ„Â±lan Malzemeler',
         icon: Icons.inventory_2_outlined,
         children: [
           Text(
-            'Henüz malzeme eklenmemiş.',
+            'HenÃƒÂ¼z malzeme eklenmemiÃ…Å¸.',
             style: TextStyle(color: _secondaryTextColor(context)),
           ),
         ],
@@ -2806,7 +2881,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     }
 
     return _buildModernContentCard(
-      title: 'Kullanılan Malzemeler',
+      title: 'KullanÃ„Â±lan Malzemeler',
       icon: Icons.inventory_2_outlined,
       children: [
         ListView.separated(
@@ -2819,7 +2894,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             return ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(
-                part.inventoryName ?? 'Bilinmeyen Ürün',
+                part.inventoryName ?? 'Bilinmeyen ÃƒÅ“rÃƒÂ¼n',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: _primaryTextColor(context),
@@ -4223,7 +4298,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     return NestedScrollView(
       headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
         return [
-          // Üst Header - Servis Özeti
+          // ÃƒÅ“st Header - Servis Ãƒâ€“zeti
           SliverToBoxAdapter(
             child: _buildRefinedHeaderSection(
               ticket,
@@ -4236,7 +4311,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             ),
           ),
 
-          // Partner kullanıcılar için info bar
+          // Partner kullanÃ„Â±cÃ„Â±lar iÃƒÂ§in info bar
           if (isPartnerUser) SliverToBoxAdapter(child: _buildPartnerInfoBar()),
 
           // Tab Bar - Sabit kalacak
@@ -4270,6 +4345,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   Tab(height: 56, text: 'Gunluk'),
                   Tab(height: 56, text: 'Evrak'),
                   Tab(height: 56, text: 'Teknik'),
+                  Tab(height: 56, text: 'Loglar'),
                 ],
               ),
             ),
@@ -4284,12 +4360,213 @@ class _TicketDetailPageState extends State<TicketDetailPage>
           _buildDailyReportsTab(),
           _buildPaperworkTab(ticket),
           _buildTechnicalTab(ticket, isWide),
+          _buildActivityLogsTab(),
         ],
       ),
     );
   }
 
-  // Kurumsal notlar görünümü - Profesyonel kart yapısı
+  Widget _buildActivityLogsTab() {
+    final users = <String, String>{};
+    for (final log in _activityLogs) {
+      final id = '${log['actor_id'] ?? log['user_id'] ?? ''}'.trim();
+      final name = '${log['actor_name'] ?? ''}'.trim();
+      if (id.isNotEmpty || name.isNotEmpty) {
+        users[id.isEmpty ? name : id] = name.isEmpty ? 'Kullanici' : name;
+      }
+    }
+
+    final filteredLogs =
+        _activityUserFilter == null
+            ? _activityLogs
+            : _activityLogs
+                .where((log) {
+                  final id =
+                      '${log['actor_id'] ?? log['user_id'] ?? ''}'.trim();
+                  final name = '${log['actor_name'] ?? ''}'.trim();
+                  return _activityUserFilter == id ||
+                      _activityUserFilter == name;
+                })
+                .toList(growable: false);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildModernContentCard(
+            title: 'Is Loglari',
+            icon: Icons.history_rounded,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _activityNoteController,
+                      minLines: 1,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Kisa not ekle',
+                        hintText: 'Bugunku ilerleme veya gorusme notu',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    onPressed: _isSavingActivityNote ? null : _addActivityNote,
+                    icon:
+                        _isSavingActivityNote
+                            ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                            : const Icon(Icons.add_comment_outlined),
+                    label: const Text('Ekle'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('Tum kullanicilar'),
+                    selected: _activityUserFilter == null,
+                    onSelected:
+                        (_) => setState(() => _activityUserFilter = null),
+                  ),
+                  ...users.entries.map(
+                    (entry) => ChoiceChip(
+                      label: Text(entry.value),
+                      selected: _activityUserFilter == entry.key,
+                      onSelected:
+                          (_) =>
+                              setState(() => _activityUserFilter = entry.key),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (_activityLogsLoading)
+                const SizedBox(
+                  height: 160,
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              else if (filteredLogs.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: _surfaceMutedColor(context),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _borderColor(context)),
+                  ),
+                  child: Text(
+                    'Bu is icin henuz log kaydi yok.',
+                    style: TextStyle(color: _secondaryTextColor(context)),
+                  ),
+                )
+              else
+                ...filteredLogs.map(_buildActivityLogTile),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivityLogTile(Map<String, dynamic> log) {
+    final actor = '${log['actor_name'] ?? ''}'.trim();
+    final message =
+        '${log['message'] ?? log['note'] ?? log['action'] ?? ''}'.trim();
+    final action = '${log['action'] ?? ''}'.trim();
+    final createdAt = Formatters.date(log['created_at']);
+    final isManual = log['is_manual_note'] == true || log['source'] == 'manual';
+    final title =
+        message.isNotEmpty ? message : (action.isEmpty ? 'Log kaydi' : action);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _surfaceColor(context),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _borderColor(context)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor:
+                isManual
+                    ? Colors.amber.withOpacity(0.18)
+                    : Theme.of(context).colorScheme.primary.withOpacity(0.12),
+            child: Icon(
+              isManual ? Icons.edit_note_rounded : Icons.bolt_outlined,
+              size: 19,
+              color:
+                  isManual
+                      ? Colors.amber.shade800
+                      : Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: _primaryTextColor(context),
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 4,
+                  children: [
+                    Text(
+                      actor.isEmpty ? 'Kullanici bilinmiyor' : actor,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _secondaryTextColor(context),
+                      ),
+                    ),
+                    Text(
+                      createdAt,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _secondaryTextColor(context),
+                      ),
+                    ),
+                    Text(
+                      isManual ? 'Manuel not' : 'Otomatik kayit',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _secondaryTextColor(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Kurumsal notlar gÃƒÂ¶rÃƒÂ¼nÃƒÂ¼mÃƒÂ¼ - Profesyonel kart yapÃ„Â±sÃ„Â±
   Widget _buildNotesChatView() {
     final notes = _serviceTimelineNotes;
     if (_notesLoading) {
@@ -4300,7 +4577,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     }
 
     if (notes.isEmpty) {
-      return const SizedBox.shrink(); // Boş durumda hiçbir şey gösterme (FAB zaten var)
+      return const SizedBox.shrink(); // BoÃ…Å¸ durumda hiÃƒÂ§bir Ã…Å¸ey gÃƒÂ¶sterme (FAB zaten var)
     }
 
     return Column(
@@ -4364,7 +4641,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Başlık satırı - Kullanıcı, rol, tarih
+                    // BaÃ…Å¸lÃ„Â±k satÃ„Â±rÃ„Â± - KullanÃ„Â±cÃ„Â±, rol, tarih
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -4385,7 +4662,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                           ),
                         ),
                         const SizedBox(width: 12),
-                        // Kullanıcı bilgileri
+                        // KullanÃ„Â±cÃ„Â± bilgileri
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -4443,7 +4720,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                             ],
                           ),
                         ),
-                        // Tarih ve düzenleme - Sağ üstte
+                        // Tarih ve dÃƒÂ¼zenleme - SaÃ„Å¸ ÃƒÂ¼stte
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
@@ -4517,7 +4794,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                                               _launchAttachment(
                                                                 url,
                                                               ),
-                                                      tooltip: 'Tarayıcıda Aç',
+                                                      tooltip:
+                                                          'TarayÃ„Â±cÃ„Â±da AÃƒÂ§',
                                                     ),
                                                   ],
                                                 ),
@@ -4807,7 +5085,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header (kurumsal sarı aksan)
+          // Header (kurumsal sarÃ„Â± aksan)
           Container(
             decoration: BoxDecoration(
               color: _corporatePanelColor(context),
@@ -4966,16 +5244,16 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     final features = {
       'DX': ticket['dx'],
       'Sulu Batarya': ticket['sulu_batarya'],
-      'Karışım Damper': ticket['karisim_damper'],
+      'KarÃ„Â±Ã…Å¸Ã„Â±m Damper': ticket['karisim_damper'],
       'Nemlendirici': ticket['nemlendirici'],
       'Rotor': ticket['rotor'],
-      'Brülör': ticket['brulor'],
+      'BrÃƒÂ¼lÃƒÂ¶r': ticket['brulor'],
     };
 
     if (features.values.every((v) => v != true)) {
       return [
         const Text(
-          'Özel donanım seçili değil.',
+          'Ãƒâ€“zel donanÃ„Â±m seÃƒÂ§ili deÃ„Å¸il.',
           style: TextStyle(
             color: AppColors.textLight,
             fontStyle: FontStyle.italic,
@@ -5054,7 +5332,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
           const SizedBox(height: 8),
           if (isSigned) ...[
             Text(
-              name ?? 'İsimsiz',
+              name ?? 'Ã„Â°simsiz',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: _primaryTextColor(context),
@@ -5075,7 +5353,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             ),
           ] else
             const Text(
-              'İmza Bekleniyor',
+              'Ã„Â°mza Bekleniyor',
               style: TextStyle(
                 color: Colors.grey,
                 fontStyle: FontStyle.italic,
@@ -5200,7 +5478,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   }
 }
 
-// TabBar için SliverPersistentHeader delegate
+// TabBar iÃƒÂ§in SliverPersistentHeader delegate
 class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   final TabBar tabBar;
 

@@ -106,9 +106,9 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   };
 
   static const Map<String, String> _priorityLabels = {
-    'low': 'Düşük Öncelik',
-    'normal': 'Normal Öncelik',
-    'high': 'Yüksek Öncelik',
+    'low': 'Dusuk Oncelik',
+    'normal': 'Normal Oncelik',
+    'high': 'Yuksek Oncelik',
   };
 
   bool _isDark(BuildContext context) {
@@ -1207,7 +1207,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                           ),
                         ),
                         const Text(
-                          '·',
+                          '-',
                           style: TextStyle(color: AppColors.textLight),
                         ),
                         Text(
@@ -1255,7 +1255,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
               ),
               if (plannedDate != null) ...[
                 const Text(
-                  '·',
+                  '-',
                   style: TextStyle(color: AppColors.textLight, fontSize: 11),
                 ),
                 Text(
@@ -1518,7 +1518,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              '${customer['name'] as String? ?? 'Musteri bilgisi yok'}  •  ${Formatters.safeText(ticket['job_code'])}',
+                              '${customer['name'] as String? ?? 'Musteri bilgisi yok'}  -  ${Formatters.safeText(ticket['job_code'])}',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: secondaryText,
                               ),

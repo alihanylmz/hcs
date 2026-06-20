@@ -5,6 +5,7 @@ import 'ticket_detail_page.dart';
 import 'archived_tickets_page.dart';
 import 'stock_overview_page.dart';
 import 'partner_management_page.dart';
+import 'activity_logs_page.dart';
 import 'user_management_page.dart';
 import '../features/admin/application/admin_access_controller.dart';
 import '../models/ticket_status.dart';
@@ -1383,6 +1384,11 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                   );
                   break;
+                case 'logs':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ActivityLogsPage()),
+                  );
+                  break;
               }
             },
             itemBuilder:
@@ -1410,6 +1416,19 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                         SizedBox(width: 12),
                         Text('Partner Firmalar'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'logs',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.event_note_rounded,
+                          color: AppColors.corporateNavy,
+                        ),
+                        SizedBox(width: 12),
+                        Text('Hareket Merkezi'),
                       ],
                     ),
                   ),

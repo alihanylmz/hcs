@@ -138,7 +138,7 @@ class ActivityLogService {
       'activity_type': activityType,
       'work_code': workCode?.trim() ?? '',
       'message': cleanMessage,
-      'note': null,
+      'note': '',
       'source': 'auto',
       'is_manual_note': false,
       'metadata': {'ticket_id': jobId, 'job_type': jobType},

@@ -9,6 +9,7 @@ import '../models/card_linked_ticket.dart';
 import '../services/card_service.dart';
 import '../theme/app_colors.dart';
 import 'ticket_detail_page.dart';
+import 'workshop_recipe_page.dart';
 
 class CardDetailPage extends StatefulWidget {
   const CardDetailPage({super.key, required this.card});
@@ -49,6 +50,18 @@ class _CardDetailPageState extends State<CardDetailPage> {
       _descController.text.trim() != _initialDescription ||
       _currentStatus != _initialStatus ||
       _selectedLinkedTicketId != _initialLinkedTicketId;
+
+  bool get _isWorkshopCard {
+    final title = widget.card.title.toLowerCase();
+    final description = (widget.card.description ?? '').toLowerCase();
+    return title.contains('atolye') ||
+        title.contains('atölye') ||
+        title.contains('uretim') ||
+        title.contains('üretim') ||
+        description.contains('[atolye]') ||
+        description.contains('[atölye]') ||
+        description.contains('workshop_recipe_json');
+  }
 
   @override
   void initState() {
@@ -317,6 +330,18 @@ class _CardDetailPageState extends State<CardDetailPage> {
     );
   }
 
+  Future<void> _openWorkshopRecipe() async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WorkshopRecipePage(cardId: widget.card.id),
+        fullscreenDialog: true,
+      ),
+    );
+    if (result == true) {
+      _hasSavedChanges = true;
+    }
+  }
+
   List<CardLinkedTicket> _ticketOptions() {
     final options = List<CardLinkedTicket>.from(_linkableTickets);
     final selectedId = _selectedLinkedTicketId;
@@ -348,7 +373,7 @@ class _CardDetailPageState extends State<CardDetailPage> {
       child: Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(
-          title: const Text('Pano Karti'),
+          title: Text(_isWorkshopCard ? 'Atolye Imalat' : 'Pano Karti'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => Navigator.pop(context, _hasSavedChanges),
@@ -360,6 +385,25 @@ class _CardDetailPageState extends State<CardDetailPage> {
                 : Column(
                   children: [
                     _buildHeader(theme, isWide),
+                    if (_isWorkshopCard)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1080),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: _openWorkshopRecipe,
+                                icon: const Icon(
+                                  Icons.precision_manufacturing_outlined,
+                                ),
+                                label: const Text('Uretim Recetesini Ac'),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                       child: Center(
@@ -539,7 +583,9 @@ class _CardDetailPageState extends State<CardDetailPage> {
                         child: Text(
                           _hasPendingChanges
                               ? 'Kaydedilmemis degisiklikler var.'
-                              : 'Bu ekran ekip ici pano gorevine odaklanir. Referans is emri baglanti icin opsiyoneldir.',
+                              : (_isWorkshopCard
+                                  ? 'Bu kart atolye imalat emridir. Teknik alanlar, motor gucleri ve proje dosyalari icin Uretim Recetesi ekranini kullan.'
+                                  : 'Bu ekran ekip ici pano gorevine odaklanir. Referans is emri baglanti icin opsiyoneldir.'),
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onSurface.withOpacity(
                               0.68,
@@ -556,6 +602,13 @@ class _CardDetailPageState extends State<CardDetailPage> {
                     spacing: 10,
                     runSpacing: 10,
                     children: [
+                      if (_isWorkshopCard)
+                        _actionButton(
+                          theme,
+                          'Uretim Recetesi',
+                          Icons.precision_manufacturing_outlined,
+                          _openWorkshopRecipe,
+                        ),
                       _actionButton(theme, 'Konusma', Icons.forum_outlined, () {
                         Navigator.pop(context, 'open_conversation');
                       }),

@@ -1,8 +1,12 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 import '../models/card.dart';
 import '../services/card_service.dart';
@@ -24,12 +28,20 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
   final TicketService _ticketService = TicketService();
   late Future<KanbanCard> _cardFuture;
   final _panelTypeController = TextEditingController();
+  final _panelWidthController = TextEditingController();
+  final _panelHeightController = TextEditingController();
   final _mainBreakerController = TextEditingController();
   final _drivePowerController = TextEditingController();
+  final _drivePower2Controller = TextEditingController();
+  final _condenserDriveController = TextEditingController();
+  final _condenserDrive2Controller = TextEditingController();
+  final _compressorController = TextEditingController();
+  final _compressor2Controller = TextEditingController();
+  final _jetfanController = TextEditingController();
   final _plcModelController = TextEditingController();
   final _controlVoltageController = TextEditingController();
   final _notesController = TextEditingController();
-  final List<TextEditingController> _motorControllers = [];
+  String _panelType = 'Icten Tava';
   String _fileType = 'Proje PDF';
   bool _isSaving = false;
   bool _isUploading = false;
@@ -45,14 +57,19 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
   @override
   void dispose() {
     _panelTypeController.dispose();
+    _panelWidthController.dispose();
+    _panelHeightController.dispose();
     _mainBreakerController.dispose();
     _drivePowerController.dispose();
+    _drivePower2Controller.dispose();
+    _condenserDriveController.dispose();
+    _condenserDrive2Controller.dispose();
+    _compressorController.dispose();
+    _compressor2Controller.dispose();
+    _jetfanController.dispose();
     _plcModelController.dispose();
     _controlVoltageController.dispose();
     _notesController.dispose();
-    for (final controller in _motorControllers) {
-      controller.dispose();
-    }
     super.dispose();
   }
 
@@ -80,22 +97,23 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
     if (_loadedCardId == card.id) return;
     _loadedCardId = card.id;
     final data = _extractRecipe(card.description);
-    _panelTypeController.text = data['panel_type']?.toString() ?? '';
+    _panelType = data['panel_type']?.toString() ?? _panelType;
+    _panelTypeController.text = _panelType;
+    _panelWidthController.text = data['panel_width']?.toString() ?? '';
+    _panelHeightController.text = data['panel_height']?.toString() ?? '';
     _mainBreakerController.text = data['main_breaker']?.toString() ?? '';
     _drivePowerController.text = data['drive_power']?.toString() ?? '';
+    _drivePower2Controller.text = data['drive_power_2']?.toString() ?? '';
+    _condenserDriveController.text = data['condenser_drive']?.toString() ?? '';
+    _condenserDrive2Controller.text =
+        data['condenser_drive_2']?.toString() ?? '';
+    _compressorController.text = data['compressor']?.toString() ?? '';
+    _compressor2Controller.text = data['compressor_2']?.toString() ?? '';
+    _jetfanController.text = data['jetfan']?.toString() ?? '';
     _plcModelController.text = data['plc_model']?.toString() ?? '';
     _controlVoltageController.text = data['control_voltage']?.toString() ?? '';
     _notesController.text =
         data['notes']?.toString() ?? _stripRecipeBlock(card.description);
-    _motorControllers.clear();
-    final motors = data['motors'];
-    if (motors is List && motors.isNotEmpty) {
-      for (final motor in motors) {
-        _motorControllers.add(TextEditingController(text: motor.toString()));
-      }
-    } else {
-      _motorControllers.add(TextEditingController());
-    }
   }
 
   Map<String, dynamic> _extractRecipe(String? description) {
@@ -125,16 +143,18 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
 
   Future<void> _saveRecipe(KanbanCard card) async {
     setState(() => _isSaving = true);
-    final motors =
-        _motorControllers
-            .map((controller) => controller.text.trim())
-            .where((value) => value.isNotEmpty)
-            .toList();
     final data = {
-      'panel_type': _panelTypeController.text.trim(),
+      'panel_type': _panelType,
+      'panel_width': _panelWidthController.text.trim(),
+      'panel_height': _panelHeightController.text.trim(),
       'main_breaker': _mainBreakerController.text.trim(),
-      'motors': motors,
       'drive_power': _drivePowerController.text.trim(),
+      'drive_power_2': _drivePower2Controller.text.trim(),
+      'condenser_drive': _condenserDriveController.text.trim(),
+      'condenser_drive_2': _condenserDrive2Controller.text.trim(),
+      'compressor': _compressorController.text.trim(),
+      'compressor_2': _compressor2Controller.text.trim(),
+      'jetfan': _jetfanController.text.trim(),
       'plc_model': _plcModelController.text.trim(),
       'control_voltage': _controlVoltageController.text.trim(),
       'notes': _notesController.text.trim(),
@@ -142,11 +162,12 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
     final encoded = const JsonEncoder.withIndent('  ').convert(data);
     final humanSummary = [
       '[ATOLYE] Uretim recetesi',
-      if (_panelTypeController.text.trim().isNotEmpty)
-        'Panel tipi: ${_panelTypeController.text.trim()}',
+      if (_panelType.trim().isNotEmpty) 'Panel tipi: $_panelType',
+      if (_panelWidthController.text.trim().isNotEmpty ||
+          _panelHeightController.text.trim().isNotEmpty)
+        'Pano olcu: ${_panelWidthController.text.trim()}x${_panelHeightController.text.trim()}',
       if (_mainBreakerController.text.trim().isNotEmpty)
         'Ana salter: ${_mainBreakerController.text.trim()}',
-      if (motors.isNotEmpty) 'Motorlar: ${motors.join(', ')}',
       if (_drivePowerController.text.trim().isNotEmpty)
         'Surucu: ${_drivePowerController.text.trim()}',
       if (_plcModelController.text.trim().isNotEmpty)
@@ -172,6 +193,52 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  Future<void> _printRecipePdf(KanbanCard card) async {
+    await Printing.layoutPdf(
+      name: 'Uretim_Recetesi_${card.linkedJobCode ?? card.id}.pdf',
+      onLayout: (_) => _buildRecipePdf(card),
+    );
+  }
+
+  Future<Uint8List> _buildRecipePdf(KanbanCard card) async {
+    final doc = pw.Document();
+    final rows = _recipeRows(card);
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build:
+            (context) => pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'URETIM RECETESI',
+                  style: pw.TextStyle(
+                    fontSize: 20,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 14),
+                pw.TableHelper.fromTextArray(
+                  headers: const ['Alan', 'Deger'],
+                  data: rows.map((row) => [row.$1, row.$2]).toList(),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  cellAlignment: pw.Alignment.centerLeft,
+                ),
+                if (_notesController.text.trim().isNotEmpty) ...[
+                  pw.SizedBox(height: 16),
+                  pw.Text(
+                    'Notlar',
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.Text(_notesController.text.trim()),
+                ],
+              ],
+            ),
+      ),
+    );
+    return doc.save();
   }
 
   Future<void> _uploadProjectFile(KanbanCard card) async {
@@ -357,21 +424,64 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
       title: 'Teknik Ozellikler',
       child: Column(
         children: [
-          _field(
-            _panelTypeController,
-            'Panel Tipi',
-            'Duvar tipi, dikili tip...',
+          DropdownButtonFormField<String>(
+            initialValue: _panelType,
+            decoration: const InputDecoration(labelText: 'Panel Tipi'),
+            items:
+                const [
+                      'Icten Tava',
+                      'Dikili Tip',
+                      'Plastik Pano',
+                      'Duvar Tipi',
+                      'Saha Panosu',
+                      'MCC Pano',
+                    ]
+                    .map(
+                      (type) =>
+                          DropdownMenuItem(value: type, child: Text(type)),
+                    )
+                    .toList(),
+            onChanged:
+                (value) => setState(() {
+                  _panelType = value ?? _panelType;
+                  _panelTypeController.text = _panelType;
+                }),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _numberField(_panelWidthController, 'Pano En', ''),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10),
+                child: Text('x', style: TextStyle(fontWeight: FontWeight.w800)),
+              ),
+              Expanded(
+                child: _numberField(_panelHeightController, 'Pano Boy', ''),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           _field(_mainBreakerController, 'Ana Salter Degeri', 'Orn: 125A'),
           const SizedBox(height: 12),
-          _field(_drivePowerController, 'Surucu Gucu', 'Orn: 22 kW'),
+          _numberField(_drivePowerController, 'Surucu', 'kW'),
           const SizedBox(height: 12),
-          _field(_plcModelController, 'PLC Modeli', 'Orn: Siemens S7-1200'),
+          _numberField(_drivePower2Controller, 'Surucu', 'kW'),
+          const SizedBox(height: 12),
+          _numberField(_condenserDriveController, 'Kondanser Surucu', 'kW'),
+          const SizedBox(height: 12),
+          _numberField(_condenserDrive2Controller, 'Kondanser Surucu', 'kW'),
+          const SizedBox(height: 12),
+          _numberField(_compressorController, 'Kompresor', 'Amper'),
+          const SizedBox(height: 12),
+          _numberField(_compressor2Controller, 'Kompresor', 'Amper'),
+          const SizedBox(height: 12),
+          _numberField(_jetfanController, 'Jetfan', 'Zon'),
+          const SizedBox(height: 12),
+          _field(_plcModelController, 'PLC Modeli', 'Marka / Model'),
           const SizedBox(height: 12),
           _field(_controlVoltageController, 'Kontrol Voltaji', 'Orn: 24V DC'),
-          const SizedBox(height: 16),
-          _motorList(),
           const SizedBox(height: 16),
           TextField(
             controller: _notesController,
@@ -407,15 +517,7 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
 
   Widget _recipeSheet(KanbanCard card) {
     final theme = Theme.of(context);
-    final motors =
-        _motorControllers
-            .map((controller) => controller.text.trim())
-            .where((value) => value.isNotEmpty)
-            .toList();
-    final due =
-        card.dueDate == null
-            ? '-'
-            : DateFormat('dd.MM.yyyy', 'tr_TR').format(card.dueDate!);
+    final rows = _recipeRows(card);
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -442,77 +544,22 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Duzenle'),
               ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: () => _printRecipePdf(card),
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+                label: const Text('PDF'),
+              ),
             ],
           ),
           const SizedBox(height: 14),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 980 ? 3 : 1;
-              final cards = [
-                _sheetBox(
-                  title: 'Genel Bilgiler',
-                  tone: const Color(0xFFE0F2FE),
-                  rows: [
-                    ('Is Emri', card.linkedJobCode ?? '-'),
-                    ('Termin', due),
-                    ('Durum', card.status.label),
-                    ('Sorumlu', card.assigneeName ?? 'Atanmamis'),
-                  ],
-                ),
-                _sheetBox(
-                  title: 'Recete Bilgileri',
-                  tone: const Color(0xFFDCFCE7),
-                  rows: [
-                    ('Panel Tipi', _value(_panelTypeController.text)),
-                    ('Ana Salter', _value(_mainBreakerController.text)),
-                    ('Motor', motors.isEmpty ? '-' : motors.join(', ')),
-                    ('Surucu', _value(_drivePowerController.text)),
-                  ],
-                ),
-                _sheetBox(
-                  title: 'Kontrol Bilgileri',
-                  tone: const Color(0xFFFEE2E2),
-                  rows: [
-                    ('PLC Modeli', _value(_plcModelController.text)),
-                    ('Kontrol Voltaji', _value(_controlVoltageController.text)),
-                    ('Oncelik', card.priority.label),
-                    ('Kart No', card.id.substring(0, 8)),
-                  ],
-                ),
-              ];
-
-              if (columns == 1) {
-                return Column(
-                  children:
-                      cards
-                          .map(
-                            (card) => Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: card,
-                            ),
-                          )
-                          .toList(),
-                );
-              }
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children:
-                    cards
-                        .map(
-                          (card) => Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.only(right: 12),
-                              child: card,
-                            ),
-                          ),
-                        )
-                        .toList(),
-              );
-            },
+          _sheetBox(
+            title: 'Recete Tablosu',
+            tone: const Color(0xFFE0F2FE),
+            rows: rows,
           ),
           const SizedBox(height: 14),
-          _productionSteps(motors),
+          _documentTiles(),
           const SizedBox(height: 14),
           _notesSheet(),
         ],
@@ -520,7 +567,42 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
     );
   }
 
-  String _value(String value) => value.trim().isEmpty ? '-' : value.trim();
+  List<(String, String)> _recipeRows(KanbanCard card) {
+    final due =
+        card.dueDate == null
+            ? ''
+            : DateFormat('dd.MM.yyyy', 'tr_TR').format(card.dueDate!);
+    final size =
+        _panelWidthController.text.trim().isEmpty &&
+                _panelHeightController.text.trim().isEmpty
+            ? ''
+            : '${_panelWidthController.text.trim()}x${_panelHeightController.text.trim()}';
+    final rows = <(String, String)>[
+      ('Is Emri', card.linkedJobCode ?? ''),
+      ('Termin', due),
+      ('Durum', card.status.label),
+      ('Sorumlu', card.assigneeName ?? 'Atanmamis'),
+      ('Panel Tipi', _panelType),
+      ('Pano Olcu', size),
+      ('Ana Salter', _mainBreakerController.text),
+      ('Surucu', _withSuffix(_drivePowerController.text, 'kW')),
+      ('Surucu', _withSuffix(_drivePower2Controller.text, 'kW')),
+      ('Kondanser Surucu', _withSuffix(_condenserDriveController.text, 'kW')),
+      ('Kondanser Surucu', _withSuffix(_condenserDrive2Controller.text, 'kW')),
+      ('Kompresor', _withSuffix(_compressorController.text, 'Amper')),
+      ('Kompresor', _withSuffix(_compressor2Controller.text, 'Amper')),
+      ('Jetfan', _withSuffix(_jetfanController.text, 'Zon')),
+      ('PLC Modeli', _plcModelController.text),
+      ('Kontrol Voltaji', _controlVoltageController.text),
+    ];
+    return rows.where((row) => row.$2.trim().isNotEmpty).toList();
+  }
+
+  String _withSuffix(String value, String suffix) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+    return '$trimmed $suffix';
+  }
 
   Widget _sheetBox({
     required String title,
@@ -575,12 +657,14 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
     );
   }
 
-  Widget _productionSteps(List<String> motors) {
-    final items =
-        motors.isEmpty
-            ? ['Malzeme hazirlik', 'Pano montaj', 'Kablaj', 'Test']
-            : motors.map((motor) => 'Motor $motor hatti').toList();
-
+  Widget _documentTiles() {
+    const items = [
+      'Nokta Listesi',
+      'Tek Hat Sema',
+      'Malzeme Listesi',
+      'Pano Yerlesim',
+      'Fotograflar',
+    ];
     return Wrap(
       spacing: 10,
       runSpacing: 10,
@@ -603,9 +687,8 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 8),
-                      const Text('Toplam: -'),
-                      const Text('Uretilen: -'),
-                      const Text('Kalan: -'),
+                      const Text('Dosya: Is emrinde'),
+                      const Text('Durum: Takipte'),
                     ],
                   ),
                 ),
@@ -661,66 +744,18 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
     );
   }
 
-  Widget _motorList() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Motor Gucleri',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () {
-                setState(() {
-                  _motorControllers.add(TextEditingController());
-                });
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Motor Ekle'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ...List.generate(_motorControllers.length, (index) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _motorControllers[index],
-                    decoration: InputDecoration(
-                      labelText: 'Motor ${index + 1}',
-                      hintText: 'Orn: 7.5 kW',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed:
-                      _motorControllers.length == 1
-                          ? null
-                          : () {
-                            setState(() {
-                              final controller = _motorControllers.removeAt(
-                                index,
-                              );
-                              controller.dispose();
-                            });
-                          },
-                  icon: const Icon(Icons.remove_circle_outline),
-                ),
-              ],
-            ),
-          );
-        }),
-      ],
+  Widget _numberField(
+    TextEditingController controller,
+    String label,
+    String suffix,
+  ) {
+    return TextField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(
+        labelText: label,
+        suffixText: suffix.isEmpty ? null : suffix,
+      ),
     );
   }
 

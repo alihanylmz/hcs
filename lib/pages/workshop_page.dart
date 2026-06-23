@@ -6,8 +6,8 @@ import '../models/ticket_linked_team_card.dart';
 import '../services/card_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sidebar/app_layout.dart';
-import 'card_detail_page.dart';
 import 'ticket_detail_page.dart';
+import 'workshop_recipe_page.dart';
 
 class WorkshopPage extends StatefulWidget {
   const WorkshopPage({super.key});
@@ -42,11 +42,9 @@ class _WorkshopPageState extends State<WorkshopPage> {
   }
 
   Future<void> _openCard(TicketLinkedTeamCard item) async {
-    final card = await _cardService.getCard(item.cardId);
-    if (!mounted) return;
     final result = await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => CardDetailPage(card: card),
+        builder: (_) => WorkshopRecipePage(cardId: item.cardId),
         fullscreenDialog: true,
       ),
     );

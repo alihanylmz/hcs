@@ -428,7 +428,18 @@ class _TicketListPageState extends State<TicketListPage> {
       '[ATOLYE] Uretim recetesi',
       if (customerName.isNotEmpty) 'Musteri: $customerName',
       'Kaynak is emri: ${jobCode.isEmpty ? ticketId : jobCode}',
-      'Proje PDF, nokta listesi ve teknik dosyalar is emrinin Evrak/Dosyalar bolumunden takip edilir.',
+      '',
+      'Uretim hedefi:',
+      '- Pano/proje dosyalarina gore atolye imalatini hazirla.',
+      '',
+      'Kontrol listesi:',
+      '- Proje PDF kontrol edildi',
+      '- Nokta listesi kontrol edildi',
+      '- Malzeme listesi kontrol edildi',
+      '- Klemens/etiket/kanal yerlesimi kontrol edildi',
+      '- Test ve sevk oncesi son kontrol yapildi',
+      '',
+      'Proje PDF, nokta listesi ve teknik dosyalar bagli is emrinin Evrak/Dosyalar bolumunden takip edilir.',
     ].join('\n');
 
     try {
@@ -2528,15 +2539,15 @@ class _TicketListPageState extends State<TicketListPage> {
                 slivers: [
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
                       child: Container(
-                        padding: const EdgeInsets.all(24),
+                        padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
                           color:
                               isDark
                                   ? const Color(0xFF162533)
                                   : AppColors.surfaceWhite,
-                          borderRadius: BorderRadius.circular(24),
+                          borderRadius: BorderRadius.circular(18),
                           border: Border.all(
                             color:
                                 isDark

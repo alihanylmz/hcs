@@ -360,6 +360,21 @@ class _TicketListPageState extends State<TicketListPage> {
       return;
     }
 
+    final existingWorkshopCard = await _cardService.getWorkshopCardForTicket(
+      ticketId,
+    );
+    if (existingWorkshopCard != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Bu is emri icin zaten uretim recetesi var: ${existingWorkshopCard.title}',
+          ),
+        ),
+      );
+      return;
+    }
+
     final teams = await _teamService.listTeams();
     if (!mounted) return;
     if (teams.isEmpty) {

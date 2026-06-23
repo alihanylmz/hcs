@@ -262,6 +262,30 @@ class CardService {
     }).toList();
   }
 
+  Future<TicketLinkedTeamCard?> getWorkshopCardForTicket(
+    String ticketId,
+  ) async {
+    final linkedCards = await getLinkedCardsForTicket(ticketId);
+    for (final card in linkedCards) {
+      final title = card.title.toLowerCase();
+      final description = (card.description ?? '').toLowerCase();
+      final isWorkshop =
+          title.contains('atolye') ||
+          title.contains('atölye') ||
+          title.contains('uretim') ||
+          title.contains('üretim') ||
+          description.contains('[atolye]') ||
+          description.contains('[atölye]') ||
+          description.contains('workshop_recipe_json') ||
+          description.contains('uretim recetesi') ||
+          description.contains('üretim reçetesi');
+      if (isWorkshop) {
+        return card;
+      }
+    }
+    return null;
+  }
+
   Future<KanbanCard> getCard(String cardId) async {
     final response =
         await _supabase.from('cards').select().eq('id', cardId).single();

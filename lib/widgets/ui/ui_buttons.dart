@@ -127,8 +127,8 @@ class UiGhostButton extends StatelessWidget {
             isDark
                 ? theme.colorScheme.primary.withValues(alpha: 0.14)
                 : AppColors.surfaceAccent,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }

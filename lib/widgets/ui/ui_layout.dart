@@ -7,7 +7,7 @@ class UiPage extends StatelessWidget {
     super.key,
     required this.child,
     this.maxWidth = 1420,
-    this.padding = const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+    this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
     this.center = false,
   });
 
@@ -21,9 +21,9 @@ class UiPage extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     final resolvedPadding =
         screenWidth < 720
-            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 16)
+            ? const EdgeInsets.symmetric(horizontal: 12, vertical: 12)
             : screenWidth < 1200
-            ? const EdgeInsets.symmetric(horizontal: 20, vertical: 20)
+            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 16)
             : padding;
 
     final body = Padding(
@@ -51,7 +51,7 @@ class UiSection extends StatelessWidget {
     required this.child,
     this.trailing,
     this.subtitle,
-    this.padding = const EdgeInsets.symmetric(vertical: 10),
+    this.padding = const EdgeInsets.symmetric(vertical: 8),
   });
 
   final String title;
@@ -83,7 +83,7 @@ class UiSection extends StatelessWidget {
                         child: Text(
                           subtitle!,
                           style: theme.textTheme.labelMedium?.copyWith(
-                            letterSpacing: 1.1,
+                            letterSpacing: 0.6,
                             color:
                                 isDark
                                     ? AppColors.textOnDarkMuted
@@ -103,7 +103,7 @@ class UiSection extends StatelessWidget {
               if (trailing != null) trailing!,
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           child,
         ],
       ),

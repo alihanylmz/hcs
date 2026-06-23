@@ -137,7 +137,7 @@ class AppTheme {
       ),
       textTheme: baseTextTheme,
       dividerColor: borderColor,
-      shadowColor: Colors.black.withValues(alpha: isDark ? 0.28 : 0.08),
+      shadowColor: Colors.black.withValues(alpha: isDark ? 0.22 : 0.06),
       splashFactory: InkRipple.splashFactory,
       cardColor: cardColor,
       appBarTheme: AppBarTheme(
@@ -168,29 +168,29 @@ class AppTheme {
           fontWeight: FontWeight.w600,
         ),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: cardColor,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: cardColor,
         modalBackgroundColor: cardColor,
         surfaceTintColor: Colors.transparent,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(
         color: cardColor,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        elevation: 10,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        elevation: 4,
       ),
       chipTheme: ChipThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         side: BorderSide(color: borderColor),
         backgroundColor: surfaceAltColor,
         selectedColor: primaryColor.withValues(alpha: isDark ? 0.22 : 0.10),
@@ -198,14 +198,14 @@ class AppTheme {
         secondaryLabelStyle: baseTextTheme.labelMedium?.copyWith(
           color: onSurfaceColor,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       ),
       cardTheme: CardThemeData(
         color: cardColor,
         elevation: 0,
-        margin: const EdgeInsets.only(bottom: 16),
+        margin: const EdgeInsets.only(bottom: 12),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
           side: BorderSide(color: borderColor),
         ),
       ),
@@ -213,23 +213,23 @@ class AppTheme {
         filled: true,
         fillColor: surfaceAltColor,
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 18,
-          vertical: 16,
+          horizontal: 14,
+          vertical: 13,
         ),
         hintStyle: baseTextTheme.bodyMedium?.copyWith(color: mutedTextColor),
         labelStyle: baseTextTheme.bodyMedium?.copyWith(color: mutedTextColor),
         prefixIconColor: mutedTextColor,
         suffixIconColor: mutedTextColor,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: borderColor),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: borderColor),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: primaryColor, width: 1.5),
         ),
       ),
@@ -239,11 +239,9 @@ class AppTheme {
           foregroundColor: colorScheme.onPrimary,
           elevation: 0,
           shadowColor: Colors.transparent,
-          minimumSize: const Size(0, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
+          minimumSize: const Size(0, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           textStyle: baseTextTheme.labelLarge?.copyWith(
             fontSize: 14,
             fontWeight: FontWeight.w600,
@@ -255,11 +253,9 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: primaryColor,
           foregroundColor: colorScheme.onPrimary,
-          minimumSize: const Size(0, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
+          minimumSize: const Size(0, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           textStyle: baseTextTheme.labelLarge?.copyWith(
             fontSize: 14,
             fontWeight: FontWeight.w600,
@@ -275,11 +271,9 @@ class AppTheme {
                   ? AppColors.surfaceDarkMuted.withValues(alpha: 0.74)
                   : AppColors.surfaceWhite,
           side: BorderSide(color: borderColor),
-          minimumSize: const Size(0, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
+          minimumSize: const Size(0, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           textStyle: baseTextTheme.labelLarge?.copyWith(
             fontSize: 14,
             fontWeight: FontWeight.w600,
@@ -290,10 +284,8 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: primaryColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           textStyle: baseTextTheme.labelLarge?.copyWith(
             fontSize: 14,
             fontWeight: FontWeight.w600,
@@ -307,16 +299,14 @@ class AppTheme {
               isDark
                   ? AppColors.surfaceDarkMuted.withValues(alpha: 0.76)
                   : AppColors.surfaceSoft,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(color: primaryColor),
       listTileTheme: ListTileThemeData(
@@ -324,14 +314,14 @@ class AppTheme {
         textColor: onSurfaceColor,
         selectedTileColor: surfaceAltColor,
         tileColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       tabBarTheme: TabBarThemeData(
         dividerColor: Colors.transparent,
         indicatorSize: TabBarIndicatorSize.tab,
         indicator: BoxDecoration(
           color: isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceAccent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isDark ? primaryColor.withValues(alpha: 0.22) : borderColor,
           ),
@@ -350,7 +340,7 @@ class AppTheme {
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
           color: isDark ? AppColors.surfaceDarkMuted : AppColors.corporateNavy,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(6),
         ),
         textStyle: baseTextTheme.bodySmall?.copyWith(
           color: Colors.white,

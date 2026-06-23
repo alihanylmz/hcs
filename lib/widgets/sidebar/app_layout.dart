@@ -53,7 +53,7 @@ class AppLayout extends StatelessWidget {
         const Positioned.fill(child: _DashboardBackdrop()),
         if (isWideScreen)
           SafeArea(
-            minimum: const EdgeInsets.all(16),
+            minimum: const EdgeInsets.all(12),
             child: Row(
               children: [
                 RepaintBoundary(
@@ -63,13 +63,13 @@ class AppLayout extends StatelessWidget {
                     userRole: userRole,
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     children: [
                       if (showAppBar)
                         RepaintBoundary(child: _buildDesktopAppBar(context)),
-                      if (showAppBar) const SizedBox(height: 16),
+                      if (showAppBar) const SizedBox(height: 12),
                       Expanded(child: _DesktopContentShell(child: child)),
                     ],
                   ),
@@ -107,7 +107,7 @@ class AppLayout extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     return AppBar(
-      toolbarHeight: 76,
+      toolbarHeight: 64,
       titleSpacing: 0,
       surfaceTintColor: Colors.transparent,
       title: Column(
@@ -144,7 +144,7 @@ class AppLayout extends StatelessWidget {
             decoration: BoxDecoration(
               color:
                   isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceAccent,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
               ),
@@ -179,22 +179,19 @@ class AppLayout extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     return Container(
-      height: 84,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      height: 72,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color:
-            isDark
-                ? AppColors.surfaceDarkRaised.withValues(alpha: 0.92)
-                : Colors.white.withValues(alpha: 0.78),
-        borderRadius: BorderRadius.circular(18),
+        color: isDark ? AppColors.surfaceDarkRaised : AppColors.surfaceWhite,
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
         ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.08),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -207,7 +204,7 @@ class AppLayout extends StatelessWidget {
             decoration: BoxDecoration(
               color:
                   isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceAccent,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
               ),
@@ -275,7 +272,7 @@ class AppLayout extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(8),
           onTap: () => appState?.toggleTheme(),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
@@ -287,7 +284,7 @@ class AppLayout extends StatelessWidget {
             ),
             decoration: BoxDecoration(
               color: backgroundColor,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: borderColor),
             ),
             child: Row(
@@ -300,7 +297,7 @@ class AppLayout extends StatelessWidget {
                   height: compact ? 28 : 32,
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF0B1220) : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(
@@ -417,23 +414,20 @@ class _DesktopContentShell extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color:
-            isDark
-                ? AppColors.surfaceDark.withValues(alpha: 0.88)
-                : Colors.white.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(18),
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceWhite,
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
         ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.14 : 0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
-      child: ClipRRect(borderRadius: BorderRadius.circular(18), child: child),
+      child: ClipRRect(borderRadius: BorderRadius.circular(8), child: child),
     );
   }
 }
@@ -453,22 +447,43 @@ class _DashboardBackdrop extends StatelessWidget {
             color: isDark ? AppColors.backgroundDark : AppColors.backgroundGrey,
           ),
         ),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.white.withValues(alpha: isDark ? 0.02 : 0.20),
-                Colors.transparent,
-                Colors.transparent,
-                Colors.black.withValues(alpha: isDark ? 0.12 : 0.03),
-              ],
-              stops: const [0.0, 0.24, 0.72, 1.0],
+        Positioned.fill(
+          child: CustomPaint(
+            painter: _IndustrialGridPainter(
+              color:
+                  isDark
+                      ? AppColors.borderDark.withValues(alpha: 0.18)
+                      : AppColors.borderSubtle.withValues(alpha: 0.42),
             ),
           ),
         ),
       ],
     );
+  }
+}
+
+class _IndustrialGridPainter extends CustomPainter {
+  const _IndustrialGridPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint =
+        Paint()
+          ..color = color
+          ..strokeWidth = 1;
+    const step = 32.0;
+    for (double x = 0; x <= size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y <= size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _IndustrialGridPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }

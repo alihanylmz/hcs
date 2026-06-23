@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 class SidebarItem extends StatelessWidget {
   const SidebarItem({
@@ -25,7 +25,7 @@ class SidebarItem extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Material(
         color: Colors.transparent,
         child: Ink(
@@ -34,7 +34,7 @@ class SidebarItem extends StatelessWidget {
                 isActive
                     ? activeColor
                     : Colors.white.withValues(alpha: isDark ? 0.02 : 0.04),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color:
                   isActive
@@ -46,22 +46,22 @@ class SidebarItem extends StatelessWidget {
                     ? [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.18),
-                        blurRadius: 18,
-                        offset: const Offset(0, 10),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
                       ),
                     ]
                     : null,
           ),
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(8),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
               child: Row(
                 children: [
                   Container(
-                    width: 38,
-                    height: 38,
+                    width: 34,
+                    height: 34,
                     decoration: BoxDecoration(
                       color:
                           isActive
@@ -69,7 +69,7 @@ class SidebarItem extends StatelessWidget {
                               : Colors.white.withValues(
                                 alpha: isDark ? 0.06 : 0.08,
                               ),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: Icon(
                       icon,
@@ -121,4 +121,3 @@ class SidebarDivider extends StatelessWidget {
     );
   }
 }
-

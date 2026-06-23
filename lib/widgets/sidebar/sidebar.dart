@@ -34,49 +34,42 @@ class Sidebar extends StatelessWidget {
             ? AppColors.sidebarBackgroundDark
             : AppColors.sidebarBackgroundLight;
     final activeColor =
-        isDark ? const Color(0xFF1D4ED8) : const Color(0xFF1E40AF);
+        isDark ? AppColors.sidebarActiveDark : AppColors.sidebarActiveLight;
     final textColor = AppColors.sidebarText;
     final mutedTextColor = AppColors.sidebarTextMuted;
     final iconColor = AppColors.sidebarTextMuted;
 
     return Container(
-      width: 304,
+      width: 280,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            baseBg,
-            Color.lerp(baseBg, AppColors.corporateBlue, isDark ? 0.20 : 0.12)!,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(32),
+        color: baseBg,
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: Colors.white.withValues(alpha: isDark ? 0.06 : 0.08),
+          color: Colors.white.withValues(alpha: isDark ? 0.08 : 0.10),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.16),
-            blurRadius: 40,
-            offset: const Offset(10, 20),
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.12),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(18, 18, 18, 10),
+        minimum: const EdgeInsets.fromLTRB(12, 12, 12, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildBrandCard(textColor, mutedTextColor, isDark),
             if (userName != null) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               _buildUserCard(textColor, mutedTextColor, isDark),
             ],
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Text(
-                'NAVIGASYON',
+                'MODULLER',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
@@ -85,7 +78,7 @@ class Sidebar extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Expanded(
               child: ListView(
                 padding: EdgeInsets.zero,
@@ -180,7 +173,7 @@ class Sidebar extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             const SidebarDivider(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
@@ -214,7 +207,7 @@ class Sidebar extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(6),
                     border: Border.all(
                       color: Colors.white.withValues(alpha: 0.10),
                     ),
@@ -239,11 +232,11 @@ class Sidebar extends StatelessWidget {
   Widget _buildBrandCard(Color textColor, Color mutedTextColor, bool isDark) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: isDark ? 0.04 : 0.06),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: Colors.white.withValues(alpha: isDark ? 0.035 : 0.045),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,12 +244,12 @@ class Sidebar extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 48,
-                height: 48,
-                padding: const EdgeInsets.all(9),
+                width: 42,
+                height: 42,
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: SvgPicture.asset('assets/images/log.svg'),
               ),
@@ -268,7 +261,7 @@ class Sidebar extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   'OPERATIONS',
@@ -282,18 +275,18 @@ class Sidebar extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           Text(
             'Is Takip',
             style: TextStyle(
-              fontSize: 22,
+              fontSize: 20,
               fontWeight: FontWeight.w800,
               color: textColor,
             ),
           ),
           const SizedBox(height: 6),
           Text(
-            'Servis, stok ve saha operasyonlarini tek ekranda yonetin.',
+            'Servis, stok ve atolye operasyonlari.',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -309,10 +302,10 @@ class Sidebar extends StatelessWidget {
   Widget _buildUserCard(Color textColor, Color mutedTextColor, bool isDark) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: isDark ? 0.04 : 0.05),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
@@ -322,7 +315,7 @@ class Sidebar extends StatelessWidget {
             height: 46,
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
               Icons.person_outline_rounded,

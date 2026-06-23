@@ -9,9 +9,9 @@ class UiCard extends StatelessWidget {
     super.key,
     required this.child,
     this.onTap,
-    this.padding = const EdgeInsets.all(20),
+    this.padding = const EdgeInsets.all(16),
     this.tone = UiCardTone.base,
-    this.radius = 24,
+    this.radius = 8,
   });
 
   final Widget child;
@@ -29,9 +29,9 @@ class UiCard extends StatelessWidget {
     final surface = switch (tone) {
       UiCardTone.base => theme.cardColor,
       UiCardTone.muted =>
-        isDark ? const Color(0xFF13203A) : const Color(0xFFF8FBFF),
+        isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceSoft,
       UiCardTone.accent =>
-        isDark ? const Color(0xFF0F2140) : const Color(0xFFEEF4FF),
+        isDark ? const Color(0xFF10243B) : AppColors.surfaceAccent,
       UiCardTone.success =>
         isDark ? const Color(0xFF082D24) : const Color(0xFFF0FDF4),
       UiCardTone.danger =>
@@ -73,9 +73,9 @@ class UiCard extends StatelessWidget {
           border: Border.all(color: border),
           boxShadow: [
             BoxShadow(
-              color: shadowColor.withValues(alpha: isDark ? 0.18 : 0.08),
-              blurRadius: isDark ? 28 : 22,
-              offset: const Offset(0, 14),
+              color: shadowColor.withValues(alpha: isDark ? 0.12 : 0.035),
+              blurRadius: isDark ? 14 : 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),

@@ -31,6 +31,31 @@ class CardService {
     return Exception(error.message);
   }
 
+  String _workshopHaystack(String? title, String? description) {
+    return '${title ?? ''} ${description ?? ''}'
+        .toLowerCase()
+        .replaceAll('ı', 'i')
+        .replaceAll('ö', 'o')
+        .replaceAll('ü', 'u')
+        .replaceAll('ş', 's')
+        .replaceAll('ğ', 'g')
+        .replaceAll('ç', 'c')
+        .replaceAll('Ã¶', 'o')
+        .replaceAll('Ã¼', 'u')
+        .replaceAll('ÅŸ', 's')
+        .replaceAll('ÄŸ', 'g')
+        .replaceAll('Ã§', 'c');
+  }
+
+  bool _isWorkshopCardText(String? title, String? description) {
+    final haystack = _workshopHaystack(title, description);
+    return haystack.contains('atolye') ||
+        haystack.contains('uretim') ||
+        haystack.contains('[atolye]') ||
+        haystack.contains('workshop_recipe_json') ||
+        haystack.contains('uretim recetesi');
+  }
+
   Future<bool> supportsLinkedTicketing() async {
     if (_supportsLinkedTicketingCache != null) {
       return _supportsLinkedTicketingCache!;
@@ -267,6 +292,13 @@ class CardService {
   ) async {
     final linkedCards = await getLinkedCardsForTicket(ticketId);
     for (final card in linkedCards) {
+      final isKnownWorkshop = _isWorkshopCardText(card.title, card.description);
+      if (isKnownWorkshop) {
+        if (card.status != CardStatus.done) {
+          return card;
+        }
+        continue;
+      }
       final title = card.title.toLowerCase();
       final description = (card.description ?? '').toLowerCase();
       final isWorkshop =
@@ -279,7 +311,7 @@ class CardService {
           description.contains('workshop_recipe_json') ||
           description.contains('uretim recetesi') ||
           description.contains('üretim reçetesi');
-      if (isWorkshop) {
+      if (isWorkshop && card.status != CardStatus.done) {
         return card;
       }
     }

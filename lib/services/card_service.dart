@@ -153,6 +153,115 @@ class CardService {
     }).toList();
   }
 
+  Future<List<TicketLinkedTeamCard>> getWorkshopCards() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return const [];
+
+    final supportsLinkedTicketingEnabled = await supportsLinkedTicketing();
+    if (!supportsLinkedTicketingEnabled) {
+      return const [];
+    }
+
+    final memberships = await _supabase
+        .from('team_members')
+        .select('team_id')
+        .eq('user_id', userId);
+    final teamIds =
+        (memberships as List<dynamic>)
+            .map((row) => (row as Map<String, dynamic>)['team_id']?.toString())
+            .where((id) => id != null && id.isNotEmpty)
+            .cast<String>()
+            .toSet()
+            .toList();
+    if (teamIds.isEmpty) return const [];
+
+    final response = await _supabase
+        .from('cards')
+        .select(
+          'id, board_id, team_id, title, description, status, assignee_id, '
+          'priority, due_date, created_at, updated_at, linked_ticket_id',
+        )
+        .inFilter('team_id', teamIds)
+        .not('linked_ticket_id', 'is', null)
+        .order('updated_at', ascending: false);
+
+    final rows =
+        (response as List<dynamic>)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .where((row) {
+              final title = row['title']?.toString().toLowerCase() ?? '';
+              final description =
+                  row['description']?.toString().toLowerCase() ?? '';
+              return title.contains('atolye') ||
+                  title.contains('atölye') ||
+                  title.contains('uretim') ||
+                  title.contains('üretim') ||
+                  description.contains('[atolye]') ||
+                  description.contains('[atölye]') ||
+                  description.contains('uretim recetesi') ||
+                  description.contains('üretim reçetesi');
+            })
+            .toList();
+    if (rows.isEmpty) return const [];
+
+    final assigneeIds =
+        rows
+            .map((row) => row['assignee_id']?.toString())
+            .where((id) => id != null && id.isNotEmpty)
+            .cast<String>()
+            .toSet()
+            .toList();
+    final teamRowIds =
+        rows
+            .map((row) => row['team_id']?.toString())
+            .where((id) => id != null && id.isNotEmpty)
+            .cast<String>()
+            .toSet()
+            .toList();
+    final boardIds =
+        rows
+            .map((row) => row['board_id']?.toString())
+            .where((id) => id != null && id.isNotEmpty)
+            .cast<String>()
+            .toSet()
+            .toList();
+
+    final profilesById = await _fetchProfilesById(assigneeIds);
+    final teamNamesById = await _fetchNamesById('teams', teamRowIds);
+    final boardNamesById = await _fetchNamesById('boards', boardIds);
+
+    return rows.map((row) {
+      final teamId = row['team_id'].toString();
+      final boardId = row['board_id'].toString();
+      final assigneeId = row['assignee_id']?.toString();
+      final assigneeName =
+          assigneeId == null
+              ? null
+              : (profilesById[assigneeId]?['full_name']?.toString() ??
+                  profilesById[assigneeId]?['email']?.toString());
+
+      return TicketLinkedTeamCard(
+        cardId: row['id'].toString(),
+        teamId: teamId,
+        teamName: teamNamesById[teamId] ?? 'Takim',
+        boardId: boardId,
+        boardName: boardNamesById[boardId] ?? 'Pano',
+        title: row['title']?.toString() ?? 'Atolye imalat emri',
+        description: row['description']?.toString(),
+        status: CardStatus.fromDb(row['status']?.toString() ?? 'TODO'),
+        priority: CardPriority.fromDb(row['priority'] as String?),
+        assigneeId: assigneeId,
+        assigneeName: assigneeName,
+        dueDate:
+            (row['due_date'] as String?)?.isNotEmpty == true
+                ? DateTime.tryParse(row['due_date'] as String)
+                : null,
+        createdAt: DateTime.parse(row['created_at'] as String),
+        updatedAt: DateTime.parse(row['updated_at'] as String),
+      );
+    }).toList();
+  }
+
   Future<KanbanCard> getCard(String cardId) async {
     final response =
         await _supabase.from('cards').select().eq('id', cardId).single();

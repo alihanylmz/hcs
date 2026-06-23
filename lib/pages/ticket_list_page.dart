@@ -4,10 +4,13 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:intl/intl.dart';
 
 import '../models/fault_record.dart';
+import '../models/card.dart';
 import '../main.dart';
 import '../pages/fault_record_detail_page.dart';
 import '../services/general_report_service.dart';
 import '../services/fault_record_service.dart';
+import '../services/board_service.dart';
+import '../services/card_service.dart';
 import '../services/notification_service.dart';
 import '../services/notification_navigation_service.dart';
 import '../pages/archived_tickets_page.dart';
@@ -23,6 +26,7 @@ import '../pages/profile_page.dart';
 import '../services/pdf_export_service.dart';
 import '../services/permission_service.dart';
 import '../services/user_service.dart';
+import '../services/team_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sidebar/app_layout.dart';
 import '../widgets/ui/ui.dart';
@@ -64,33 +68,35 @@ class _TicketActionButton extends StatelessWidget {
     final Color bg =
         danger
             ? (isDark
-                ? Colors.red.withOpacity(0.16)
-                : AppColors.corporateRed.withOpacity(0.08))
-            : (isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceSoft);
+                ? Colors.red.withValues(alpha: 0.12)
+                : AppColors.corporateRed.withValues(alpha: 0.06))
+            : (isDark
+                ? AppColors.surfaceDarkMuted.withValues(alpha: 0.72)
+                : Colors.white);
 
     return TextButton.icon(
       style: TextButton.styleFrom(
         foregroundColor: baseColor,
         backgroundColor: bg,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           side: BorderSide(
             color:
                 danger
                     ? (isDark
-                        ? Colors.red.withOpacity(0.24)
-                        : AppColors.corporateRed.withOpacity(0.16))
+                        ? Colors.red.withValues(alpha: 0.20)
+                        : AppColors.corporateRed.withValues(alpha: 0.14))
                     : (isDark ? AppColors.borderDark : AppColors.borderSubtle),
           ),
         ),
-        minimumSize: const Size(0, 34),
+        minimumSize: const Size(0, 36),
       ),
       onPressed: onTap,
       icon: Icon(icon, size: 16),
       label: Text(
         label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -100,6 +106,9 @@ class _TicketListPageState extends State<TicketListPage> {
   late Future<List<Map<String, dynamic>>> _ticketsFuture;
   final DateFormat _shortDateFormatter = DateFormat('dd.MM.yyyy');
   final FaultRecordService _faultRecordService = FaultRecordService();
+  final CardService _cardService = CardService();
+  final BoardService _boardService = BoardService();
+  final TeamService _teamService = TeamService();
 
   final TextEditingController _searchController = TextEditingController();
   String _searchText = '';
@@ -333,6 +342,119 @@ class _TicketListPageState extends State<TicketListPage> {
     );
   }
 
+  Future<void> _sendToWorkshop(Map<String, dynamic> ticket) async {
+    final ticketId = ticket['id']?.toString();
+    if (ticketId == null || ticketId.isEmpty) return;
+
+    final supportsLinkedTicketing =
+        await _cardService.supportsLinkedTicketing();
+    if (!supportsLinkedTicketing) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Atolye baglantisi icin linked_ticket_id migration dosyasi calismali.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final teams = await _teamService.listTeams();
+    if (!mounted) return;
+    if (teams.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Atolye karti acmak icin once bir takima uye olmalisin.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final selectedTeam =
+        teams.length == 1
+            ? teams.first
+            : await showModalBottomSheet(
+              context: context,
+              showDragHandle: true,
+              builder:
+                  (sheetContext) => SafeArea(
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                      shrinkWrap: true,
+                      children: [
+                        Text(
+                          'Atolye panosu icin takim sec',
+                          style: Theme.of(sheetContext).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 12),
+                        ...teams.map(
+                          (team) => ListTile(
+                            leading: const Icon(Icons.groups_2_outlined),
+                            title: Text(team.name),
+                            subtitle:
+                                team.description == null
+                                    ? null
+                                    : Text(team.description!),
+                            onTap: () => Navigator.pop(sheetContext, team),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+            );
+    if (selectedTeam == null) return;
+
+    final boards = await _boardService.getTeamBoards(selectedTeam.id);
+    if (!mounted || boards.isEmpty) return;
+
+    final customer =
+        ticket['customers'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final jobCode = (ticket['job_code'] as String? ?? '').trim();
+    final title = (ticket['title'] as String? ?? 'Is emri').trim();
+    final customerName = (customer['name'] as String? ?? '').trim();
+    final plannedDate = ticket['planned_date'] as String?;
+    final dueDate =
+        plannedDate == null || plannedDate.isEmpty
+            ? null
+            : DateTime.tryParse(plannedDate);
+
+    final cardTitle =
+        'Atolye - ${jobCode.isEmpty ? title : '$jobCode / $title'}';
+    final description = [
+      '[ATOLYE] Uretim recetesi',
+      if (customerName.isNotEmpty) 'Musteri: $customerName',
+      'Kaynak is emri: ${jobCode.isEmpty ? ticketId : jobCode}',
+      'Proje PDF, nokta listesi ve teknik dosyalar is emrinin Evrak/Dosyalar bolumunden takip edilir.',
+    ].join('\n');
+
+    try {
+      await _cardService.createCard(
+        teamId: selectedTeam.id,
+        boardId: boards.first.id,
+        title: cardTitle,
+        description: description,
+        linkedTicketId: ticketId,
+        priority: CardPriority.fromDb(ticket['priority'] as String?),
+        dueDate: dueDate,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Is emri atolye imalat takibine gonderildi.'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Atolyeye gonderilemedi: $error')));
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _fetchAllTicketsForReport() async {
     final supabase = Supabase.instance.client;
 
@@ -462,6 +584,46 @@ class _TicketListPageState extends State<TicketListPage> {
     }
 
     await _openTicketDetailPage(ticket);
+  }
+
+  Future<void> _editTicketFromList(Map<String, dynamic> ticket) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EditTicketPage(ticketId: ticket['id'].toString()),
+      ),
+    );
+    await _refresh();
+  }
+
+  Future<void> _confirmDeleteTicket(Map<String, dynamic> ticket) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Sil'),
+            content: const Text('Bu isi silmek istedigine emin misin?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Iptal'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text(
+                  'Sil',
+                  style: TextStyle(color: AppColors.corporateRed),
+                ),
+              ),
+            ],
+          ),
+    );
+    if (confirm != true) return;
+
+    final supabase = Supabase.instance.client;
+    await supabase.from('tickets').delete().eq('id', ticket['id']);
+    if (mounted) {
+      await _refresh();
+    }
   }
 
   void _invalidateFilteredCache() {
@@ -1161,11 +1323,11 @@ class _TicketListPageState extends State<TicketListPage> {
     IconData? icon,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withOpacity(0.18)),
+        border: Border.all(color: color.withValues(alpha: 0.16)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1179,7 +1341,7 @@ class _TicketListPageState extends State<TicketListPage> {
             style: TextStyle(
               color: color,
               fontSize: 12,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -1200,10 +1362,10 @@ class _TicketListPageState extends State<TicketListPage> {
 
     return Container(
       constraints: const BoxConstraints(minWidth: 132),
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF102131) : AppColors.surfaceSoft,
-        borderRadius: BorderRadius.circular(14),
+        color: isDark ? const Color(0xFF102131) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark ? const Color(0xFF2B3A47) : AppColors.borderSubtle,
         ),
@@ -1215,8 +1377,8 @@ class _TicketListPageState extends State<TicketListPage> {
             width: 30,
             height: 30,
             decoration: BoxDecoration(
-              color: accent.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(10),
+              color: accent.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, size: 16, color: accent),
           ),
@@ -1230,9 +1392,9 @@ class _TicketListPageState extends State<TicketListPage> {
                   label,
                   style: TextStyle(
                     fontSize: 10,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                     color: secondaryText,
-                    letterSpacing: 0.4,
+                    letterSpacing: 0,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -1242,7 +1404,7 @@ class _TicketListPageState extends State<TicketListPage> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                     color: primaryText,
                   ),
                 ),
@@ -1323,10 +1485,84 @@ class _TicketListPageState extends State<TicketListPage> {
     required bool isWide,
   }) {
     final routedToFault = _shouldRoutePrimaryDetailToFault(ticket);
+    if (!isWide) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _TicketActionButton(
+            label: routedToFault ? 'Ariza Detay' : 'Detay',
+            icon:
+                routedToFault
+                    ? Icons.bug_report_outlined
+                    : Icons.visibility_outlined,
+            onTap: () => _openPrimaryDetail(ticket),
+          ),
+          const SizedBox(width: 8),
+          PopupMenuButton<String>(
+            tooltip: 'Diger islemler',
+            icon: const Icon(Icons.more_horiz_rounded),
+            onSelected: (value) async {
+              switch (value) {
+                case 'ticket':
+                  await _openTicketDetailPage(ticket);
+                  break;
+                case 'pdf':
+                  await _openTicketPdf(ticket);
+                  break;
+                case 'edit':
+                  await _editTicketFromList(ticket);
+                  break;
+                case 'delete':
+                  await _confirmDeleteTicket(ticket);
+                  break;
+              }
+            },
+            itemBuilder:
+                (context) => [
+                  if (routedToFault)
+                    const PopupMenuItem(
+                      value: 'ticket',
+                      child: ListTile(
+                        leading: Icon(Icons.assignment_outlined),
+                        title: Text('Is Emri'),
+                      ),
+                    ),
+                  const PopupMenuItem(
+                    value: 'pdf',
+                    child: ListTile(
+                      leading: Icon(Icons.picture_as_pdf_outlined),
+                      title: Text('PDF'),
+                    ),
+                  ),
+                  if (_canEditTickets)
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: ListTile(
+                        leading: Icon(Icons.edit_outlined),
+                        title: Text('Duzenle'),
+                      ),
+                    ),
+                  if (_canDeleteTickets)
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(
+                          Icons.delete_outline,
+                          color: AppColors.corporateRed,
+                        ),
+                        title: Text('Sil'),
+                      ),
+                    ),
+                ],
+          ),
+        ],
+      );
+    }
+
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      alignment: isWide ? WrapAlignment.end : WrapAlignment.start,
+      alignment: WrapAlignment.end,
       children: [
         _TicketActionButton(
           label: routedToFault ? 'Ariza Detay' : 'Detay',
@@ -1347,21 +1583,17 @@ class _TicketListPageState extends State<TicketListPage> {
           icon: Icons.picture_as_pdf_outlined,
           onTap: () => _openTicketPdf(ticket),
         ),
+        if (isWide)
+          _TicketActionButton(
+            label: 'Atolyeye Gonder',
+            icon: Icons.precision_manufacturing_outlined,
+            onTap: () => _sendToWorkshop(ticket),
+          ),
         if (_canEditTickets)
           _TicketActionButton(
             label: 'Düzenle',
             icon: Icons.edit_outlined,
-            onTap:
-                () => Navigator.of(context)
-                    .push(
-                      MaterialPageRoute(
-                        builder:
-                            (_) => EditTicketPage(
-                              ticketId: ticket['id'].toString(),
-                            ),
-                      ),
-                    )
-                    .then((_) => _refresh()),
+            onTap: () => _editTicketFromList(ticket),
           ),
         if (_canDeleteTickets)
           _TicketActionButton(
@@ -1501,9 +1733,9 @@ class _TicketListPageState extends State<TicketListPage> {
       width: 48,
       height: 48,
       decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: statusColor.withOpacity(0.20)),
+        color: statusColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: statusColor.withValues(alpha: 0.16)),
       ),
       child: Icon(leadingIcon, color: statusColor, size: 24),
     );
@@ -1517,7 +1749,7 @@ class _TicketListPageState extends State<TicketListPage> {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 17,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
             color: primaryText,
           ),
         ),
@@ -1529,7 +1761,7 @@ class _TicketListPageState extends State<TicketListPage> {
           style: TextStyle(
             fontSize: 14,
             color: secondaryText,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w500,
           ),
         ),
         if (customerAddress.trim().isNotEmpty) ...[
@@ -1604,13 +1836,13 @@ class _TicketListPageState extends State<TicketListPage> {
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: surfaceColor,
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: borderColor),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.08 : 0.03),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+                  color: Colors.black.withValues(alpha: isDark ? 0.10 : 0.025),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),

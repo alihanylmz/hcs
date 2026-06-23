@@ -9,6 +9,7 @@ import '../../pages/login_page.dart';
 import '../../pages/profile_page.dart';
 import '../../pages/stock_overview_page.dart';
 import '../../pages/ticket_list_page.dart';
+import '../../pages/workshop_page.dart';
 import '../../services/permission_service.dart';
 import '../../theme/app_colors.dart';
 import 'sidebar_item.dart';
@@ -97,6 +98,15 @@ class Sidebar extends StatelessWidget {
                     iconColor: iconColor,
                     textColor: textColor,
                     onTap: () => _navigate(context, const TicketListPage()),
+                  ),
+                  SidebarItem(
+                    icon: Icons.precision_manufacturing_outlined,
+                    label: 'Atolye Imalat',
+                    isActive: activeMenuItem == 'workshop',
+                    activeColor: activeColor,
+                    iconColor: iconColor,
+                    textColor: textColor,
+                    onTap: () => _navigate(context, const WorkshopPage()),
                   ),
                   if (PermissionService.roleHasPermission(
                     userRole,

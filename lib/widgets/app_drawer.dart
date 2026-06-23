@@ -7,6 +7,7 @@ import '../pages/stock_overview_page.dart';
 import '../pages/archived_tickets_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/ticket_list_page.dart';
+import '../pages/workshop_page.dart';
 import '../pages/login_page.dart';
 import '../pages/fault_codes_page.dart';
 import '../services/permission_service.dart';
@@ -14,6 +15,7 @@ import '../theme/app_colors.dart';
 
 enum AppDrawerPage {
   ticketList,
+  workshop,
   dashboard,
   stock,
   archived,
@@ -171,6 +173,21 @@ class AppDrawer extends StatelessWidget {
                                     context,
                                     AppDrawerPage.ticketList,
                                     const TicketListPage(),
+                                  ),
+                            ),
+                            _NavTile(
+                              label: 'At\u00f6lye \u0130malat',
+                              icon: Icons.precision_manufacturing_outlined,
+                              active: currentPage == AppDrawerPage.workshop,
+                              iconMuted: iconMuted,
+                              textColor: textColor,
+                              activeBg: activeBg,
+                              accent: accent,
+                              onTap:
+                                  () => _navigate(
+                                    context,
+                                    AppDrawerPage.workshop,
+                                    const WorkshopPage(),
                                   ),
                             ),
                             if (PermissionService.roleHasPermission(

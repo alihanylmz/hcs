@@ -105,13 +105,13 @@ class DashboardPage extends StatefulWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         decoration: BoxDecoration(
-          color: tone.withOpacity(isDark ? 0.16 : 0.08),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: tone.withOpacity(0.18)),
+          color: isDark ? AppColors.surfaceDarkMuted : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: tone.withValues(alpha: 0.16)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -122,7 +122,7 @@ class DashboardPage extends StatefulWidget {
               label,
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
                 color: foreground,
               ),
             ),
@@ -219,28 +219,28 @@ class DashboardPage extends StatefulWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Operasyon Ozeti',
+                        'Bugunun Merkezi',
                         style: TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.6,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0,
                           color: _mutedText(isDark),
                         ),
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Bugun hangi alana mudahale edilmesi gerektigini tek ekranda gosterir.',
+                        'Bugun $totalAttention konu takip istiyor.',
                         style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 30,
+                          fontWeight: FontWeight.w700,
                           color: primaryText,
-                          height: 1.15,
+                          height: 1.12,
                         ),
                       ),
                       const SizedBox(height: 12),
                       Text(
                         totalAttention > 0
-                            ? '$totalAttention kayit yonetsel takip istiyor.'
+                            ? 'Geciken isler, stok bekleyenler ve imza eksikleri oncelikli gorunur.'
                             : 'Su an kritik mudahale gerektiren kayit gorunmuyor.',
                         style: TextStyle(
                           fontSize: 14,
@@ -262,7 +262,7 @@ class DashboardPage extends StatefulWidget {
                                   color:
                                       isDark
                                           ? const Color(0xFF102131)
-                                          : AppColors.surfaceSoft,
+                                          : Colors.white,
                                   borderRadius: BorderRadius.circular(999),
                                   border: Border.all(
                                     color: _panelBorder(isDark),
@@ -272,7 +272,7 @@ class DashboardPage extends StatefulWidget {
                                   item,
                                   style: TextStyle(
                                     fontSize: 12,
-                                    fontWeight: FontWeight.w700,
+                                    fontWeight: FontWeight.w600,
                                     color: primaryText,
                                   ),
                                 ),
@@ -289,10 +289,10 @@ class DashboardPage extends StatefulWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Hizli aksiyonlar',
+                        'Aksiyonlar',
                         style: TextStyle(
                           fontSize: 14,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                           color: primaryText,
                         ),
                       ),
@@ -305,27 +305,27 @@ class DashboardPage extends StatefulWidget {
             )
           else ...[
             Text(
-              'Operasyon Ozeti',
+              'Bugunun Merkezi',
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0,
                 color: _mutedText(isDark),
               ),
             ),
             const SizedBox(height: 10),
             Text(
-              'Yonetici paneli',
+              'Bugun $totalAttention konu takip istiyor.',
               style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
+                fontSize: 25,
+                fontWeight: FontWeight.w700,
                 color: primaryText,
               ),
             ),
             const SizedBox(height: 10),
             Text(
               totalAttention > 0
-                  ? '$totalAttention kayit takip istiyor.'
+                  ? 'Geciken isler, stok bekleyenler ve imza eksikleri oncelikli.'
                   : 'Kritik mudahale gerektiren kayit gorunmuyor.',
               style: TextStyle(fontSize: 14, color: _mutedText(isDark)),
             ),

@@ -8,6 +8,7 @@ import 'sidebar.dart';
 
 enum AppPage {
   ticketList,
+  workshop,
   dashboard,
   stock,
   archived,
@@ -52,7 +53,7 @@ class AppLayout extends StatelessWidget {
         const Positioned.fill(child: _DashboardBackdrop()),
         if (isWideScreen)
           SafeArea(
-            minimum: const EdgeInsets.all(20),
+            minimum: const EdgeInsets.all(16),
             child: Row(
               children: [
                 RepaintBoundary(
@@ -62,13 +63,13 @@ class AppLayout extends StatelessWidget {
                     userRole: userRole,
                   ),
                 ),
-                const SizedBox(width: 20),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     children: [
                       if (showAppBar)
                         RepaintBoundary(child: _buildDesktopAppBar(context)),
-                      if (showAppBar) const SizedBox(height: 20),
+                      if (showAppBar) const SizedBox(height: 16),
                       Expanded(child: _DesktopContentShell(child: child)),
                     ],
                   ),
@@ -178,22 +179,22 @@ class AppLayout extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     return Container(
-      height: 92,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+      height: 84,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         color:
             isDark
                 ? AppColors.surfaceDarkRaised.withValues(alpha: 0.92)
                 : Colors.white.withValues(alpha: 0.78),
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
         ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.08),
-            blurRadius: 30,
-            offset: const Offset(0, 18),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -206,7 +207,7 @@ class AppLayout extends StatelessWidget {
             decoration: BoxDecoration(
               color:
                   isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceAccent,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
               ),
@@ -339,6 +340,8 @@ class AppLayout extends StatelessWidget {
     switch (page) {
       case AppPage.ticketList:
         return 'SERVIS MASASI';
+      case AppPage.workshop:
+        return 'ATOLYE';
       case AppPage.dashboard:
         return 'ANALITIK PANEL';
       case AppPage.stock:
@@ -360,6 +363,8 @@ class AppLayout extends StatelessWidget {
     switch (currentPage) {
       case AppPage.ticketList:
         return 'ticket_list';
+      case AppPage.workshop:
+        return 'workshop';
       case AppPage.dashboard:
         return 'dashboard';
       case AppPage.stock:
@@ -381,6 +386,8 @@ class AppLayout extends StatelessWidget {
     switch (currentPage) {
       case AppPage.ticketList:
         return AppDrawerPage.ticketList;
+      case AppPage.workshop:
+        return AppDrawerPage.workshop;
       case AppPage.dashboard:
         return AppDrawerPage.dashboard;
       case AppPage.stock:
@@ -412,21 +419,21 @@ class _DesktopContentShell extends StatelessWidget {
       decoration: BoxDecoration(
         color:
             isDark
-                ? AppColors.surfaceDark.withValues(alpha: 0.72)
-                : Colors.white.withValues(alpha: 0.56),
-        borderRadius: BorderRadius.circular(32),
+                ? AppColors.surfaceDark.withValues(alpha: 0.88)
+                : Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.16 : 0.08),
-            blurRadius: 30,
-            offset: const Offset(0, 18),
+            color: Colors.black.withValues(alpha: isDark ? 0.14 : 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: ClipRRect(borderRadius: BorderRadius.circular(32), child: child),
+      child: ClipRRect(borderRadius: BorderRadius.circular(18), child: child),
     );
   }
 }
@@ -443,38 +450,7 @@ class _DashboardBackdrop extends StatelessWidget {
       children: [
         DecoratedBox(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors:
-                  isDark
-                      ? const [
-                        Color(0xFF020817),
-                        Color(0xFF081225),
-                        Color(0xFF0B1220),
-                      ]
-                      : const [
-                        Color(0xFFF8FBFF),
-                        Color(0xFFF1F5F9),
-                        Color(0xFFEAF1FB),
-                      ],
-            ),
-          ),
-        ),
-        Positioned(
-          top: -120,
-          right: -80,
-          child: _BackdropGlow(
-            size: 320,
-            color: isDark ? const Color(0xFF1D4ED8) : const Color(0xFFBFDBFE),
-          ),
-        ),
-        Positioned(
-          bottom: -140,
-          left: -100,
-          child: _BackdropGlow(
-            size: 360,
-            color: isDark ? const Color(0xFF0F766E) : const Color(0xFFCFFAFE),
+            color: isDark ? AppColors.backgroundDark : AppColors.backgroundGrey,
           ),
         ),
         DecoratedBox(
@@ -493,32 +469,6 @@ class _DashboardBackdrop extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _BackdropGlow extends StatelessWidget {
-  const _BackdropGlow({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [
-              color.withValues(alpha: 0.34),
-              color.withValues(alpha: 0.0),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

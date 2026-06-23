@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/card.dart';
 import '../services/card_service.dart';
@@ -47,6 +48,8 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
   bool _isUploading = false;
   bool _isEditing = false;
   String? _loadedCardId;
+  String? _loadedDocumentTicketId;
+  Map<String, String> _documentUrls = const {};
 
   @override
   void initState() {
@@ -114,6 +117,56 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
     _controlVoltageController.text = data['control_voltage']?.toString() ?? '';
     _notesController.text =
         data['notes']?.toString() ?? _stripRecipeBlock(card.description);
+    _loadDocumentLinks(card);
+  }
+
+  Future<void> _loadDocumentLinks(KanbanCard card) async {
+    final ticketId = card.linkedTicketId;
+    if (ticketId == null || ticketId.isEmpty) return;
+    if (_loadedDocumentTicketId == ticketId) return;
+    _loadedDocumentTicketId = ticketId;
+
+    final notes = await _ticketService.getNotes(ticketId);
+    final links = <String, String>{};
+    final urlPattern = RegExp(r'https?:\/\/\S+');
+
+    for (final note in notes) {
+      final text = note['note']?.toString() ?? '';
+      if (!text.toLowerCase().contains('atolye proje dosyasi')) continue;
+
+      final url = urlPattern.firstMatch(text)?.group(0);
+      if (url == null || url.isEmpty) continue;
+
+      final typeMatch = RegExp(
+        r'Tur:\s*(.+)',
+        multiLine: true,
+      ).firstMatch(text);
+      final type = typeMatch?.group(1)?.trim();
+      if (type == null || type.isEmpty) continue;
+
+      links[_docKey(type)] = url;
+    }
+
+    if (!mounted) return;
+    setState(() => _documentUrls = links);
+  }
+
+  String _docKey(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll('ı', 'i')
+        .replaceAll('ş', 's')
+        .replaceAll('ğ', 'g')
+        .replaceAll('ü', 'u')
+        .replaceAll('ö', 'o')
+        .replaceAll('ç', 'c')
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '');
+  }
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   Map<String, dynamic> _extractRecipe(String? description) {
@@ -260,6 +313,8 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
           'Atolye proje dosyasi eklendi\nTur: $_fileType\nDosya: ${file.name}\n$url',
         );
       }
+      _loadedDocumentTicketId = null;
+      await _loadDocumentLinks(card);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -659,41 +714,66 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
 
   Widget _documentTiles() {
     const items = [
-      'Nokta Listesi',
-      'Tek Hat Sema',
-      'Malzeme Listesi',
-      'Pano Yerlesim',
-      'Fotograflar',
+      ('Nokta Listesi', 'Nokta Listesi'),
+      ('Tek Hat Sema', 'Tek Hat Semasi'),
+      ('Malzeme Listesi', 'Malzeme Listesi'),
+      ('Pano Yerlesim', 'Pano Yerlesim'),
+      ('Fotograflar', 'Fotograf'),
     ];
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children:
-          items
-              .map(
-                (item) => Container(
-                  width: 190,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFCCFBF1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFF99F6E4)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text('Dosya: Is emrinde'),
-                      const Text('Durum: Takipte'),
-                    ],
-                  ),
+          items.map((item) {
+            final url = _documentUrls[_docKey(item.$2)];
+            final hasFile = url != null && url.isNotEmpty;
+            final bg =
+                hasFile ? const Color(0xFFCCFBF1) : const Color(0xFFFEE2E2);
+            final border =
+                hasFile ? const Color(0xFF99F6E4) : const Color(0xFFFCA5A5);
+            return InkWell(
+              onTap: hasFile ? () => _openUrl(url) : null,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: 190,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: border),
                 ),
-              )
-              .toList(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          hasFile
+                              ? Icons.check_circle_outline
+                              : Icons.error_outline,
+                          size: 18,
+                          color:
+                              hasFile
+                                  ? AppColors.statusDone
+                                  : AppColors.corporateRed,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            item.$1,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(hasFile ? 'Dosya: Var' : 'Dosya: Yok'),
+                    Text(hasFile ? 'Durum: Yuklendi' : 'Durum: Yuklenmedi'),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
     );
   }
 

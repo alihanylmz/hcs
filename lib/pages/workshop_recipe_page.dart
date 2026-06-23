@@ -33,6 +33,7 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
   String _fileType = 'Proje PDF';
   bool _isSaving = false;
   bool _isUploading = false;
+  bool _isEditing = false;
   String? _loadedCardId;
 
   @override
@@ -166,6 +167,7 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Uretim recetesi kaydedildi.')),
       );
+      setState(() => _isEditing = false);
       await _refresh();
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -208,7 +210,19 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(title: const Text('Uretim Recetesi')),
+      appBar: AppBar(
+        title: const Text('Uretim Recetesi'),
+        actions: [
+          TextButton.icon(
+            onPressed: () => setState(() => _isEditing = !_isEditing),
+            icon: Icon(
+              _isEditing ? Icons.visibility_outlined : Icons.edit_outlined,
+            ),
+            label: Text(_isEditing ? 'Onizle' : 'Duzenle'),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: FutureBuilder<KanbanCard>(
         future: _cardFuture,
         builder: (context, snapshot) {
@@ -228,11 +242,17 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
               children: [
                 _heroCard(card),
                 const SizedBox(height: 14),
-                _statusPanel(card),
-                const SizedBox(height: 14),
-                _technicalForm(card),
-                const SizedBox(height: 14),
-                _filePanel(card),
+                if (_isEditing) ...[
+                  _statusPanel(card),
+                  const SizedBox(height: 14),
+                  _technicalForm(card),
+                  const SizedBox(height: 14),
+                  _filePanel(card),
+                ] else ...[
+                  _recipeSheet(card),
+                  const SizedBox(height: 14),
+                  _readonlyFilePanel(card),
+                ],
               ],
             ),
           );
@@ -379,6 +399,255 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
                       : const Icon(Icons.save_outlined),
               label: const Text('Receteyi Kaydet'),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _recipeSheet(KanbanCard card) {
+    final theme = Theme.of(context);
+    final motors =
+        _motorControllers
+            .map((controller) => controller.text.trim())
+            .where((value) => value.isNotEmpty)
+            .toList();
+    final due =
+        card.dueDate == null
+            ? '-'
+            : DateFormat('dd.MM.yyyy', 'tr_TR').format(card.dueDate!);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'IMALAT RECETESI',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _isEditing = true),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Duzenle'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 980 ? 3 : 1;
+              final cards = [
+                _sheetBox(
+                  title: 'Genel Bilgiler',
+                  tone: const Color(0xFFE0F2FE),
+                  rows: [
+                    ('Is Emri', card.linkedJobCode ?? '-'),
+                    ('Termin', due),
+                    ('Durum', card.status.label),
+                    ('Sorumlu', card.assigneeName ?? 'Atanmamis'),
+                  ],
+                ),
+                _sheetBox(
+                  title: 'Recete Bilgileri',
+                  tone: const Color(0xFFDCFCE7),
+                  rows: [
+                    ('Panel Tipi', _value(_panelTypeController.text)),
+                    ('Ana Salter', _value(_mainBreakerController.text)),
+                    ('Motor', motors.isEmpty ? '-' : motors.join(', ')),
+                    ('Surucu', _value(_drivePowerController.text)),
+                  ],
+                ),
+                _sheetBox(
+                  title: 'Kontrol Bilgileri',
+                  tone: const Color(0xFFFEE2E2),
+                  rows: [
+                    ('PLC Modeli', _value(_plcModelController.text)),
+                    ('Kontrol Voltaji', _value(_controlVoltageController.text)),
+                    ('Oncelik', card.priority.label),
+                    ('Kart No', card.id.substring(0, 8)),
+                  ],
+                ),
+              ];
+
+              if (columns == 1) {
+                return Column(
+                  children:
+                      cards
+                          .map(
+                            (card) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: card,
+                            ),
+                          )
+                          .toList(),
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children:
+                    cards
+                        .map(
+                          (card) => Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: card,
+                            ),
+                          ),
+                        )
+                        .toList(),
+              );
+            },
+          ),
+          const SizedBox(height: 14),
+          _productionSteps(motors),
+          const SizedBox(height: 14),
+          _notesSheet(),
+        ],
+      ),
+    );
+  }
+
+  String _value(String value) => value.trim().isEmpty ? '-' : value.trim();
+
+  Widget _sheetBox({
+    required String title,
+    required Color tone,
+    required List<(String, String)> rows,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.dividerColor),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: tone,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(8),
+              ),
+            ),
+            child: Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+          ...rows.map(
+            (row) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: theme.dividerColor)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 118,
+                    child: Text(
+                      row.$1,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Expanded(child: Text(row.$2)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _productionSteps(List<String> motors) {
+    final items =
+        motors.isEmpty
+            ? ['Malzeme hazirlik', 'Pano montaj', 'Kablaj', 'Test']
+            : motors.map((motor) => 'Motor $motor hatti').toList();
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children:
+          items
+              .map(
+                (item) => Container(
+                  width: 190,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFCCFBF1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF99F6E4)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('Toplam: -'),
+                      const Text('Uretilen: -'),
+                      const Text('Kalan: -'),
+                    ],
+                  ),
+                ),
+              )
+              .toList(),
+    );
+  }
+
+  Widget _notesSheet() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Text(
+        _notesController.text.trim().isEmpty
+            ? 'Uretim notu girilmedi.'
+            : _notesController.text.trim(),
+      ),
+    );
+  }
+
+  Widget _readonlyFilePanel(KanbanCard card) {
+    return _panel(
+      title: 'Proje Dosyalari',
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          OutlinedButton.icon(
+            onPressed:
+                card.linkedTicketId == null ? null : () => _openTicket(card),
+            icon: const Icon(Icons.folder_open_outlined),
+            label: const Text('Is Emrindeki Dosyalar'),
+          ),
+          TextButton.icon(
+            onPressed: () => setState(() => _isEditing = true),
+            icon: const Icon(Icons.upload_file_outlined),
+            label: const Text('Dosya Eklemek Icin Duzenle'),
           ),
         ],
       ),

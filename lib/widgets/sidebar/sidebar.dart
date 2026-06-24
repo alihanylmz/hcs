@@ -198,7 +198,7 @@ class Sidebar extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    'v1.1.11',
+                    'v1.2.0',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,

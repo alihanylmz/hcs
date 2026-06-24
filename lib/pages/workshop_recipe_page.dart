@@ -10,8 +10,11 @@ import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/card.dart';
+import '../models/user_profile.dart';
 import '../services/card_service.dart';
+import '../services/permission_service.dart';
 import '../services/ticket_service.dart';
+import '../services/user_service.dart';
 import '../theme/app_colors.dart';
 import 'ticket_detail_page.dart';
 
@@ -27,6 +30,7 @@ class WorkshopRecipePage extends StatefulWidget {
 class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
   final CardService _cardService = CardService();
   final TicketService _ticketService = TicketService();
+  final UserService _userService = UserService();
   late Future<KanbanCard> _cardFuture;
   final _panelTypeController = TextEditingController();
   final _panelWidthController = TextEditingController();
@@ -46,15 +50,24 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
   String _fileType = 'Proje PDF';
   bool _isSaving = false;
   bool _isUploading = false;
+  bool _isDeleting = false;
   bool _isEditing = false;
   String? _loadedCardId;
   String? _loadedDocumentTicketId;
   Map<String, String> _documentUrls = const {};
+  UserProfile? _userProfile;
 
   @override
   void initState() {
     super.initState();
     _cardFuture = _cardService.getCard(widget.cardId);
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    final profile = await _userService.getCurrentUserProfile();
+    if (!mounted) return;
+    setState(() => _userProfile = profile);
   }
 
   @override
@@ -94,6 +107,58 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
       MaterialPageRoute(builder: (_) => TicketDetailPage(ticketId: ticketId)),
     );
     await _refresh();
+  }
+
+  bool get _canDeleteRecipe {
+    return PermissionService.hasPermission(
+      _userProfile,
+      AppPermission.deleteTicket,
+    );
+  }
+
+  Future<void> _deleteRecipe(KanbanCard card) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Uretim recetesi silinsin mi?'),
+          content: Text(
+            '${card.title} silinecek. Bu islem atolyedeki uretim kartini kaldirir.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Vazgec'),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.corporateRed,
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Sil'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+
+    setState(() => _isDeleting = true);
+    try {
+      await _cardService.deleteCard(card.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Uretim recetesi silindi.')));
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Recete silinemedi: $error')));
+      setState(() => _isDeleting = false);
+    }
   }
 
   void _loadRecipeIfNeeded(KanbanCard card) {
@@ -362,6 +427,32 @@ class _WorkshopRecipePageState extends State<WorkshopRecipePage> {
             child: ListView(
               padding: const EdgeInsets.all(18),
               children: [
+                if (_canDeleteRecipe) ...[
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: OutlinedButton.icon(
+                      onPressed: _isDeleting ? null : () => _deleteRecipe(card),
+                      icon:
+                          _isDeleting
+                              ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : const Icon(Icons.delete_outline),
+                      label: Text(_isDeleting ? 'Siliniyor' : 'Receteyi Sil'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.corporateRed,
+                        side: BorderSide(
+                          color: AppColors.corporateRed.withValues(alpha: 0.35),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 _heroCard(card),
                 const SizedBox(height: 14),
                 if (_isEditing) ...[

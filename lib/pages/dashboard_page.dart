@@ -3,7 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'ticket_list_page.dart';
 import 'ticket_detail_page.dart';
 import 'archived_tickets_page.dart';
-import 'stock_overview_page.dart';
 import 'partner_management_page.dart';
 import 'activity_logs_page.dart';
 import 'user_management_page.dart';
@@ -135,11 +134,7 @@ class DashboardPage extends StatefulWidget {
   Widget _buildExecutiveHeader(bool isWide) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryText = isDark ? Colors.white : AppColors.textDark;
-    final totalAttention =
-        _overdueTicketCount +
-        _stockWaitingCount +
-        _missingSignatureCount +
-        _lowStockItems.length;
+    final totalAttention = _overdueTicketCount + _missingSignatureCount;
 
     final summaryItems = [
       'Bugun tamamlanan: $_completedTodayCount',
@@ -168,16 +163,6 @@ class DashboardPage extends StatefulWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const ArchivedTicketsPage()),
-            );
-          },
-        ),
-        _buildQuickActionButton(
-          label: 'Stok durumu',
-          icon: Icons.inventory_2_outlined,
-          accent: AppColors.corporateYellow,
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const StockOverviewPage()),
             );
           },
         ),
@@ -240,7 +225,7 @@ class DashboardPage extends StatefulWidget {
                       const SizedBox(height: 12),
                       Text(
                         totalAttention > 0
-                            ? 'Geciken isler, stok bekleyenler ve imza eksikleri oncelikli gorunur.'
+                            ? 'Geciken isler ve imza eksikleri oncelikli gorunur.'
                             : 'Su an kritik mudahale gerektiren kayit gorunmuyor.',
                         style: TextStyle(
                           fontSize: 14,
@@ -325,7 +310,7 @@ class DashboardPage extends StatefulWidget {
             const SizedBox(height: 10),
             Text(
               totalAttention > 0
-                  ? 'Geciken isler, stok bekleyenler ve imza eksikleri oncelikli.'
+                  ? 'Geciken isler ve imza eksikleri oncelikli.'
                   : 'Kritik mudahale gerektiren kayit gorunmuyor.',
               style: TextStyle(fontSize: 14, color: _mutedText(isDark)),
             ),
@@ -453,11 +438,7 @@ class DashboardPage extends StatefulWidget {
   Widget _buildExecutiveHeader(bool isWide) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryText = isDark ? Colors.white : AppColors.textDark;
-    final totalAttention =
-        _overdueTicketCount +
-        _stockWaitingCount +
-        _missingSignatureCount +
-        _lowStockItems.length;
+    final totalAttention = _overdueTicketCount + _missingSignatureCount;
 
     final summaryItems = [
       'Bugun tamamlanan: $_completedTodayCount',
@@ -486,16 +467,6 @@ class DashboardPage extends StatefulWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const ArchivedTicketsPage()),
-            );
-          },
-        ),
-        _buildQuickActionButton(
-          label: 'Stok durumu',
-          icon: Icons.inventory_2_outlined,
-          accent: AppColors.corporateYellow,
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const StockOverviewPage()),
             );
           },
         ),
@@ -838,16 +809,6 @@ class _DashboardPageState extends State<DashboardPage> {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const ArchivedTicketsPage()),
-            );
-          },
-        ),
-        _buildQuickActionButton(
-          label: 'Stok durumu',
-          icon: Icons.inventory_2_outlined,
-          accent: AppColors.corporateYellow,
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const StockOverviewPage()),
             );
           },
         ),
@@ -1533,8 +1494,6 @@ class _DashboardPageState extends State<DashboardPage> {
                           ],
                         ),
                       const SizedBox(height: 24),
-                      _buildInventoryAlertPanel(),
-                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
@@ -1588,13 +1547,6 @@ class _DashboardPageState extends State<DashboardPage> {
           subtitle: 'Plan tarihi gecmis aktif is',
         ),
         _buildStatCard(
-          'Stok Bekleyen',
-          _stockWaitingCount.toString(),
-          Icons.inventory_outlined,
-          Colors.purple,
-          subtitle: 'Paneli hazir, sevk bekliyor',
-        ),
-        _buildStatCard(
           'Imzasi Eksik',
           _missingSignatureCount.toString(),
           Icons.draw_outlined,
@@ -1628,25 +1580,11 @@ class _DashboardPageState extends State<DashboardPage> {
         icon: Icons.alarm_outlined,
       ),
       (
-        title: 'Stok bekleyen isler',
-        value: _stockWaitingCount,
-        color: Colors.purple,
-        detail: 'Panosu hazir ancak hala sevk bekleyen kayitlar.',
-        icon: Icons.inventory_2_outlined,
-      ),
-      (
         title: 'Imzasi eksik tamamlananlar',
         value: _missingSignatureCount,
         color: Colors.teal,
         detail: 'Musteri veya teknisyen imzasi eksik kalan isler.',
         icon: Icons.border_color_outlined,
-      ),
-      (
-        title: 'Kritik stok kalemi',
-        value: _lowStockItems.length,
-        color: Colors.orange,
-        detail: 'Kritik seviyenin altinda kalan urunler.',
-        icon: Icons.warning_amber_rounded,
       ),
     ];
 

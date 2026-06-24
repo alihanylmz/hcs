@@ -3,7 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math' as math;
 import '../main.dart';
 import '../pages/dashboard_page.dart';
-import '../pages/stock_overview_page.dart';
 import '../pages/archived_tickets_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/ticket_list_page.dart';
@@ -207,25 +206,6 @@ class AppDrawer extends StatelessWidget {
                                       context,
                                       AppDrawerPage.dashboard,
                                       const DashboardPage(),
-                                    ),
-                              ),
-                            if (PermissionService.roleHasPermission(
-                              userRole,
-                              AppPermission.viewStock,
-                            ))
-                              _NavTile(
-                                label: 'Stok Durumu',
-                                icon: Icons.inventory_2_outlined,
-                                active: currentPage == AppDrawerPage.stock,
-                                iconMuted: iconMuted,
-                                textColor: textColor,
-                                activeBg: activeBg,
-                                accent: accent,
-                                onTap:
-                                    () => _navigate(
-                                      context,
-                                      AppDrawerPage.stock,
-                                      const StockOverviewPage(),
                                     ),
                               ),
                             _NavTile(

@@ -7,6 +7,7 @@ import '../pages/archived_tickets_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/ticket_list_page.dart';
 import '../pages/workshop_page.dart';
+import '../pages/service_form_templates_page.dart';
 import '../pages/login_page.dart';
 import '../pages/fault_codes_page.dart';
 import '../services/permission_service.dart';
@@ -207,6 +208,27 @@ class AppDrawer extends StatelessWidget {
                                       AppDrawerPage.dashboard,
                                       const DashboardPage(),
                                     ),
+                              ),
+                            if (PermissionService.roleHasPermission(
+                              userRole,
+                              AppPermission.viewDashboard,
+                            ))
+                              _NavTile(
+                                label: 'Servis Formu Şablonları',
+                                icon: Icons.description_outlined,
+                                active: currentPage == AppDrawerPage.other,
+                                iconMuted: iconMuted,
+                                textColor: textColor,
+                                activeBg: activeBg,
+                                accent: accent,
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const ServiceFormTemplatesPage(),
+                                    ),
+                                  );
+                                },
                               ),
                             _NavTile(
                               label: 'Biten \u0130\u015fler (Ar\u015fiv)',

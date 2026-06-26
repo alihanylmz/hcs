@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 
 // Yeni oluşturduğumuz modülleri import ediyoruz
 import '../services/pdf_export_service.dart';
@@ -10,6 +12,7 @@ import '../services/user_service.dart';
 import '../services/ticket_service.dart'; // <--- Yeni Service
 import '../services/activity_log_service.dart';
 import '../services/stock_service.dart'; // <--- Stock Service
+import '../services/service_form_service.dart'; // <--- Servis Formu
 import '../models/fault_record.dart';
 import '../models/fault_record_note.dart';
 import '../models/structured_ticket_note.dart';
@@ -19,6 +22,7 @@ import '../models/ticket_fault_record.dart';
 import '../models/user_profile.dart';
 import '../models/ticket_part.dart';
 import '../models/ticket_status.dart';
+import '../models/service_form.dart'; // <--- Servis Formu Modeli
 import '../pages/edit_ticket_page.dart';
 import 'fault_record_detail_page.dart';
 import 'signature_page.dart';
@@ -44,6 +48,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   final _faultRecordService = FaultRecordService();
   final _stockService = StockService(); // Stock Service Eklendi
   final _activityLogService = ActivityLogService();
+  final _serviceFormService = ServiceFormService(); // <--- Servis Formu Servisi
 
   Map<String, dynamic>? _ticket;
   UserProfile? _userProfile;
@@ -59,6 +64,10 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   final _activityNoteController = TextEditingController();
   List<Map<String, dynamic>> _activityLogs = [];
   String? _activityUserFilter;
+
+  // --- Servis Formu State ---
+  List<TicketServiceForm> _serviceForms = [];
+  bool _serviceFormsLoading = false;
 
   bool get _canEditTicket =>
       PermissionService.hasPermission(_userProfile, AppPermission.editTicket);
@@ -226,6 +235,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
         _loadLinkedFaults();
         _loadParts(); // Parçaları yükle
         _loadActivityLogs();
+        _loadServiceForms(); // <--- Servis Formları
       }
     } catch (e) {
       if (!mounted) return;
@@ -320,6 +330,489 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       debugPrint('İş logları yüklenirken hata: $e');
       if (mounted) setState(() => _activityLogsLoading = false);
     }
+  }
+
+  // ============================================================
+  // SERVİS FORMU FONKSİYONLARI
+  // ============================================================
+
+  Future<void> _loadServiceForms() async {
+    setState(() => _serviceFormsLoading = true);
+    try {
+      final forms = await _serviceFormService.getFormsForTicket(widget.ticketId);
+      if (mounted) setState(() => _serviceForms = forms);
+    } catch (e) {
+      debugPrint('Servis formları yüklenirken hata: $e');
+    } finally {
+      if (mounted) setState(() => _serviceFormsLoading = false);
+    }
+  }
+
+  /// "Servis Formu Gönder" butonuna basıldığında çalışır:
+  /// 1. Aktif şablonları listeler.
+  /// 2. Kullanıcıdan şablon seçmesini ister.
+  /// 3. Formu oluşturup WhatsApp linkini açar.
+  Future<void> _sendServiceForm() async {
+    // Şablonları çek
+    List<ServiceFormTemplate> templates;
+    try {
+      templates = await _serviceFormService.getActiveTemplates();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Şablonlar yüklenemedi: $e'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
+
+    if (templates.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Hiç aktif form şablonu yok. Önce şablon oluşturun.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Şablon seçim diyaloğu
+    if (!mounted) return;
+    final selected = await showDialog<ServiceFormTemplate>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.assignment_outlined, color: AppColors.corporateBlue),
+            SizedBox(width: 10),
+            Text('Form Türü Seçin'),
+          ],
+        ),
+        content: SizedBox(
+          width: 350,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Müşteriye hangi servis ön koşul formunu göndermek istiyorsunuz?',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              ...templates.map((t) => ListTile(
+                    leading: const Icon(Icons.description_outlined,
+                        color: AppColors.corporateBlue),
+                    title: Text(t.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: t.description != null ? Text(t.description!) : null,
+                    trailing: const Icon(Icons.chevron_right),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    onTap: () => Navigator.pop(ctx, t),
+                  )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('İptal'),
+          ),
+        ],
+      ),
+    );
+
+    if (selected == null) return;
+
+    // Formu oluştur
+    TicketServiceForm newForm;
+    try {
+      newForm = await _serviceFormService.createForm(
+        ticketId: widget.ticketId,
+        templateId: selected.id,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Form oluşturulamadı: $e'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
+
+    // Formu listeye ekle
+    if (mounted) {
+      setState(() => _serviceForms.insert(0, newForm));
+    }
+
+    // WhatsApp linkini oluştur ve aç
+    // Web URL'niz buraya gelecek. Örnek: https://app.sirketiniz.com/#/service-form?id=UUID
+    final supabaseUrl = newForm.id;
+    // TODO: Gerçek web adresinizle değiştirin
+    const baseUrl = 'https://istakip.app'; // <-- BURAYA KENDİ WEB ADRESİNİZİ YAZIN
+    final formUrl = '$baseUrl/#/service-form?id=$supabaseUrl';
+    final ticketNo = _ticket?['job_code'] ?? widget.ticketId;
+    final customerName = _ticket?['customer_name'] ?? 'Müşteri';
+    final message = Uri.encodeComponent(
+      'Sayın $customerName,\n\n'
+      'İş No: $ticketNo - ${selected.name} formunu doldurup imzalamanız gerekmektedir.\n\n'
+      'Lütfen aşağıdaki bağlantıya tıklayınız:\n$formUrl\n\n'
+      'Saygılarımızla.',
+    );
+    final whatsAppUri = Uri.parse('https://wa.me/?text=$message');
+
+    try {
+      if (await canLaunchUrl(whatsAppUri)) {
+        await launchUrl(whatsAppUri, mode: LaunchMode.externalApplication);
+      } else {
+        throw 'WhatsApp açılamadı';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('WhatsApp açılamadı: $e. Form ID: ${newForm.id}'), backgroundColor: Colors.orange),
+        );
+      }
+    }
+  }
+
+  /// Bir formu iptal eder (2 uyarı ile)
+  Future<void> _cancelServiceForm(TicketServiceForm form) async {
+    final confirm1 = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Formu İptal Et'),
+        content: const Text(
+          'Bu servis ön koşul formunu iptal etmek istediğinizden emin misiniz?\n\nMüşteri mevcut link üzerinden forma erişemeyecektir.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false), child: const Text('Vazgeç')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Evet, İptal Et'),
+          ),
+        ],
+      ),
+    );
+    if (confirm1 != true || !mounted) return;
+
+    final confirm2 = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Son Onay'),
+          ],
+        ),
+        content: const Text(
+          'Form iptal edilecek ve müşteriye daha önce gönderilen link geçersiz hale gelecektir.\nBu işlem geri alınamaz.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false), child: const Text('Vazgeç')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('İptal Et', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm2 != true || !mounted) return;
+
+    try {
+      await _serviceFormService.cancelForm(form.id);
+      await _loadServiceForms();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Form iptal edildi.'), backgroundColor: Colors.orange),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('İptal edilemedi: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  /// Servis formları bölümünü oluşturan widget
+  Widget _buildServiceFormsSection(BuildContext context) {
+    final isDark = _isDark(context);
+    final cardColor = _surfaceColor(context);
+    final borderColor = _borderColor(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Başlık + Gönder Butonu
+          Row(
+            children: [
+              Icon(Icons.assignment_outlined,
+                  color: _pageAccentColor(context), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Servis Ön Koşul Formları',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: _primaryTextColor(context),
+                  ),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _sendServiceForm,
+                icon: const Icon(Icons.send_outlined, size: 16),
+                label: const Text('Form Gönder'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.corporateBlue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 8),
+                  textStyle: const TextStyle(fontSize: 13),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Yükleniyor
+          if (_serviceFormsLoading)
+            const Center(
+                child: Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(),
+            ))
+          // Boş
+          else if (_serviceForms.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cardColor,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.assignment_outlined,
+                        size: 40, color: Colors.grey.shade400),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Henüz form gönderilmedi.',
+                      style: TextStyle(
+                          color: _secondaryTextColor(context)),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          // Form Listesi
+          else
+            ...(_serviceForms.map((form) {
+              final template = form.template;
+              final isSigned = form.isSigned;
+              final isPending = form.isPending;
+              final isCancelled = form.isCancelled;
+
+              Color statusColor;
+              IconData statusIcon;
+              String statusLabel;
+              if (isSigned) {
+                statusColor = Colors.green;
+                statusIcon = Icons.check_circle;
+                statusLabel = 'İmzalandı';
+              } else if (isCancelled) {
+                statusColor = Colors.grey;
+                statusIcon = Icons.cancel_outlined;
+                statusLabel = 'İptal Edildi';
+              } else {
+                statusColor = Colors.orange;
+                statusIcon = Icons.hourglass_empty;
+                statusLabel = 'İmza Bekleniyor';
+              }
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isSigned
+                        ? Colors.green.withOpacity(0.4)
+                        : isCancelled
+                            ? borderColor
+                            : Colors.orange.withOpacity(0.4),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.description_outlined,
+                              color: _pageAccentColor(context), size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              template?.name ?? 'Form',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ),
+                          // Durum rozeti
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: statusColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: statusColor.withOpacity(0.4)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(statusIcon,
+                                    color: statusColor, size: 13),
+                                const SizedBox(width: 4),
+                                Text(
+                                  statusLabel,
+                                  style: TextStyle(
+                                      color: statusColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // Oluşturulma tarihi
+                      Text(
+                        'Oluşturuldu: ${DateFormat('dd MMM yyyy, HH:mm', 'tr_TR').format(form.createdAt.toLocal())}',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: _secondaryTextColor(context)),
+                      ),
+                      // İmzalanma tarihi
+                      if (isSigned && form.signedAt != null) ...[  
+                        const SizedBox(height: 4),
+                        Text(
+                          'İmzalandı: ${DateFormat('dd MMM yyyy, HH:mm', 'tr_TR').format(form.signedAt!.toLocal())}',
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.green),
+                        ),
+                        if (form.customerName != null)
+                          Text(
+                            'İmzalayan: ${form.customerName}',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: _secondaryTextColor(context)),
+                          ),
+                      ],
+                      // İmza görüntüsü
+                      if (isSigned && form.signatureData != null) ...[  
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            height: 100,
+                            width: double.infinity,
+                            color: isDark
+                                ? Colors.white12
+                                : Colors.grey.shade100,
+                            child: Image.memory(
+                              base64Decode(form.signatureData!),
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                      ],
+                      // Butonlar
+                      if (isPending) ...[  
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Linki Tekrar Gönder
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                const baseUrl = 'https://istakip.app'; // <-- WEB ADRESİ
+                                final formUrl =
+                                    '$baseUrl/#/service-form?id=${form.id}';
+                                final ticketNo =
+                                    _ticket?['job_code'] ?? widget.ticketId;
+                                final customerName =
+                                    _ticket?['customer_name'] ?? 'Müşteri';
+                                final templateName =
+                                    template?.name ?? 'Servis Formu';
+                                final message = Uri.encodeComponent(
+                                  'Sayın $customerName,\n\n'
+                                  'İş No: $ticketNo - $templateName formunu doldurup imzalamanız gerekmektedir.\n\n'
+                                  'Lütfen aşağıdaki bağlantıya tıklayınız:\n$formUrl\n\n'
+                                  'Saygılarımızla.',
+                                );
+                                final uri = Uri.parse(
+                                    'https://wa.me/?text=$message');
+                                if (await canLaunchUrl(uri)) {
+                                  await launchUrl(uri,
+                                      mode:
+                                          LaunchMode.externalApplication);
+                                }
+                              },
+                              icon: const Icon(Icons.whatsapp,
+                                  color: Colors.green, size: 16),
+                              label: const Text('Tekrar Gönder',
+                                  style: TextStyle(fontSize: 12)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.green,
+                                side: const BorderSide(
+                                    color: Colors.green),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                              ),
+                            ),
+                            // İptal Et
+                            OutlinedButton.icon(
+                              onPressed: () => _cancelServiceForm(form),
+                              icon: const Icon(Icons.cancel_outlined,
+                                  color: Colors.red, size: 16),
+                              label: const Text('İptal Et',
+                                  style: TextStyle(fontSize: 12)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red,
+                                side:
+                                    const BorderSide(color: Colors.red),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            })).toList(),
+        ],
+      ),
+    );
   }
 
   Future<void> _addActivityNote() async {
@@ -4444,6 +4937,9 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   ),
                 ],
               ),
+              const SizedBox(height: 20),
+              // --- SERVİS ÖN KOŞUL FORMLARI ---
+              _buildServiceFormsSection(context),
               const SizedBox(height: 20),
               _buildModernContentCard(
                 title: 'Dosya Yukle (Supabase)',

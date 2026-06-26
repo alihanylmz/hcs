@@ -14,6 +14,7 @@ import 'pages/ticket_list_page.dart';
 import 'platform/platform_startup_stub.dart'
     if (dart.library.io) 'platform/platform_startup_io.dart'
     as platform_startup;
+import 'pages/public_service_form_page.dart';
 import 'services/notification_navigation_service.dart';
 import 'services/update_service.dart';
 import 'services/user_service.dart';
@@ -166,6 +167,20 @@ class IsTakipAppState extends State<IsTakipApp> {
       supportedLocales: const [Locale('tr', 'TR')],
       locale: const Locale('tr', 'TR'),
       home: const AuthGate(),
+      // Servis öncesi onay formları için anonim (giriş gerektirmeyen) rotalar
+      onGenerateRoute: (settings) {
+        final uri = Uri.tryParse(settings.name ?? '');
+        if (uri != null && uri.path == '/service-form') {
+          final formId = uri.queryParameters['id'];
+          if (formId != null && formId.isNotEmpty) {
+            return MaterialPageRoute(
+              builder: (_) => PublicServiceFormPage(formId: formId),
+              settings: settings,
+            );
+          }
+        }
+        return null;
+      },
     );
   }
 }

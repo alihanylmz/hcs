@@ -130,13 +130,14 @@ jobs:
           name: plesk-site
           path: site
 
-      - name: Deploy to Plesk over FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+      - name: Deploy to Plesk over SFTP
+        uses: appleboy/scp-action@v0.1.7
         with:
-          server: ${{ secrets.PLESK_HOST }}
+          host: ${{ secrets.PLESK_HOST }}
           username: ${{ secrets.PLESK_USER }}
           password: ${{ secrets.PLESK_PASSWORD }}
-          port: ${{ secrets.PLESK_PORT || 21 }}
-          local-dir: site/
-          server-dir: ${{ secrets.PLESK_FTP_TARGET_DIR || '/httpdocs/' }}
-          dangerous-clean-slate: false
+          port: ${{ secrets.PLESK_PORT || 22 }}
+          source: site
+          target: ${{ secrets.PLESK_TARGET_PATH }}
+          strip_components: 1
+          overwrite: true

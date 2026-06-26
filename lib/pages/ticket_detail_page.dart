@@ -775,7 +775,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                           LaunchMode.externalApplication);
                                 }
                               },
-                              icon: const Icon(Icons.whatsapp,
+                              icon: const Icon(Icons.chat,
                                   color: Colors.green, size: 16),
                               label: const Text('Tekrar Gönder',
                                   style: TextStyle(fontSize: 12)),

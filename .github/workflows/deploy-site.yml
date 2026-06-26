@@ -29,8 +29,8 @@ jobs:
           [[ -z "$IS_TAKIP_SUPABASE_ANON_KEY" ]] && missing+=("SUPABASE_ANON_KEY")
           [[ -z "$TEKLIF_SUPABASE_URL" ]] && missing+=("TEKLIF_SUPABASE_URL")
           [[ -z "$TEKLIF_SUPABASE_ANON_KEY" ]] && missing+=("TEKLIF_SUPABASE_ANON_KEY")
-          [[ -z "${{ secrets.PLESK_SERVER }}" ]] && missing+=("PLESK_SERVER")
-          [[ -z "${{ secrets.PLESK_USERNAME }}" ]] && missing+=("PLESK_USERNAME")
+          [[ -z "${{ secrets.PLESK_HOST }}" ]] && missing+=("PLESK_HOST")
+          [[ -z "${{ secrets.PLESK_USER }}" ]] && missing+=("PLESK_USER")
           [[ -z "${{ secrets.PLESK_PASSWORD }}" ]] && missing+=("PLESK_PASSWORD")
           if (( ${#missing[@]} > 0 )); then
             printf 'Missing GitHub secrets:\n- %s\n' "${missing[@]}"
@@ -133,8 +133,8 @@ jobs:
       - name: Deploy to Plesk over FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
-          server: ${{ secrets.PLESK_SERVER }}
-          username: ${{ secrets.PLESK_USERNAME }}
+          server: ${{ secrets.PLESK_HOST }}
+          username: ${{ secrets.PLESK_USER }}
           password: ${{ secrets.PLESK_PASSWORD }}
           port: ${{ secrets.PLESK_PORT || 21 }}
           local-dir: site/

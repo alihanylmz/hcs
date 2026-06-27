@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:intl/intl.dart';
 
@@ -27,6 +28,7 @@ import '../services/pdf_export_service.dart';
 import '../services/permission_service.dart';
 import '../services/user_service.dart';
 import '../services/team_service.dart';
+import '../services/service_form_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sidebar/app_layout.dart';
 import '../widgets/ui/ui.dart';
@@ -592,6 +594,71 @@ class _TicketListPageState extends State<TicketListPage> {
       ),
     );
     await _refresh();
+  }
+
+  void _showSendFormDialog(Map<String, dynamic> ticket) async {
+    try {
+      final templates = await ServiceFormService().getActiveTemplates();
+      if (!mounted) return;
+      if (templates.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Aktif form şablonu bulunamadı. Lütfen yönetici panelinden şablon ekleyin.')));
+        return;
+      }
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(
+                title: Text('Gönderilecek Formu Seçin',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+              const Divider(height: 1),
+              ...templates.map((tpl) => ListTile(
+                    leading: const Icon(Icons.assignment_outlined),
+                    title: Text(tpl.name),
+                    subtitle: Text(tpl.description ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
+                    trailing: const Icon(Icons.send, size: 16),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      _createAndSendForm(ticket, tpl.id);
+                    },
+                  )),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hata: $e')));
+    }
+  }
+
+  void _createAndSendForm(Map<String, dynamic> ticket, String templateId) async {
+    try {
+      final phone = ticket['customer_phone']?.toString().trim() ?? '';
+      if (phone.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Hata: Müşteri telefon numarası eksik! (Müşteri bilgileri kısmını kontrol edin)')));
+        return;
+      }
+      final formId = await ServiceFormService().createForm(ticket['id'], templateId);
+      final url = 'https://uzalteknikservis.com/#/service-form?id=$formId';
+      final message = 'Merhaba,\nServis talebiniz için lütfen aşağıdaki servis öncesi hazırlık formunu onaylayınız:\n$url';
+      
+      final whatsappUrl = Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(message)}');
+      if (await canLaunchUrl(whatsappUrl)) {
+        await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('WhatsApp açılamadı.')));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Form oluşturulamadı: $e')));
+    }
   }
 
   Future<void> _openPrimaryDetail(Map<String, dynamic> ticket) async {
@@ -1614,6 +1681,12 @@ class _TicketListPageState extends State<TicketListPage> {
             label: 'Atolyeye Gonder',
             icon: Icons.precision_manufacturing_outlined,
             onTap: () => _sendToWorkshop(ticket),
+          ),
+        if (isWide)
+          _TicketActionButton(
+            label: 'Form Gönder',
+            icon: Icons.assignment_turned_in_outlined,
+            onTap: () => _showSendFormDialog(ticket),
           ),
         if (_canEditTickets)
           _TicketActionButton(

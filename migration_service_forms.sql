@@ -46,12 +46,14 @@ ALTER TABLE public.service_form_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ticket_service_forms ENABLE ROW LEVEL SECURITY;
 
 -- Şablonlar: Oturum açmış kullanıcılar okuyabilir
+DROP POLICY IF EXISTS "templates_select_authenticated" ON public.service_form_templates;
 CREATE POLICY "templates_select_authenticated"
   ON public.service_form_templates FOR SELECT
   TO authenticated
   USING (true);
 
 -- Şablonlar: Sadece admin/manager oluşturabilir, güncelleyebilir, silebilir
+DROP POLICY IF EXISTS "templates_insert_admin" ON public.service_form_templates;
 CREATE POLICY "templates_insert_admin"
   ON public.service_form_templates FOR INSERT
   TO authenticated
@@ -63,6 +65,7 @@ CREATE POLICY "templates_insert_admin"
     )
   );
 
+DROP POLICY IF EXISTS "templates_update_admin" ON public.service_form_templates;
 CREATE POLICY "templates_update_admin"
   ON public.service_form_templates FOR UPDATE
   TO authenticated
@@ -74,6 +77,7 @@ CREATE POLICY "templates_update_admin"
     )
   );
 
+DROP POLICY IF EXISTS "templates_delete_admin" ON public.service_form_templates;
 CREATE POLICY "templates_delete_admin"
   ON public.service_form_templates FOR DELETE
   TO authenticated
@@ -86,6 +90,7 @@ CREATE POLICY "templates_delete_admin"
   );
 
 -- Ticket formları: Oturum açmış kullanıcılar okuyabilir
+DROP POLICY IF EXISTS "ticket_forms_select_authenticated" ON public.ticket_service_forms;
 CREATE POLICY "ticket_forms_select_authenticated"
   ON public.ticket_service_forms FOR SELECT
   TO authenticated
@@ -93,11 +98,13 @@ CREATE POLICY "ticket_forms_select_authenticated"
 
 -- Ticket formları: ANONİM kullanıcılar sadece pending formu güncelleyebilir (müşteri imzası)
 -- Bu kritik: Müşteri link üzerinden geldiğinde anonymous kullanıcı olarak işlem yapar
+DROP POLICY IF EXISTS "ticket_forms_select_anon" ON public.ticket_service_forms;
 CREATE POLICY "ticket_forms_select_anon"
   ON public.ticket_service_forms FOR SELECT
   TO anon
   USING (status = 'pending');  -- Sadece bekleyen formlar anonim erişilebilir
 
+DROP POLICY IF EXISTS "ticket_forms_update_anon" ON public.ticket_service_forms;
 CREATE POLICY "ticket_forms_update_anon"
   ON public.ticket_service_forms FOR UPDATE
   TO anon
@@ -105,12 +112,14 @@ CREATE POLICY "ticket_forms_update_anon"
   WITH CHECK (status = 'signed'); -- Sadece 'signed' yapabilir (iptal edemez)
 
 -- Ticket formları: Authenticated kullanıcılar oluşturabilir
+DROP POLICY IF EXISTS "ticket_forms_insert_authenticated" ON public.ticket_service_forms;
 CREATE POLICY "ticket_forms_insert_authenticated"
   ON public.ticket_service_forms FOR INSERT
   TO authenticated
   WITH CHECK (true);
 
 -- Ticket formları: Admin/Manager iptal edebilir
+DROP POLICY IF EXISTS "ticket_forms_cancel_admin" ON public.ticket_service_forms;
 CREATE POLICY "ticket_forms_cancel_admin"
   ON public.ticket_service_forms FOR UPDATE
   TO authenticated
@@ -125,18 +134,21 @@ VALUES ('service-signatures', 'service-signatures', TRUE)
 ON CONFLICT (id) DO NOTHING;
 
 -- Storage: Anonim kullanıcılar imza yükleyebilir
+DROP POLICY IF EXISTS "signatures_upload_anon" ON storage.objects;
 CREATE POLICY "signatures_upload_anon"
   ON storage.objects FOR INSERT
   TO anon
   WITH CHECK (bucket_id = 'service-signatures');
 
 -- Storage: Herkes okuyabilir (link paylaşımı için)
+DROP POLICY IF EXISTS "signatures_read_public" ON storage.objects;
 CREATE POLICY "signatures_read_public"
   ON storage.objects FOR SELECT
   TO public
   USING (bucket_id = 'service-signatures');
 
 -- Storage: Authenticated kullanıcılar silebilir (yönetici)
+DROP POLICY IF EXISTS "signatures_delete_admin" ON storage.objects;
 CREATE POLICY "signatures_delete_admin"
   ON storage.objects FOR DELETE
   TO authenticated

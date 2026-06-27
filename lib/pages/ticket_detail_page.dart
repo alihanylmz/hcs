@@ -30,7 +30,9 @@ import 'pdf_viewer_page.dart';
 import 'profile_page.dart'; // <--- Eklendi
 import '../theme/app_colors.dart'; // <--- Renkler
 import '../utils/formatters.dart'; // <--- Formatlayıcılar
+import '../utils/service_form_links.dart';
 import '../widgets/add_note_dialog.dart';
+import '../widgets/service_form_share_dialog.dart';
 import '../widgets/ticket_backup_request_dialog.dart';
 
 class TicketDetailPage extends StatefulWidget {
@@ -448,33 +450,23 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       setState(() => _serviceForms.insert(0, newForm));
     }
 
-    // WhatsApp linkini oluştur ve aç
-    // Web URL'niz buraya gelecek. Örnek: https://app.sirketiniz.com/#/service-form?id=UUID
-    final supabaseUrl = newForm.id;
-    const baseUrl = 'https://uzalteknikservis.com/is-takip';
-    final formUrl = '$baseUrl/#/service-form?id=$supabaseUrl';
+    // Paylaşım penceresini aç
+    final formUrl = ServiceFormLinks.formUrl(newForm.id);
     final ticketNo = _ticket?['job_code'] ?? widget.ticketId;
     final customerName = _ticket?['customer_name'] ?? 'Müşteri';
-    final message = Uri.encodeComponent(
-      'Sayın $customerName,\n\n'
-      'İş No: $ticketNo - ${selected.name} formunu doldurup imzalamanız gerekmektedir.\n\n'
-      'Lütfen aşağıdaki bağlantıya tıklayınız:\n$formUrl\n\n'
-      'Saygılarımızla.',
+    final message = ServiceFormLinks.customerMessage(
+      customerName: customerName.toString(),
+      ticketNo: ticketNo.toString(),
+      templateName: selected.name,
+      formUrl: formUrl,
     );
-    final whatsAppUri = Uri.parse('https://wa.me/?text=$message');
 
-    try {
-      if (await canLaunchUrl(whatsAppUri)) {
-        await launchUrl(whatsAppUri, mode: LaunchMode.externalApplication);
-      } else {
-        throw 'WhatsApp açılamadı';
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('WhatsApp açılamadı: $e. Form ID: ${newForm.id}'), backgroundColor: Colors.orange),
-        );
-      }
+    if (mounted) {
+      await showServiceFormShareDialog(
+        context,
+        formUrl: formUrl,
+        whatsAppMessage: message,
+      );
     }
   }
 
@@ -747,43 +739,81 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                       // Butonlar
                       if (isPending) ...[  
                         const SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withOpacity(0.06)
+                                : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: borderColor),
+                          ),
+                          child: SelectableText(
+                            ServiceFormLinks.formUrl(form.id),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _secondaryTextColor(context),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
-                            // Linki Tekrar Gönder
                             OutlinedButton.icon(
                               onPressed: () async {
-                                const baseUrl = 'https://uzalteknikservis.com/is-takip'; // <-- WEB ADRESİ
-                                final formUrl =
-                                    '$baseUrl/#/service-form?id=${form.id}';
+                                final formUrl = ServiceFormLinks.formUrl(form.id);
                                 final ticketNo =
                                     _ticket?['job_code'] ?? widget.ticketId;
                                 final customerName =
                                     _ticket?['customer_name'] ?? 'Müşteri';
                                 final templateName =
                                     template?.name ?? 'Servis Formu';
-                                final message = Uri.encodeComponent(
-                                  'Sayın $customerName,\n\n'
-                                  'İş No: $ticketNo - $templateName formunu doldurup imzalamanız gerekmektedir.\n\n'
-                                  'Lütfen aşağıdaki bağlantıya tıklayınız:\n$formUrl\n\n'
-                                  'Saygılarımızla.',
+                                final message = ServiceFormLinks.customerMessage(
+                                  customerName: customerName.toString(),
+                                  ticketNo: ticketNo.toString(),
+                                  templateName: templateName,
+                                  formUrl: formUrl,
                                 );
-                                final uri = Uri.parse(
-                                    'https://wa.me/?text=$message');
-                                if (await canLaunchUrl(uri)) {
-                                  await launchUrl(uri,
-                                      mode:
-                                          LaunchMode.externalApplication);
-                                }
+                                await showServiceFormShareDialog(
+                                  context,
+                                  formUrl: formUrl,
+                                  whatsAppMessage: message,
+                                  title: 'Form Paylaş',
+                                );
                               },
-                              icon: const Icon(Icons.chat,
+                              icon: const Icon(Icons.ios_share,
                                   color: Colors.green, size: 16),
-                              label: const Text('Tekrar Gönder',
+                              label: const Text('Paylaş',
                                   style: TextStyle(fontSize: 12)),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: Colors.green,
                                 side: const BorderSide(
                                     color: Colors.green),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                final uri = Uri.parse(
+                                  ServiceFormLinks.formUrl(form.id),
+                                );
+                                if (await canLaunchUrl(uri)) {
+                                  await launchUrl(uri,
+                                      mode: LaunchMode.platformDefault);
+                                }
+                              },
+                              icon: const Icon(Icons.open_in_new_outlined,
+                                  color: AppColors.corporateBlue, size: 16),
+                              label: const Text('Formu Aç',
+                                  style: TextStyle(fontSize: 12)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.corporateBlue,
+                                side: const BorderSide(
+                                    color: AppColors.corporateBlue),
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 10, vertical: 6),
                               ),

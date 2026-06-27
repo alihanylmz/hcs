@@ -47,6 +47,96 @@ class _ServiceFormTemplatesPageState extends State<ServiceFormTemplatesPage> {
     if (result == true) _loadTemplates();
   }
 
+  void _previewTemplate(ServiceFormTemplate template) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.visibility_outlined,
+                color: AppColors.corporateBlue),
+            const SizedBox(width: 8),
+            Expanded(child: Text(template.name)),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if ((template.description ?? '').trim().isNotEmpty) ...[
+                  Text(
+                    template.description!,
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+                const Text(
+                  'Bilgilendirme Metni',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Text(template.contentText),
+                const SizedBox(height: 18),
+                const Text(
+                  'Onay Maddeleri',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                ...template.checkboxes.asMap().entries.map((entry) {
+                  final item = entry.value;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          item.required
+                              ? Icons.check_box_outline_blank
+                              : Icons.check_box_outline_blank_outlined,
+                          size: 18,
+                          color: item.required
+                              ? AppColors.corporateBlue
+                              : Colors.grey,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${entry.key + 1}. ${item.label}${item.required ? ' *' : ''}',
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Kapat'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _openEditor(template: template);
+            },
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            label: const Text('Düzenle'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.corporateBlue,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _deleteTemplate(ServiceFormTemplate template) async {
     // 1. Uyarı
     final confirm1 = await showDialog<bool>(
@@ -229,10 +319,19 @@ class _ServiceFormTemplatesPageState extends State<ServiceFormTemplatesPage> {
             ),
             trailing: PopupMenuButton<String>(
               onSelected: (v) {
+                if (v == 'preview') _previewTemplate(t);
                 if (v == 'edit') _openEditor(template: t);
                 if (v == 'delete') _deleteTemplate(t);
               },
               itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'preview',
+                  child: ListTile(
+                    leading: Icon(Icons.visibility_outlined),
+                    title: Text('Önizle'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
                 const PopupMenuItem(
                   value: 'edit',
                   child: ListTile(

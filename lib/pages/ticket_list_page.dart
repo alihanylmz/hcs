@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../models/fault_record.dart';
 import '../models/card.dart';
+import '../models/service_form.dart';
 import '../main.dart';
 import '../pages/fault_record_detail_page.dart';
 import '../services/general_report_service.dart';
@@ -30,7 +31,9 @@ import '../services/user_service.dart';
 import '../services/team_service.dart';
 import '../services/service_form_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/service_form_links.dart';
 import '../widgets/sidebar/app_layout.dart';
+import '../widgets/service_form_share_dialog.dart';
 import '../widgets/ui/ui.dart';
 import '../widgets/notifications_dropdown.dart';
 import 'pdf_viewer_page.dart';
@@ -625,7 +628,7 @@ class _TicketListPageState extends State<TicketListPage> {
                     trailing: const Icon(Icons.send, size: 16),
                     onTap: () async {
                       Navigator.pop(ctx);
-                      _createAndSendForm(ticket, tpl.id);
+                      _createAndSendForm(ticket, tpl);
                     },
                   )),
             ],
@@ -637,21 +640,29 @@ class _TicketListPageState extends State<TicketListPage> {
     }
   }
 
-  void _createAndSendForm(Map<String, dynamic> ticket, String templateId) async {
+  void _createAndSendForm(Map<String, dynamic> ticket, ServiceFormTemplate template) async {
     try {
       final customerName = ticket['customer_name']?.toString().trim();
       final createdForm = await ServiceFormService().createForm(
-          ticketId: ticket['id'].toString(), templateId: templateId, customerName: customerName);
-      final url = 'https://uzalteknikservis.com/is-takip/#/service-form?id=${createdForm.id}';
-      final message = 'Merhaba,\nServis talebiniz için lütfen aşağıdaki servis öncesi hazırlık formunu onaylayınız:\n$url';
-      
-      final whatsappUrl = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(message)}');
-      if (await canLaunchUrl(whatsappUrl)) {
-        await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('WhatsApp açılamadı.')));
-      }
+          ticketId: ticket['id'].toString(), templateId: template.id, customerName: customerName);
+      if (!mounted) return;
+
+      final url = ServiceFormLinks.formUrl(createdForm.id);
+      final ticketNo = ticket['job_code']?.toString() ?? ticket['id'].toString();
+      final message = ServiceFormLinks.customerMessage(
+        customerName: (customerName == null || customerName.isEmpty)
+            ? 'Müşteri'
+            : customerName,
+        ticketNo: ticketNo,
+        templateName: template.name,
+        formUrl: url,
+      );
+
+      await showServiceFormShareDialog(
+        context,
+        formUrl: url,
+        whatsAppMessage: message,
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Form oluşturulamadı: $e')));
     }

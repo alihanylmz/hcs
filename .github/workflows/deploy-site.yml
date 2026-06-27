@@ -147,4 +147,5 @@ jobs:
           port: ${{ secrets.PLESK_PORT || 21 }}
           local-dir: site/
           server-dir: ${{ secrets.PLESK_FTP_TARGET_DIR || '/httpdocs/' }}
+          state-name: .ftp-deploy-sync-state-full-refresh.json
           dangerous-clean-slate: false

@@ -98,11 +98,10 @@ class ServiceFormService {
 
   /// Bir ticket'a bağlı formları listele (şablon bilgisiyle birlikte)
   Future<List<TicketServiceForm>> getFormsForTicket(String ticketId) async {
-    final ticketIdInt = int.tryParse(ticketId) ?? 0;
     final data = await _supabase
         .from('ticket_service_forms')
         .select('*, service_form_templates(*)')
-        .eq('ticket_id', ticketIdInt)
+        .eq('ticket_id', ticketId)
         .order('created_at', ascending: false);
 
     return (data as List)

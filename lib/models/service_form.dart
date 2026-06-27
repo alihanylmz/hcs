@@ -78,7 +78,7 @@ class ServiceFormTemplate {
 /// Bir iş emrine bağlı gönderilen spesifik bir form (1 ticket → N form)
 class TicketServiceForm {
   final String id;
-  final int ticketId;
+  final String ticketId;
   final String templateId;
   final String status; // 'pending' | 'signed' | 'cancelled'
   final String? customerName;
@@ -131,7 +131,7 @@ class TicketServiceForm {
 
     return TicketServiceForm(
       id: json['id'] as String,
-      ticketId: (json['ticket_id'] as num).toInt(),
+      ticketId: json['ticket_id'] as String? ?? '',
       templateId: json['template_id'] as String,
       status: json['status'] as String? ?? 'pending',
       customerName: json['customer_name'] as String?,

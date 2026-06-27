@@ -103,6 +103,14 @@ jobs:
           cp -a uzalteklif/build/web/. site/teklif/
 
           cat > site/is-takip/.htaccess <<'EOF'
+          <IfModule mod_headers.c>
+            <FilesMatch "^(index\.html|flutter_bootstrap\.js|main\.dart\.js|flutter_service_worker\.js|version\.json)$">
+              Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+              Header set Pragma "no-cache"
+              Header set Expires "0"
+            </FilesMatch>
+          </IfModule>
+
           <IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteBase /is-takip/

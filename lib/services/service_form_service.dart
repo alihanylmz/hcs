@@ -115,13 +115,14 @@ class ServiceFormService {
   Future<TicketServiceForm> createForm({
     required String ticketId,
     required String templateId,
+    String? customerName,
   }) async {
-    final ticketIdInt = int.tryParse(ticketId) ?? 0;
     final data = await _supabase
         .from('ticket_service_forms')
         .insert({
-          'ticket_id': ticketIdInt,
+          'ticket_id': ticketId,
           'template_id': templateId,
+          'customer_name': customerName,
           'status': 'pending',
           'created_by': _supabase.auth.currentUser?.id,
         })

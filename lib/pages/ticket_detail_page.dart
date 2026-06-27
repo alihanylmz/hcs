@@ -428,9 +428,11 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     // Formu oluştur
     TicketServiceForm newForm;
     try {
+      final customerName = _ticket?['customer_name']?.toString().trim();
       newForm = await _serviceFormService.createForm(
         ticketId: widget.ticketId,
         templateId: selected.id,
+        customerName: customerName,
       );
     } catch (e) {
       if (mounted) {
@@ -449,8 +451,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     // WhatsApp linkini oluştur ve aç
     // Web URL'niz buraya gelecek. Örnek: https://app.sirketiniz.com/#/service-form?id=UUID
     final supabaseUrl = newForm.id;
-    // TODO: Gerçek web adresinizle değiştirin
-    const baseUrl = 'https://istakip.app'; // <-- BURAYA KENDİ WEB ADRESİNİZİ YAZIN
+    const baseUrl = 'https://uzalteknikservis.com';
     final formUrl = '$baseUrl/#/service-form?id=$supabaseUrl';
     final ticketNo = _ticket?['job_code'] ?? widget.ticketId;
     final customerName = _ticket?['customer_name'] ?? 'Müşteri';
@@ -752,7 +753,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                             // Linki Tekrar Gönder
                             OutlinedButton.icon(
                               onPressed: () async {
-                                const baseUrl = 'https://istakip.app'; // <-- WEB ADRESİ
+                                const baseUrl = 'https://uzalteknikservis.com'; // <-- WEB ADRESİ
                                 final formUrl =
                                     '$baseUrl/#/service-form?id=${form.id}';
                                 final ticketNo =

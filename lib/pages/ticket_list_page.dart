@@ -639,18 +639,13 @@ class _TicketListPageState extends State<TicketListPage> {
 
   void _createAndSendForm(Map<String, dynamic> ticket, String templateId) async {
     try {
-      final phone = ticket['customer_phone']?.toString().trim() ?? '';
-      if (phone.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Hata: Müşteri telefon numarası eksik! (Müşteri bilgileri kısmını kontrol edin)')));
-        return;
-      }
+      final customerName = ticket['customer_name']?.toString().trim();
       final formId = await ServiceFormService().createForm(
-          ticketId: ticket['id'].toString(), templateId: templateId);
+          ticketId: ticket['id'].toString(), templateId: templateId, customerName: customerName);
       final url = 'https://uzalteknikservis.com/#/service-form?id=$formId';
       final message = 'Merhaba,\nServis talebiniz için lütfen aşağıdaki servis öncesi hazırlık formunu onaylayınız:\n$url';
       
-      final whatsappUrl = Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(message)}');
+      final whatsappUrl = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(message)}');
       if (await canLaunchUrl(whatsappUrl)) {
         await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
       } else {

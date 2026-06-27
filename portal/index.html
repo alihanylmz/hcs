@@ -6,6 +6,13 @@
   <meta name="theme-color" content="#101820">
   <title>Uzal Teknik | Sistem Girişi</title>
   <link rel="icon" href="assets/icon.png">
+  <script>
+    (function () {
+      if (window.location.hash.indexOf('#/service-form') === 0) {
+        window.location.replace('/is-takip/' + window.location.hash);
+      }
+    })();
+  </script>
   <style>
     :root {
       --ink: #101820;

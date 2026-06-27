@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -95,6 +96,7 @@ class IsTakipApp extends StatefulWidget {
 class IsTakipAppState extends State<IsTakipApp> {
   ThemeMode _themeMode = ThemeMode.system;
   SharedPreferences? _prefs;
+  late final String? _initialPublicServiceFormId;
 
   Brightness get _systemBrightness =>
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
@@ -102,6 +104,7 @@ class IsTakipAppState extends State<IsTakipApp> {
   @override
   void initState() {
     super.initState();
+    _initialPublicServiceFormId = _publicServiceFormIdFromBrowserUrl();
     _loadTheme();
   }
 
@@ -166,22 +169,63 @@ class IsTakipAppState extends State<IsTakipApp> {
       ],
       supportedLocales: const [Locale('tr', 'TR')],
       locale: const Locale('tr', 'TR'),
-      home: const AuthGate(),
+      home: _initialPublicServiceFormId == null
+          ? const AuthGate()
+          : PublicServiceFormPage(formId: _initialPublicServiceFormId!),
       // Servis öncesi onay formları için anonim (giriş gerektirmeyen) rotalar
       onGenerateRoute: (settings) {
-        final uri = Uri.tryParse(settings.name ?? '');
-        if (uri != null && uri.path == '/service-form') {
-          final formId = uri.queryParameters['id'];
-          if (formId != null && formId.isNotEmpty) {
-            return MaterialPageRoute(
-              builder: (_) => PublicServiceFormPage(formId: formId),
-              settings: settings,
-            );
-          }
+        final formId = _publicServiceFormIdFromRoute(settings.name);
+        if (formId != null) {
+          return MaterialPageRoute(
+            builder: (_) => PublicServiceFormPage(formId: formId),
+            settings: settings,
+          );
         }
         return null;
       },
     );
+  }
+
+  String? _publicServiceFormIdFromBrowserUrl() {
+    if (!kIsWeb) {
+      return null;
+    }
+
+    final current = Uri.base;
+    final fragmentId = _publicServiceFormIdFromRoute(current.fragment);
+    if (fragmentId != null) {
+      return fragmentId;
+    }
+
+    if (current.path.endsWith('/service-form')) {
+      final formId = current.queryParameters['id'];
+      if (formId != null && formId.isNotEmpty) {
+        return formId;
+      }
+    }
+
+    return null;
+  }
+
+  String? _publicServiceFormIdFromRoute(String? routeName) {
+    if (routeName == null || routeName.isEmpty) {
+      return null;
+    }
+
+    final normalized = routeName.startsWith('#')
+        ? routeName.substring(1)
+        : routeName;
+    final uri = Uri.tryParse(normalized);
+    if (uri == null || uri.path != '/service-form') {
+      return null;
+    }
+
+    final formId = uri.queryParameters['id'];
+    if (formId == null || formId.isEmpty) {
+      return null;
+    }
+
+    return formId;
   }
 }
 

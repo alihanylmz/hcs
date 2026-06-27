@@ -52,6 +52,13 @@ CREATE POLICY "templates_select_authenticated"
   TO authenticated
   USING (true);
 
+-- Müşteri linki anonim açılır; pending formun şablon metni de okunabilmeli.
+DROP POLICY IF EXISTS "templates_select_anon_active" ON public.service_form_templates;
+CREATE POLICY "templates_select_anon_active"
+  ON public.service_form_templates FOR SELECT
+  TO anon
+  USING (is_active = true);
+
 -- Şablonlar: Sadece admin/manager oluşturabilir, güncelleyebilir, silebilir
 DROP POLICY IF EXISTS "templates_insert_admin" ON public.service_form_templates;
 CREATE POLICY "templates_insert_admin"

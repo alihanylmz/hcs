@@ -640,9 +640,9 @@ class _TicketListPageState extends State<TicketListPage> {
   void _createAndSendForm(Map<String, dynamic> ticket, String templateId) async {
     try {
       final customerName = ticket['customer_name']?.toString().trim();
-      final formId = await ServiceFormService().createForm(
+      final createdForm = await ServiceFormService().createForm(
           ticketId: ticket['id'].toString(), templateId: templateId, customerName: customerName);
-      final url = 'https://uzalteknikservis.com/#/service-form?id=$formId';
+      final url = 'https://uzalteknikservis.com/#/service-form?id=${createdForm.id}';
       final message = 'Merhaba,\nServis talebiniz için lütfen aşağıdaki servis öncesi hazırlık formunu onaylayınız:\n$url';
       
       final whatsappUrl = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(message)}');

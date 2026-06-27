@@ -253,14 +253,17 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.green.shade200),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
                     const Icon(Icons.access_time,
                         color: Colors.green, size: 16),
-                    const SizedBox(width: 8),
                     Text(
                       'İmzalanma: $formatted',
+                      textAlign: TextAlign.center,
                       style: const TextStyle(
                           color: Colors.green, fontWeight: FontWeight.w600),
                     ),
@@ -657,8 +660,11 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
           elevation: canSubmit ? 4 : 0,
         ),
         child: _submitting
-            ? const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+            ? const Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 6,
                 children: [
                   SizedBox(
                     width: 20,
@@ -666,17 +672,22 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
                     child: CircularProgressIndicator(
                         color: Colors.white, strokeWidth: 2),
                   ),
-                  SizedBox(width: 12),
-                  Text('Gönderiliyor...', style: TextStyle(fontSize: 16)),
+                  Text(
+                    'Gönderiliyor...',
+                    style: TextStyle(fontSize: 16),
+                  ),
                 ],
               )
-            : const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+            : const Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 10,
+                runSpacing: 6,
                 children: [
                   Icon(Icons.check_circle_outline, size: 22),
-                  SizedBox(width: 10),
                   Text(
                     'Kabul Ediyorum ve Servis Çağırıyorum',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,

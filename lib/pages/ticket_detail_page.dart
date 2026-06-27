@@ -451,7 +451,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     // WhatsApp linkini oluştur ve aç
     // Web URL'niz buraya gelecek. Örnek: https://app.sirketiniz.com/#/service-form?id=UUID
     final supabaseUrl = newForm.id;
-    const baseUrl = 'https://uzalteknikservis.com';
+    const baseUrl = 'https://uzalteknikservis.com/is-takip';
     final formUrl = '$baseUrl/#/service-form?id=$supabaseUrl';
     final ticketNo = _ticket?['job_code'] ?? widget.ticketId;
     final customerName = _ticket?['customer_name'] ?? 'Müşteri';
@@ -753,7 +753,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                             // Linki Tekrar Gönder
                             OutlinedButton.icon(
                               onPressed: () async {
-                                const baseUrl = 'https://uzalteknikservis.com'; // <-- WEB ADRESİ
+                                const baseUrl = 'https://uzalteknikservis.com/is-takip'; // <-- WEB ADRESİ
                                 final formUrl =
                                     '$baseUrl/#/service-form?id=${form.id}';
                                 final ticketNo =

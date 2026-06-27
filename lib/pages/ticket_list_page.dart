@@ -642,7 +642,7 @@ class _TicketListPageState extends State<TicketListPage> {
       final customerName = ticket['customer_name']?.toString().trim();
       final createdForm = await ServiceFormService().createForm(
           ticketId: ticket['id'].toString(), templateId: templateId, customerName: customerName);
-      final url = 'https://uzalteknikservis.com/#/service-form?id=${createdForm.id}';
+      final url = 'https://uzalteknikservis.com/is-takip/#/service-form?id=${createdForm.id}';
       final message = 'Merhaba,\nServis talebiniz için lütfen aşağıdaki servis öncesi hazırlık formunu onaylayınız:\n$url';
       
       final whatsappUrl = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(message)}');

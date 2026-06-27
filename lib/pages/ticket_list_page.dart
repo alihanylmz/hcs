@@ -645,7 +645,8 @@ class _TicketListPageState extends State<TicketListPage> {
             const SnackBar(content: Text('Hata: Müşteri telefon numarası eksik! (Müşteri bilgileri kısmını kontrol edin)')));
         return;
       }
-      final formId = await ServiceFormService().createForm(ticket['id'], templateId);
+      final formId = await ServiceFormService().createForm(
+          ticketId: ticket['id'].toString(), templateId: templateId);
       final url = 'https://uzalteknikservis.com/#/service-form?id=$formId';
       final message = 'Merhaba,\nServis talebiniz için lütfen aşağıdaki servis öncesi hazırlık formunu onaylayınız:\n$url';
       

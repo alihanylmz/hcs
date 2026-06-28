@@ -141,16 +141,20 @@ jobs:
           path: site
 
       - name: Repair Is Takip main bundle over FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
-        with:
-          server: ${{ secrets.PLESK_HOST }}
-          username: ${{ secrets.PLESK_USER }}
-          password: ${{ secrets.PLESK_PASSWORD }}
-          port: ${{ secrets.PLESK_PORT || 21 }}
-          local-dir: repair/is-takip/
-          server-dir: ${{ secrets.PLESK_FTP_TARGET_DIR || '/httpdocs/' }}is-takip/
-          state-name: .ftp-deploy-sync-state-main-repair.json
-          dangerous-clean-slate: false
+        shell: bash
+        env:
+          PLESK_HOST: ${{ secrets.PLESK_HOST }}
+          PLESK_USER: ${{ secrets.PLESK_USER }}
+          PLESK_PASSWORD: ${{ secrets.PLESK_PASSWORD }}
+          PLESK_PORT: ${{ secrets.PLESK_PORT || 21 }}
+          PLESK_TARGET_DIR: ${{ secrets.PLESK_FTP_TARGET_DIR || '/httpdocs/' }}
+        run: |
+          target_dir="${PLESK_TARGET_DIR%/}/is-takip"
+          curl --fail --show-error --retry 5 --retry-all-errors --connect-timeout 30 \
+            --ftp-create-dirs \
+            --user "$PLESK_USER:$PLESK_PASSWORD" \
+            --upload-file repair/is-takip/main.dart.js \
+            "ftp://$PLESK_HOST:$PLESK_PORT$target_dir/main.dart.js"
 
       - name: Deploy to Plesk over FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6

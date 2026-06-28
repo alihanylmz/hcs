@@ -150,13 +150,23 @@ jobs:
           PLESK_TARGET_DIR: ${{ secrets.PLESK_FTP_TARGET_DIR || '/httpdocs/' }}
         run: |
           target_dir="${PLESK_TARGET_DIR%/}/is-takip"
-          curl --fail --show-error --retry 5 --retry-all-errors --connect-timeout 30 \
-            --ftp-create-dirs \
-            --user "$PLESK_USER:$PLESK_PASSWORD" \
-            --upload-file repair/is-takip/main.dart.js \
-            "ftp://$PLESK_HOST:$PLESK_PORT$target_dir/main.dart.js"
+          target_url="ftp://$PLESK_HOST:$PLESK_PORT$target_dir/main.dart.js"
+          for attempt in {1..12}; do
+            echo "Repair upload attempt $attempt"
+            if curl --fail --show-error --connect-timeout 30 \
+              --ftp-method nocwd \
+              --continue-at - \
+              --user "$PLESK_USER:$PLESK_PASSWORD" \
+              --upload-file repair/is-takip/main.dart.js \
+              "$target_url"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
 
       - name: Deploy to Plesk over FTP
+        if: ${{ false }}
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
           server: ${{ secrets.PLESK_HOST }}

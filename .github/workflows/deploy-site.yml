@@ -97,10 +97,12 @@ jobs:
         shell: bash
         run: |
           rm -rf site
-          mkdir -p site/is-takip site/teklif
+          rm -rf repair
+          mkdir -p site/is-takip site/teklif repair/is-takip
           cp -a hcs/portal/. site/
           cp -a hcs/build/web/. site/is-takip/
           cp -a uzalteklif/build/web/. site/teklif/
+          cp hcs/build/web/main.dart.js repair/is-takip/main.dart.js
 
           cat > site/is-takip/.htaccess <<'EOF'
           <IfModule mod_headers.c>
@@ -138,6 +140,18 @@ jobs:
           name: plesk-site
           path: site
 
+      - name: Repair Is Takip main bundle over FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+        with:
+          server: ${{ secrets.PLESK_HOST }}
+          username: ${{ secrets.PLESK_USER }}
+          password: ${{ secrets.PLESK_PASSWORD }}
+          port: ${{ secrets.PLESK_PORT || 21 }}
+          local-dir: repair/
+          server-dir: ${{ secrets.PLESK_FTP_TARGET_DIR || '/httpdocs/' }}
+          state-name: .ftp-deploy-sync-state-main-repair.json
+          dangerous-clean-slate: false
+
       - name: Deploy to Plesk over FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
@@ -147,5 +161,4 @@ jobs:
           port: ${{ secrets.PLESK_PORT || 21 }}
           local-dir: site/
           server-dir: ${{ secrets.PLESK_FTP_TARGET_DIR || '/httpdocs/' }}
-          state-name: .ftp-deploy-sync-state-full-refresh.json
           dangerous-clean-slate: false

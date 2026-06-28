@@ -147,8 +147,8 @@ jobs:
           username: ${{ secrets.PLESK_USER }}
           password: ${{ secrets.PLESK_PASSWORD }}
           port: ${{ secrets.PLESK_PORT || 21 }}
-          local-dir: repair/
-          server-dir: ${{ secrets.PLESK_FTP_TARGET_DIR || '/httpdocs/' }}
+          local-dir: repair/is-takip/
+          server-dir: ${{ secrets.PLESK_FTP_TARGET_DIR || '/httpdocs/' }}is-takip/
           state-name: .ftp-deploy-sync-state-main-repair.json
           dangerous-clean-slate: false
 

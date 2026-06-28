@@ -151,11 +151,16 @@ jobs:
         run: |
           target_dir="${PLESK_TARGET_DIR%/}/is-takip"
           target_url="ftp://$PLESK_HOST:$PLESK_PORT$target_dir/main.dart.js"
-          for attempt in {1..12}; do
+          delete_path="$target_dir/main.dart.js"
+          curl --show-error --connect-timeout 30 \
+            --ftp-method nocwd \
+            --user "$PLESK_USER:$PLESK_PASSWORD" \
+            --quote "DELE $delete_path" \
+            "ftp://$PLESK_HOST:$PLESK_PORT/" || true
+          for attempt in {1..5}; do
             echo "Repair upload attempt $attempt"
             if curl --fail --show-error --connect-timeout 30 \
               --ftp-method nocwd \
-              --continue-at - \
               --user "$PLESK_USER:$PLESK_PASSWORD" \
               --upload-file repair/is-takip/main.dart.js \
               "$target_url"; then

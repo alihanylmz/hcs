@@ -102,11 +102,24 @@ jobs:
           cp -a hcs/portal/. site/
           cp -a hcs/build/web/. site/is-takip/
           cp -a uzalteklif/build/web/. site/teklif/
-          cp hcs/build/web/main.dart.js repair/is-takip/main.dart.js
+          gzip -9 -c hcs/build/web/main.dart.js > repair/is-takip/main.dart.js.gz
 
           cat > site/is-takip/.htaccess <<'EOF'
+          <IfModule mod_mime.c>
+            AddEncoding gzip .gz
+            AddType application/javascript .js.gz
+          </IfModule>
+
           <IfModule mod_headers.c>
             <FilesMatch "^(index\.html|flutter_bootstrap\.js|main\.dart\.js|flutter_service_worker\.js|version\.json)$">
+              Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+              Header set Pragma "no-cache"
+              Header set Expires "0"
+            </FilesMatch>
+            <FilesMatch "^main\.dart\.js\.gz$">
+              Header set Content-Encoding gzip
+              Header set Content-Type "application/javascript; charset=UTF-8"
+              Header set Vary "Accept-Encoding"
               Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
               Header set Pragma "no-cache"
               Header set Expires "0"
@@ -116,12 +129,16 @@ jobs:
           <IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteBase /is-takip/
+            RewriteCond %{HTTP:Accept-Encoding} gzip
+            RewriteCond %{REQUEST_FILENAME}.gz -f
+            RewriteRule ^main\.dart\.js$ main.dart.js.gz [L]
             RewriteRule ^index\.html$ - [L]
             RewriteCond %{REQUEST_FILENAME} !-f
             RewriteCond %{REQUEST_FILENAME} !-d
             RewriteRule . /is-takip/index.html [L]
           </IfModule>
           EOF
+          cp site/is-takip/.htaccess repair/is-takip/.htaccess
 
           cat > site/teklif/.htaccess <<'EOF'
           <IfModule mod_rewrite.c>
@@ -150,25 +167,25 @@ jobs:
           PLESK_TARGET_DIR: ${{ secrets.PLESK_FTP_TARGET_DIR || '/httpdocs/' }}
         run: |
           target_dir="${PLESK_TARGET_DIR%/}/is-takip"
-          target_url="ftp://$PLESK_HOST:$PLESK_PORT$target_dir/main.dart.js"
-          delete_path="$target_dir/main.dart.js"
-          curl --show-error --connect-timeout 30 \
-            --ftp-method nocwd \
-            --user "$PLESK_USER:$PLESK_PASSWORD" \
-            --quote "DELE $delete_path" \
-            "ftp://$PLESK_HOST:$PLESK_PORT/" || true
-          for attempt in {1..5}; do
-            echo "Repair upload attempt $attempt"
-            if curl --fail --show-error --connect-timeout 30 \
+          upload_file() {
+            local local_file="$1"
+            local remote_name="$2"
+            local target_url="ftp://$PLESK_HOST:$PLESK_PORT$target_dir/$remote_name"
+            for attempt in {1..5}; do
+              echo "Repair upload $remote_name attempt $attempt"
+              if curl --fail --show-error --connect-timeout 30 \
               --ftp-method nocwd \
               --user "$PLESK_USER:$PLESK_PASSWORD" \
-              --upload-file repair/is-takip/main.dart.js \
+              --upload-file "$local_file" \
               "$target_url"; then
-              exit 0
-            fi
-            sleep 5
-          done
-          exit 1
+                return 0
+              fi
+              sleep 5
+            done
+            return 1
+          }
+          upload_file repair/is-takip/.htaccess .htaccess
+          upload_file repair/is-takip/main.dart.js.gz main.dart.js.gz
 
       - name: Deploy to Plesk over FTP
         if: ${{ false }}

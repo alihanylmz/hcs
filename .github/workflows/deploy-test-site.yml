@@ -1,0 +1,109 @@
+name: Deploy Test Site to Plesk
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - test
+      - staging
+      - develop
+
+concurrency:
+  group: deploy-test-site
+  cancel-in-progress: true
+
+jobs:
+  deploy-test:
+    runs-on: ubuntu-latest
+    env:
+      IS_TAKIP_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL || secrets.SUPABASE_URL }}
+      IS_TAKIP_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+      PLESK_TARGET_DIR: ${{ secrets.PLESK_TEST_FTP_TARGET_DIR || '/test.uzalteknikservis.com/' }}
+    steps:
+      - name: Validate secrets
+        shell: bash
+        run: |
+          missing=()
+          [[ -z "$IS_TAKIP_SUPABASE_URL" ]] && missing+=("SUPABASE_URL or STAGING_SUPABASE_URL")
+          [[ -z "$IS_TAKIP_SUPABASE_ANON_KEY" ]] && missing+=("SUPABASE_ANON_KEY or STAGING_SUPABASE_ANON_KEY")
+          [[ -z "${{ secrets.PLESK_HOST }}" ]] && missing+=("PLESK_HOST")
+          [[ -z "${{ secrets.PLESK_USER }}" ]] && missing+=("PLESK_USER")
+          [[ -z "${{ secrets.PLESK_PASSWORD }}" ]] && missing+=("PLESK_PASSWORD")
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing GitHub secrets:\n- %s\n' "${missing[@]}"
+            exit 1
+          fi
+          echo "Deploy target: $PLESK_TARGET_DIR"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build Is Takip web
+        run: |
+          flutter pub get
+          flutter build web --release --base-href /is-takip/ \
+            --dart-define=SUPABASE_URL="$IS_TAKIP_SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$IS_TAKIP_SUPABASE_ANON_KEY"
+
+      - name: Prepare test payload
+        shell: bash
+        run: |
+          rm -rf site
+          mkdir -p site/is-takip
+          cp -a portal/. site/
+          cp -a build/web/. site/is-takip/
+          gzip -9 -c build/web/main.dart.js > site/is-takip/main.dart.js.gz
+          rm -f site/is-takip/main.dart.js
+
+          cat > site/is-takip/.htaccess <<'EOF'
+          <IfModule mod_mime.c>
+            AddEncoding gzip .gz
+            AddType application/javascript .js.gz
+          </IfModule>
+
+          <IfModule mod_headers.c>
+            <FilesMatch "^(index\.html|flutter_bootstrap\.js|main\.dart\.js|flutter_service_worker\.js|version\.json)$">
+              Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+              Header set Pragma "no-cache"
+              Header set Expires "0"
+            </FilesMatch>
+            <FilesMatch "^main\.dart\.js\.gz$">
+              Header set Content-Encoding gzip
+              Header set Content-Type "application/javascript; charset=UTF-8"
+              Header set Vary "Accept-Encoding"
+              Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+              Header set Pragma "no-cache"
+              Header set Expires "0"
+            </FilesMatch>
+          </IfModule>
+
+          <IfModule mod_rewrite.c>
+            RewriteEngine On
+            RewriteBase /is-takip/
+            RewriteCond %{HTTP:Accept-Encoding} gzip
+            RewriteCond %{REQUEST_FILENAME}.gz -f
+            RewriteRule ^main\.dart\.js$ main.dart.js.gz [L]
+            RewriteRule ^index\.html$ - [L]
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule . /is-takip/index.html [L]
+          </IfModule>
+          EOF
+
+      - name: Deploy test site to Plesk
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+        with:
+          server: ${{ secrets.PLESK_HOST }}
+          username: ${{ secrets.PLESK_USER }}
+          password: ${{ secrets.PLESK_PASSWORD }}
+          port: ${{ secrets.PLESK_PORT || 21 }}
+          local-dir: site/
+          server-dir: ${{ env.PLESK_TARGET_DIR }}
+          state-name: .ftp-deploy-sync-state-test.json
+          dangerous-clean-slate: false

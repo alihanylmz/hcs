@@ -21,7 +21,7 @@ jobs:
       TEKLIF_SUPABASE_URL: ${{ secrets.STAGING_TEKLIF_SUPABASE_URL || secrets.TEKLIF_SUPABASE_URL }}
       TEKLIF_SUPABASE_ANON_KEY: ${{ secrets.STAGING_TEKLIF_SUPABASE_ANON_KEY || secrets.TEKLIF_SUPABASE_ANON_KEY }}
       PUBLIC_QUOTE_BASE_URL: ${{ vars.STAGING_PUBLIC_QUOTE_BASE_URL || vars.PUBLIC_QUOTE_BASE_URL || 'https://www.uzalteknikservis.info/t' }}
-      PLESK_TARGET_DIR: ${{ secrets.PLESK_TEST_FTP_TARGET_DIR || '/anadizin/www.uzalteknikservis.info/' }}
+      PLESK_TARGET_DIR: ${{ secrets.PLESK_TEST_FTP_TARGET_DIR || 'anadizin/www.uzalteknikservis.info/' }}
     steps:
       - name: Validate secrets
         shell: bash

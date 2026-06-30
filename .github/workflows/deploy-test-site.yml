@@ -142,6 +142,13 @@ jobs:
           </IfModule>
           EOF
 
+      - name: Normalize FTP target
+        shell: bash
+        run: |
+          target="${PLESK_TARGET_DIR%/}/"
+          echo "DEPLOY_TARGET_DIR=$target" >> "$GITHUB_ENV"
+          echo "Normalized deploy target: $target"
+
       - name: Deploy test site to Plesk
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
@@ -150,6 +157,6 @@ jobs:
           password: ${{ secrets.PLESK_PASSWORD }}
           port: ${{ secrets.PLESK_PORT || 21 }}
           local-dir: site/
-          server-dir: ${{ env.PLESK_TARGET_DIR }}
+          server-dir: ${{ env.DEPLOY_TARGET_DIR }}
           state-name: .ftp-deploy-sync-state-test.json
           dangerous-clean-slate: false

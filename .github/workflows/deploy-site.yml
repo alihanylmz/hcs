@@ -188,7 +188,6 @@ jobs:
           upload_file repair/is-takip/main.dart.js.gz main.dart.js.gz
 
       - name: Deploy to Plesk over FTP
-        if: ${{ false }}
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
           server: ${{ secrets.PLESK_HOST }}

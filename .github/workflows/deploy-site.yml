@@ -149,6 +149,14 @@ jobs:
             RewriteCond %{REQUEST_FILENAME} !-d
             RewriteRule . /teklif/index.html [L]
           </IfModule>
+          <IfModule mod_headers.c>
+            <FilesMatch "^(index\.html|flutter_bootstrap\.js|flutter_service_worker\.js)$">
+              Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+            </FilesMatch>
+            <FilesMatch "\.(js|json|wasm)$">
+              Header set Cache-Control "no-cache, must-revalidate"
+            </FilesMatch>
+          </IfModule>
           EOF
 
       - name: Upload deploy artifact

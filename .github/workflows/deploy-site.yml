@@ -150,6 +150,7 @@ jobs:
             RewriteRule . /teklif/index.html [L]
           </IfModule>
           <IfModule mod_headers.c>
+            Header set X-Uzal-Teklif-Deploy "quote-edit-normalize-20260710"
             <FilesMatch "^(index\.html|flutter_bootstrap\.js|flutter_service_worker\.js)$">
               Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
             </FilesMatch>

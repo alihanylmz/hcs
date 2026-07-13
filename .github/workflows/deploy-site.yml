@@ -60,7 +60,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: alihanylmz/uzalteklif
-          ref: 0aca4023e7e53137c41bc7dfb03029f0407db42b
+          ref: 5a437ca05868ea513fb59f5f6b6cf500631a6ab3
           path: uzalteklif
           token: ${{ secrets.DEPLOY_REPO_TOKEN || github.token }}
 

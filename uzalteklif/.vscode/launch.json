@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Uzal Teklif (Windows)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "windows"
+    },
+    {
+      "name": "Uzal Teklif (Windows + Supabase)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "windows",
+      "toolArgs": [
+        "--dart-define-from-file",
+        "config/supabase.local.json"
+      ]
+    }
+  ]
+}

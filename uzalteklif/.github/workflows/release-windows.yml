@@ -1,0 +1,65 @@
+# Windows surum paketini olusturup GitHub Release'e yukler.
+#
+# Kullanim:
+#   git tag v1.0.1
+#   git push origin v1.0.1
+#
+# Surum numarasi pubspec.yaml ile uyumlu olsun (ornek: 1.0.1+2 -> tag v1.0.1).
+# Release varligi: uzalteklif-windows-x64.zip (Release klasoru icerigi).
+
+name: Release Windows
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Flutter (beta — pubspec Dart SDK ile uyum)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: beta
+          cache: true
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Build Windows release
+        shell: pwsh
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PUBLIC_QUOTE_BASE_URL: ${{ vars.PUBLIC_QUOTE_BASE_URL || 'https://uzalteknik.com/t' }}
+          UPDATE_GITHUB_REPO: ${{ vars.UPDATE_GITHUB_REPO || github.repository }}
+        run: |
+          flutter build windows --release `
+            --dart-define=SUPABASE_URL="$env:SUPABASE_URL" `
+            --dart-define=SUPABASE_ANON_KEY="$env:SUPABASE_ANON_KEY" `
+            --dart-define=PUBLIC_QUOTE_BASE_URL="$env:PUBLIC_QUOTE_BASE_URL" `
+            --dart-define=UPDATE_GITHUB_REPO="$env:UPDATE_GITHUB_REPO"
+
+      - name: Zip runner Release
+        shell: pwsh
+        run: |
+          $src = Join-Path $env:GITHUB_WORKSPACE "build\windows\x64\runner\Release"
+          $zip = Join-Path $env:GITHUB_WORKSPACE "uzalteklif-windows-x64.zip"
+          if (-not (Test-Path $src)) { throw "Release klasoru yok: $src" }
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path (Join-Path $src '*') -DestinationPath $zip -CompressionLevel Optimal
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: uzalteklif-windows-x64.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

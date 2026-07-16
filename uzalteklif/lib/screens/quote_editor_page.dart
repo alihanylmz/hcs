@@ -106,7 +106,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   String _selectedDisplayUnit = 'EURTRY';
   String _productCategoryFilter = 'Tum Kategoriler';
   bool _isSubmitting = false;
-  bool _infoCollapsed = false;
+  bool _infoCollapsed = true;
   QuotePaymentMethod _paymentMethod = QuotePaymentMethod.cash;
   bool _hidePrices = false;
   String? _draftQuoteId;
@@ -1537,6 +1537,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     return formatter.format(total);
   }
 
+  String _formatTlForDisplayUnit(double amountTl) {
+    final rate = _rateLookup[_selectedDisplayUnit] ?? 1;
+    final converted = rate == 0 ? amountTl : amountTl / rate;
+    return _formatTotalForDisplay(converted, _selectedDisplayUnit);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 1180;
@@ -1554,12 +1560,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          flex: 7,
+                          flex: 8,
                           child: _buildFormPanel(expandList: true),
                         ),
-                        const SizedBox(width: 20),
+                        const SizedBox(width: 16),
                         Expanded(
-                          flex: 3,
+                          flex: 2,
                           child: _buildSummaryPanel(expandActions: true),
                         ),
                       ],
@@ -1633,7 +1639,6 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   }
 
   Widget _buildFormPanel({required bool expandList}) {
-    final filteredProducts = _filteredProductsForAdd;
     final lineList = _buildSectionedItemsList(expandList: expandList);
 
     final panelColumn = Column(
@@ -1645,86 +1650,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
           const SizedBox(height: 24),
           _buildTopFormSections(),
         ],
-        const SizedBox(height: 28),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Urun Katalogu',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
-            ),
-            Text(
-              '${filteredProducts.length} urun',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF5B6F7F),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Aradigin urunu listeden sec, dogrudan kalemlere al ve miktar-fiyat-iskonto bilgisini altta yonet.',
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF5B6F7F)),
-        ),
-        const SizedBox(height: 12),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final searchField = TextField(
-              controller: _productSearchController,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Kod, urun adi, marka veya model ara',
-                prefixIcon: Icon(Icons.search_rounded),
-                isDense: true,
-              ),
-            );
-            final categoryField = DropdownButtonFormField<String>(
-              initialValue: _productCategoryFilter,
-              isDense: true,
-              decoration: const InputDecoration(labelText: 'Kategori'),
-              items: _productCategories
-                  .map(
-                    (category) => DropdownMenuItem(
-                      value: category,
-                      child: Text(category),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => _productCategoryFilter = value);
-                }
-              },
-            );
-
-            if (constraints.maxWidth < 920) {
-              return Column(
-                children: [
-                  searchField,
-                  const SizedBox(height: 10),
-                  categoryField,
-                ],
-              );
-            }
-
-            return Row(
-              children: [
-                Expanded(flex: 3, child: searchField),
-                const SizedBox(width: 12),
-                Expanded(flex: 2, child: categoryField),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 12),
-        _buildProductCatalog(filteredProducts: filteredProducts),
-        const SizedBox(height: 22),
+        const SizedBox(height: 24),
         Row(
           children: [
             Expanded(
@@ -1744,17 +1670,29 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             ),
             const SizedBox(width: 12),
             Text(
-              _money.format(_visibleSubtotalTl),
+              _formatTlForDisplayUnit(_visibleSubtotalTl),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: const Color(0xFF17304C),
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(width: 12),
+            FilledButton.icon(
+              onPressed: _openMaterialListDialog,
+              icon: const Icon(Icons.inventory_2_outlined, size: 18),
+              label: const Text('Malzeme Listesi'),
+            ),
+            const SizedBox(width: 8),
             OutlinedButton.icon(
               onPressed: _addCustomLine,
               icon: const Icon(Icons.edit_note_rounded),
-              label: const Text('Ozel Kalem Ekle'),
+              label: const Text('Ozel Kalem'),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: () => _openHiddenCostDialog(),
+              icon: const Icon(Icons.visibility_off_outlined, size: 18),
+              label: const Text('Gizli Yukleme'),
             ),
           ],
         ),
@@ -1776,8 +1714,10 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         _buildCategoryBar(),
         const SizedBox(height: 12),
         lineList,
-        const SizedBox(height: 22),
-        _buildHiddenCostsSection(),
+        if (_hiddenCosts.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _buildHiddenCostsCompactSummary(),
+        ],
       ],
     );
 
@@ -1997,6 +1937,165 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     );
   }
 
+  Future<void> _openMaterialListDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final filteredProducts = _filteredProductsForAdd;
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 24,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 1120,
+                  maxHeight: 760,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.inventory_2_outlined,
+                            color: Color(0xFF17304C),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Malzeme Listesi',
+                              style: Theme.of(context).textTheme.headlineSmall
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          Text(
+                            '${filteredProducts.length} urun',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: const Color(0xFF5B6F7F),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            tooltip: 'Kapat',
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final searchField = TextField(
+                            controller: _productSearchController,
+                            onChanged: (_) {
+                              setState(() {});
+                              setDialogState(() {});
+                            },
+                            decoration: const InputDecoration(
+                              labelText: 'Kod, urun adi, marka veya model ara',
+                              prefixIcon: Icon(Icons.search_rounded),
+                              isDense: true,
+                            ),
+                          );
+                          final categoryField = DropdownButtonFormField<String>(
+                            initialValue: _productCategoryFilter,
+                            isDense: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Kategori',
+                            ),
+                            items: _productCategories
+                                .map(
+                                  (category) => DropdownMenuItem(
+                                    value: category,
+                                    child: Text(category),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setState(() => _productCategoryFilter = value);
+                              setDialogState(() {});
+                            },
+                          );
+
+                          if (constraints.maxWidth < 760) {
+                            return Column(
+                              children: [
+                                searchField,
+                                const SizedBox(height: 10),
+                                categoryField,
+                              ],
+                            );
+                          }
+                          return Row(
+                            children: [
+                              Expanded(flex: 3, child: searchField),
+                              const SizedBox(width: 12),
+                              Expanded(flex: 2, child: categoryField),
+                            ],
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      Expanded(
+                        child: _buildProductCatalog(
+                          filteredProducts: filteredProducts,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildHiddenCostsCompactSummary() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F8FA),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFD7DEE6)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.visibility_off_outlined,
+            size: 18,
+            color: Color(0xFF5B6F7F),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${_hiddenCosts.length} gizli yukleme: ${_formatTlForDisplayUnit(_hiddenSubtotalTl)}',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: const Color(0xFF17304C),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => _openHiddenCostDialog(),
+            child: const Text('Ekle'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ignore: unused_element
   Widget _buildHiddenCostsSection() {
     final hasCosts = _hiddenCosts.isNotEmpty;
     final totalText = _money.format(_hiddenSubtotalTl);
@@ -2417,7 +2516,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                       ),
                     ),
                     Text(
-                      _money.format(groupSubtotal),
+                      _formatTlForDisplayUnit(groupSubtotal),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: ink,
                         fontWeight: FontWeight.w800,
@@ -2468,10 +2567,11 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                         rowNumber: i + 1,
                         product: product,
                         draft: draft,
-                        money: _money,
                         onChanged: () => setState(() {}),
                         onRemove: () => _removeLine(draft),
-                        lineTotal: _lineNetTotal(draft),
+                        lineTotalText: _formatTlForDisplayUnit(
+                          _lineNetTotal(draft),
+                        ),
                         displayUnit: draft.priceCurrencyCode,
                         useDesktopLayout: expandList,
                         discountLocked: _isBulkDiscountEnabled(group),
@@ -3027,12 +3127,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'Donusum ve Cikti',
+          'Ozet ve Cikti',
           style: Theme.of(
             context,
-          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 10),
         Text(
           _visibleQuoteCode,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -3040,11 +3140,11 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 10),
         DropdownButtonFormField<String>(
           key: ValueKey(_selectedDisplayUnit),
           initialValue: _selectedDisplayUnit,
-          decoration: const InputDecoration(labelText: 'Teklifi Cevir'),
+          decoration: const InputDecoration(labelText: 'Para Birimi'),
           items: _displayUnits
               .map(
                 (unit) =>
@@ -3057,14 +3157,13 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             }
           },
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.all(20),
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: const LinearGradient(
-              colors: [Color(0xFF17304C), Color(0xFF274D67)],
-            ),
+            borderRadius: BorderRadius.circular(14),
+            color: const Color(0xFF17304C),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3078,17 +3177,17 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
               const SizedBox(height: 8),
               Text(
                 _formatTotalForDisplay(convertedTotal, _selectedDisplayUnit),
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 8),
               Text(
                 selectedRate == null
-                    ? 'TL bazli fiyatlandirma aktif'
-                    : '${selectedRate.label} bazli fiyatlandirma aktif',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    ? 'Teklif TL olarak hazirlaniyor'
+                    : 'Teklif ${selectedRate.label} olarak hazirlaniyor',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Colors.white.withValues(alpha: 0.85),
                 ),
               ),
@@ -3884,10 +3983,9 @@ class _QuoteLineEditorRow extends StatelessWidget {
   const _QuoteLineEditorRow({
     required this.rowNumber,
     required this.draft,
-    required this.money,
     required this.onChanged,
     required this.onRemove,
-    required this.lineTotal,
+    required this.lineTotalText,
     required this.displayUnit,
     required this.useDesktopLayout,
     required this.discountLocked,
@@ -3902,10 +4000,9 @@ class _QuoteLineEditorRow extends StatelessWidget {
   final int rowNumber;
   final Product? product;
   final _LineDraft draft;
-  final NumberFormat money;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
-  final double lineTotal;
+  final String lineTotalText;
   final String displayUnit;
   final bool useDesktopLayout;
   final bool discountLocked;
@@ -4073,7 +4170,7 @@ class _QuoteLineEditorRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Satir net: ${money.format(lineTotal)}',
+                  'Satir net: $lineTotalText',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: const Color(0xFF17304C),
                     fontWeight: FontWeight.w800,
@@ -4230,7 +4327,7 @@ class _QuoteLineEditorRow extends StatelessWidget {
               SizedBox(
                 width: 132,
                 child: Text(
-                  money.format(lineTotal),
+                  lineTotalText,
                   textAlign: TextAlign.end,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: const Color(0xFF17304C),

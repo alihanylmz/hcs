@@ -3965,7 +3965,7 @@ class _QuoteLineEditorRow extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final showDesktopRow = useDesktopLayout && constraints.maxWidth >= 980;
+        final showDesktopRow = useDesktopLayout && constraints.maxWidth >= 720;
 
         if (!showDesktopRow) {
           return Container(
@@ -4277,7 +4277,7 @@ class _QuoteLineSheetHeader extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 980) return const SizedBox.shrink();
+        if (constraints.maxWidth < 720) return const SizedBox.shrink();
 
         return Container(
           height: 36,

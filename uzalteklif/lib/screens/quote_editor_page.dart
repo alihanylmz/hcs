@@ -4324,11 +4324,7 @@ class _SheetDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: double.infinity,
-      color: const Color(0xFFD7DEE6),
-    );
+    return Container(width: 1, height: 36, color: const Color(0xFFD7DEE6));
   }
 }
 

@@ -2,6 +2,9 @@ name: Deploy Site to Plesk
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 concurrency:
   group: deploy-site

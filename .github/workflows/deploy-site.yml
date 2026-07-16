@@ -56,14 +56,6 @@ jobs:
           path: hcs
           token: ${{ secrets.DEPLOY_REPO_TOKEN || github.token }}
 
-      - name: Checkout Teklif
-        uses: actions/checkout@v4
-        with:
-          repository: alihanylmz/uzalteklif
-          ref: 5a437ca05868ea513fb59f5f6b6cf500631a6ab3
-          path: uzalteklif
-          token: ${{ secrets.DEPLOY_REPO_TOKEN || github.token }}
-
       - name: Setup Flutter stable for Is Takip
         uses: subosito/flutter-action@v2
         with:
@@ -85,7 +77,7 @@ jobs:
           cache: true
 
       - name: Build Teklif web
-        working-directory: uzalteklif
+        working-directory: hcs/uzalteklif
         run: |
           flutter pub get
           flutter build web --release --base-href /teklif/ \
@@ -101,7 +93,7 @@ jobs:
           mkdir -p site/is-takip site/teklif repair/is-takip
           cp -a hcs/portal/. site/
           cp -a hcs/build/web/. site/is-takip/
-          cp -a uzalteklif/build/web/. site/teklif/
+          cp -a hcs/uzalteklif/build/web/. site/teklif/
           gzip -9 -c hcs/build/web/main.dart.js > repair/is-takip/main.dart.js.gz
 
           cat > site/is-takip/.htaccess <<'EOF'

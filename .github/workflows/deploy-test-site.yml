@@ -18,6 +18,9 @@ jobs:
     env:
       IS_TAKIP_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL || secrets.SUPABASE_URL }}
       IS_TAKIP_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+      TEKLIF_SUPABASE_URL: ${{ secrets.STAGING_TEKLIF_SUPABASE_URL || secrets.TEKLIF_SUPABASE_URL }}
+      TEKLIF_SUPABASE_ANON_KEY: ${{ secrets.STAGING_TEKLIF_SUPABASE_ANON_KEY || secrets.TEKLIF_SUPABASE_ANON_KEY }}
+      PUBLIC_QUOTE_BASE_URL: ${{ vars.STAGING_PUBLIC_QUOTE_BASE_URL || vars.PUBLIC_QUOTE_BASE_URL || 'https://uzalteknikservis.info/t' }}
       PLESK_TARGET_DIR: ${{ secrets.PLESK_TEST_FTP_TARGET_DIR || '/test.uzalteknikservis.com/' }}
     steps:
       - name: Validate secrets
@@ -26,6 +29,8 @@ jobs:
           missing=()
           [[ -z "$IS_TAKIP_SUPABASE_URL" ]] && missing+=("SUPABASE_URL or STAGING_SUPABASE_URL")
           [[ -z "$IS_TAKIP_SUPABASE_ANON_KEY" ]] && missing+=("SUPABASE_ANON_KEY or STAGING_SUPABASE_ANON_KEY")
+          [[ -z "$TEKLIF_SUPABASE_URL" ]] && missing+=("TEKLIF_SUPABASE_URL or STAGING_TEKLIF_SUPABASE_URL")
+          [[ -z "$TEKLIF_SUPABASE_ANON_KEY" ]] && missing+=("TEKLIF_SUPABASE_ANON_KEY or STAGING_TEKLIF_SUPABASE_ANON_KEY")
           [[ -z "${{ secrets.PLESK_HOST }}" ]] && missing+=("PLESK_HOST")
           [[ -z "${{ secrets.PLESK_USER }}" ]] && missing+=("PLESK_USER")
           [[ -z "${{ secrets.PLESK_PASSWORD }}" ]] && missing+=("PLESK_PASSWORD")
@@ -51,13 +56,29 @@ jobs:
             --dart-define=SUPABASE_URL="$IS_TAKIP_SUPABASE_URL" \
             --dart-define=SUPABASE_ANON_KEY="$IS_TAKIP_SUPABASE_ANON_KEY"
 
+      - name: Setup Flutter beta for Teklif
+        uses: subosito/flutter-action@v2
+        with:
+          channel: beta
+          cache: true
+
+      - name: Build Teklif web
+        working-directory: uzalteklif
+        run: |
+          flutter pub get
+          flutter build web --release --base-href /teklif/ \
+            --dart-define=SUPABASE_URL="$TEKLIF_SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$TEKLIF_SUPABASE_ANON_KEY" \
+            --dart-define=PUBLIC_QUOTE_BASE_URL="$PUBLIC_QUOTE_BASE_URL"
+
       - name: Prepare test payload
         shell: bash
         run: |
           rm -rf site
-          mkdir -p site/is-takip
+          mkdir -p site/is-takip site/teklif
           cp -a portal/. site/
           cp -a build/web/. site/is-takip/
+          cp -a uzalteklif/build/web/. site/teklif/
           gzip -9 -c build/web/main.dart.js > site/is-takip/main.dart.js.gz
           rm -f site/is-takip/main.dart.js
 
@@ -93,6 +114,26 @@ jobs:
             RewriteCond %{REQUEST_FILENAME} !-f
             RewriteCond %{REQUEST_FILENAME} !-d
             RewriteRule . /is-takip/index.html [L]
+          </IfModule>
+          EOF
+
+          cat > site/teklif/.htaccess <<'EOF'
+          <IfModule mod_rewrite.c>
+            RewriteEngine On
+            RewriteBase /teklif/
+            RewriteRule ^index\.html$ - [L]
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule . /teklif/index.html [L]
+          </IfModule>
+          <IfModule mod_headers.c>
+            Header set X-Uzal-Teklif-Deploy "spreadsheet-editor-test-20260716"
+            <FilesMatch "^(index\.html|flutter_bootstrap\.js|flutter_service_worker\.js)$">
+              Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+            </FilesMatch>
+            <FilesMatch "\.(js|json|wasm)$">
+              Header set Cache-Control "no-cache, must-revalidate"
+            </FilesMatch>
           </IfModule>
           EOF
 

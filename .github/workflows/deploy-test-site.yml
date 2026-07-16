@@ -137,6 +137,15 @@ jobs:
           </IfModule>
           EOF
 
+      - name: Normalize test FTP target
+        shell: bash
+        run: |
+          target_dir="$PLESK_TARGET_DIR"
+          if [[ "$target_dir" != */ ]]; then
+            target_dir="$target_dir/"
+          fi
+          echo "PLESK_TARGET_DIR=$target_dir" >> "$GITHUB_ENV"
+
       - name: Deploy test site to Plesk
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:

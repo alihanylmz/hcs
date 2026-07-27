@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/app_config.dart';
 import '../services/admin_repository.dart';
 import '../services/cari_repository.dart';
+import '../services/discovery_repository.dart';
 import '../services/market_rate_service.dart';
 import '../services/own_company_repository.dart';
 import '../services/price_adjustment_rule_repository.dart';
@@ -22,6 +23,7 @@ class AppBootstrap {
     required this.priceAdjustmentRuleRepository,
     required this.userProfileRepository,
     required this.cariRepository,
+    required this.discoveryRepository,
     required this.themePreferenceService,
     required this.supabaseActive,
   });
@@ -34,6 +36,7 @@ class AppBootstrap {
   final PriceAdjustmentRuleRepository priceAdjustmentRuleRepository;
   final UserProfileRepository userProfileRepository;
   final CariRepository cariRepository;
+  final DiscoveryRepository discoveryRepository;
   final ThemePreferenceService themePreferenceService;
   final bool supabaseActive;
 
@@ -65,6 +68,7 @@ class AppBootstrap {
       ),
       userProfileRepository: UserProfileRepository(client: client),
       cariRepository: CariRepository(client: client),
+      discoveryRepository: DiscoveryRepository(client: client),
       themePreferenceService: themePreferenceService,
       supabaseActive: client != null,
     );

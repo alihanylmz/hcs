@@ -90,6 +90,24 @@ void main() {
     expect(bytes.length, greaterThan(20000));
     expect(elapsed, lessThan(const Duration(seconds: 20)));
   });
+
+  test('pdf export service accepts a very long multiline offer note', () async {
+    const service = PdfExportService();
+    final base = _buildSampleQuote();
+    final json = base.toJson();
+    json['note'] = List.generate(
+      160,
+      (index) =>
+          '${index + 1}. Teslimat, ödeme, garanti ve devreye alma koşulları '
+          'müşteri ile karşılıklı mutabakat sağlandıktan sonra kesinleşecektir.',
+    ).join('\n\n');
+    final quote = Quote.fromJson(json);
+
+    final bytes = await service.buildQuotePdfBytes(quote);
+
+    expect(quote.note.length, greaterThan(15000));
+    expect(bytes.length, greaterThan(10000));
+  });
 }
 
 Quote _buildSampleQuote() {

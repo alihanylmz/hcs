@@ -154,6 +154,9 @@ alter table public.quotes
 alter column id type text using id::text;
 
 alter table public.quotes
+alter column note type text using note::text;
+
+alter table public.quotes
 add column if not exists hidden_costs jsonb not null default '[]'::jsonb;
 
 alter table public.quotes

@@ -1150,7 +1150,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       return null;
     }
 
-    final baseNote = _noteController.text.trim();
+    final baseNote = _sanitizeLongText(_noteController.text).trim();
     final taggedNote = source == 'ARSIV'
         ? baseNote
         : '$baseNote\nCikti bicimi: $source';
@@ -2951,8 +2951,19 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
           const SizedBox(height: 12),
           TextFormField(
             controller: _noteController,
-            maxLines: 5,
-            decoration: const InputDecoration(labelText: 'Notlar / Kisa ozet'),
+            minLines: 6,
+            maxLines: 14,
+            keyboardType: TextInputType.multiline,
+            decoration: InputDecoration(
+              labelText: 'Teklif ayrıntıları / notlar',
+              alignLabelWithHint: true,
+              helper: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _noteController,
+                builder: (context, value, child) => Text(
+                  '${value.text.runes.length} karakter - karakter sınırı yok',
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -3492,6 +3503,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       return 'Zorunlu';
     }
     return null;
+  }
+
+  static String _sanitizeLongText(String value) {
+    return value
+        .replaceAll('\u0000', '')
+        .replaceAll(RegExp(r'[\u0001-\u0008\u000B\u000C\u000E-\u001F]'), '');
   }
 }
 

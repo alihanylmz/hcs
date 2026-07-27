@@ -41,4 +41,51 @@ void main() {
     expect(result.products.single.currencyCode, 'EURTRY');
     expect(result.products.single.salePrice, 1250.50);
   });
+
+  test('9 kolonlu detaylı Honeywell listesini doğru alanlara eşler', () {
+    const content =
+        'Common\tThermostats\tElectronic Thermostats\tTB3026B\t'
+        'BACNET FIXED FUNCTION THERMOSTAT\t USD \t'
+        r' $520,00 '
+        '\t Active \t MX \n'
+        'Field Devices\tSensors and Wall Modules\tModule with Setpoint\t'
+        'TR100-T-G\tCommercial Wall Module, T\t USD \t'
+        r' $250,44 '
+        '\t Phase Out Inprogress \t US ';
+
+    final result = service.parseContent(content, existingProducts: const []);
+
+    expect(result.skippedRows, 0);
+    expect(result.products, hasLength(2));
+    expect(result.products.first.code, 'TB3026B');
+    expect(result.products.first.name, 'BACNET FIXED FUNCTION THERMOSTAT');
+    expect(result.products.first.category, 'Thermostats');
+    expect(result.products.first.brand, 'Honeywell');
+    expect(result.products.first.salePrice, 520);
+    expect(result.products.first.isActive, isTrue);
+    expect(result.products.first.specifications['supplier_group'], 'Common');
+    expect(
+      result.products.first.specifications['supplier_subcategory'],
+      'Electronic Thermostats',
+    );
+    expect(result.products.first.specifications['origin_country'], 'MX');
+    expect(result.products.last.code, 'TR100-T-G');
+    expect(result.products.last.isActive, isFalse);
+  });
+
+  test('detaylı listede tekrarlanan ürün kodunun son satırını kullanır', () {
+    const content =
+        'Common\tThermostats\tElectronic\tTB3026B\tFirst\tUSD\t'
+        r'$500,00'
+        '\tActive\tMX\n'
+        'Common\tThermostats\tElectronic\tTB3026B\tUpdated\tUSD\t'
+        r'$520,00'
+        '\tActive\tMX';
+
+    final result = service.parseContent(content, existingProducts: const []);
+
+    expect(result.products, hasLength(1));
+    expect(result.products.single.name, 'Updated');
+    expect(result.products.single.salePrice, 520);
+  });
 }

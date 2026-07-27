@@ -91,7 +91,7 @@ class ProductCsvService {
         normalizedHeaders.contains('name');
 
     if (!hasHeader) {
-      return _parseHoneywellPriceList(rows, existingProducts: existingProducts);
+      return _parseSupplierPriceList(rows, existingProducts: existingProducts);
     }
 
     final indexByHeader = <String, int>{
@@ -154,7 +154,7 @@ class ProductCsvService {
     return ProductCsvImportResult(products: products, skippedRows: skippedRows);
   }
 
-  ProductCsvImportResult _parseHoneywellPriceList(
+  ProductCsvImportResult _parseSupplierPriceList(
     List<List<String>> rows, {
     required List<Product> existingProducts,
   }) {
@@ -172,11 +172,14 @@ class ProductCsvService {
         continue;
       }
 
-      // Honeywell fiyat listesi:
-      // kategori, ürün kodu, açıklama, para birimi, fiyat, marka, durum
-      final category = row[0].trim();
-      final code = row[1].trim();
-      final name = row[2].trim();
+      // Desteklenen başlıksız tedarikçi listeleri:
+      // 7 kolon: kategori, kod, açıklama, para birimi, fiyat, marka, durum
+      // 9 kolon: grup, kategori, alt kategori, kod, açıklama,
+      //          para birimi, fiyat, durum, menşei
+      final isDetailedFormat = row.length >= 9;
+      final category = row[isDetailedFormat ? 1 : 0].trim();
+      final code = row[isDetailedFormat ? 3 : 1].trim();
+      final name = row[isDetailedFormat ? 4 : 2].trim();
       if (code.isEmpty || name.isEmpty) {
         skippedRows++;
         continue;
@@ -185,6 +188,18 @@ class ProductCsvService {
       final normalizedCode = code.toUpperCase();
       final now = DateTime.now().toUtc();
       final existing = byCode[normalizedCode];
+      final supplierStatus = row[isDetailedFormat ? 7 : 6].trim();
+      final specifications = Map<String, String>.from(
+        existing?.specifications ?? const {},
+      );
+      if (isDetailedFormat) {
+        specifications.addAll({
+          'supplier_group': row[0].trim(),
+          'supplier_subcategory': row[2].trim(),
+          'supplier_status': supplierStatus,
+          'origin_country': row[8].trim(),
+        });
+      }
       productsByCode[normalizedCode] = Product(
         id:
             existing?.id ??
@@ -193,21 +208,32 @@ class ProductCsvService {
         code: code,
         name: name,
         category: _fallback(category, 'Genel'),
-        brand: row[5].trim(),
+        brand: isDetailedFormat
+            ? _fallback(existing?.brand ?? '', 'Honeywell')
+            : row[5].trim(),
         model: code,
         unit: 'adet',
-        currencyCode: _normalizeCurrency(row[3]),
-        salePrice: _readDouble(row[4]),
+        currencyCode: _normalizeCurrency(row[isDetailedFormat ? 5 : 3]),
+        salePrice: _readDouble(row[isDetailedFormat ? 6 : 4]),
         stockQuantity: existing?.stockQuantity ?? 0,
         minimumStock: existing?.minimumStock ?? 0,
         vatRate: existing?.vatRate ?? 20,
         leadTime: existing?.leadTime ?? '',
         description: name,
-        technicalSummary: existing?.technicalSummary ?? '',
-        isActive: _readBool(row[6]),
+        technicalSummary: isDetailedFormat
+            ? [
+                if (row[0].trim().isNotEmpty) 'Grup: ${row[0].trim()}',
+                if (row[2].trim().isNotEmpty) 'Alt kategori: ${row[2].trim()}',
+                if (row[8].trim().isNotEmpty) 'Menşei: ${row[8].trim()}',
+                if (supplierStatus.isNotEmpty) 'Durum: $supplierStatus',
+              ].join(' | ')
+            : existing?.technicalSummary ?? '',
+        isActive: isDetailedFormat
+            ? _readDetailedSupplierStatus(supplierStatus)
+            : _readBool(supplierStatus),
         updatedAt: now,
         imagePath: existing?.imagePath ?? '',
-        specifications: existing?.specifications ?? const {},
+        specifications: specifications,
       );
     }
 
@@ -347,5 +373,13 @@ class ProductCsvService {
         value == 'yes' ||
         value == 'active' ||
         value == 'aktif';
+  }
+
+  static bool _readDetailedSupplierStatus(String raw) {
+    final value = raw.trim().toLowerCase();
+    return value == 'active' ||
+        value == 'new' ||
+        value == 'phase in' ||
+        value.startsWith('active,');
   }
 }

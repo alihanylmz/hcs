@@ -416,7 +416,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     }
 
     for (final item in source.items) {
-      final productId = _findProductIdFromDescription(item.description);
+      final productId = _findProductIdFromItem(item);
       _items.add(
         _LineDraft(
           productId: productId,
@@ -554,6 +554,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
           .map(
             (item) => QuoteLineItem(
               id: item.id,
+              productCode: item.productCode,
               description: item.description,
               quantity: item.quantity,
               unit: item.unit,
@@ -609,11 +610,10 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     );
   }
 
-  /// Teklif kaleminin `description` metninden ("KOD - isim - marka model")
-  /// ilgili urunu bulup `id`'sini doner. Urun bulunamazsa null doner (bu
-  /// durumda satir atlanir, kullaniciya uyari dusmez).
-  String? _findProductIdFromDescription(String description) {
-    final code = description.split(' - ').first.trim();
+  /// Kayitli urun kodundan veya eski tekliflerdeki aciklama on ekinden
+  /// ilgili urunu bulup `id`'sini doner.
+  String? _findProductIdFromItem(QuoteLineItem item) {
+    final code = item.resolvedProductCode;
     if (code.isEmpty) return null;
     for (final product in widget.availableProducts) {
       if (product.code == code) return product.id;
@@ -1122,6 +1122,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
           return QuoteLineItem(
             id: _newId('line'),
+            productCode: _findProductById(draft.productId)?.code.trim() ?? '',
             description: description,
             quantity: quantity,
             unit: unit,

@@ -892,7 +892,8 @@ class PdfExportService {
         final item = items[i];
         rows.add([
           '${startIndex + i + 1}',
-          item.description,
+          item.resolvedProductCode,
+          item.documentDescription,
           item.unit,
           _formatQuantity(item.quantity),
         ]);
@@ -908,13 +909,15 @@ class PdfExportService {
         ),
         columnWidths: const {
           0: pw.FixedColumnWidth(22),
-          1: pw.FlexColumnWidth(6),
-          2: pw.FixedColumnWidth(56),
-          3: pw.FixedColumnWidth(72),
+          1: pw.FixedColumnWidth(76),
+          2: pw.FlexColumnWidth(5),
+          3: pw.FixedColumnWidth(48),
+          4: pw.FixedColumnWidth(58),
         },
         children: [
           _tableHeaderRow(const [
             '#',
+            'Urun Kodu',
             'Aciklama',
             'Birim',
             'Miktar',
@@ -930,7 +933,8 @@ class PdfExportService {
       final item = items[i];
       rows.add([
         '${startIndex + i + 1}',
-        item.description,
+        item.resolvedProductCode,
+        item.documentDescription,
         item.unit,
         _formatQuantity(item.quantity),
         price.fmtAmount(quote.effectiveUnitPriceTl(item)),
@@ -950,16 +954,18 @@ class PdfExportService {
       ),
       columnWidths: const {
         0: pw.FixedColumnWidth(22),
-        1: pw.FlexColumnWidth(4.2),
-        2: pw.FixedColumnWidth(36),
-        3: pw.FixedColumnWidth(42),
-        4: pw.FlexColumnWidth(1.5),
-        5: pw.FlexColumnWidth(1.5),
-        6: pw.FlexColumnWidth(1.6),
+        1: pw.FixedColumnWidth(72),
+        2: pw.FlexColumnWidth(3.3),
+        3: pw.FixedColumnWidth(34),
+        4: pw.FixedColumnWidth(40),
+        5: pw.FlexColumnWidth(1.35),
+        6: pw.FlexColumnWidth(1.35),
+        7: pw.FlexColumnWidth(1.45),
       },
       children: [
         _tableHeaderRow([
           '#',
+          'Urun Kodu',
           'Aciklama',
           'Birim',
           'Miktar',
@@ -968,7 +974,7 @@ class PdfExportService {
           'Toplam\n(${price.displaySymbol})',
         ], repeat: true),
         for (var i = 0; i < rows.length; i++)
-          _tableDataRow(rows[i], isZebra: i.isOdd, totalColumnIndex: 6),
+          _tableDataRow(rows[i], isZebra: i.isOdd, totalColumnIndex: 7),
       ],
     );
   }
@@ -1074,7 +1080,8 @@ class PdfExportService {
       final item = items[i];
       rows.add([
         '${startIndex + i + 1}',
-        item.description,
+        item.resolvedProductCode,
+        item.documentDescription,
         _formatQuantity(item.quantity),
         item.unit,
         '',
@@ -1092,14 +1099,16 @@ class PdfExportService {
       ),
       columnWidths: const {
         0: pw.FixedColumnWidth(24),
-        1: pw.FlexColumnWidth(5.2),
-        2: pw.FixedColumnWidth(58),
-        3: pw.FixedColumnWidth(48),
-        4: pw.FlexColumnWidth(1.8),
+        1: pw.FixedColumnWidth(80),
+        2: pw.FlexColumnWidth(4.2),
+        3: pw.FixedColumnWidth(52),
+        4: pw.FixedColumnWidth(44),
+        5: pw.FlexColumnWidth(1.6),
       },
       children: [
         _tableHeaderRow(const [
           '#',
+          'Urun Kodu',
           'Malzeme',
           'Miktar',
           'Birim',

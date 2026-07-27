@@ -24,6 +24,7 @@ class ExcelExportService {
     sheet.appendRow([TextCellValue('Baslik'), TextCellValue(quote.title)]);
     sheet.appendRow(const []);
     sheet.appendRow([
+      TextCellValue('Urun Kodu'),
       TextCellValue('Kalem'),
       TextCellValue('Miktar'),
       TextCellValue('Birim'),
@@ -37,7 +38,8 @@ class ExcelExportService {
       // Gizli yukleme uplift'i uygulanmis efektif fiyatlar;
       // gizli kalemler Excel'de ayri satir olarak gozukmez, fiyatlara yedirilir.
       sheet.appendRow([
-        TextCellValue(item.description),
+        TextCellValue(item.resolvedProductCode),
+        TextCellValue(item.documentDescription),
         DoubleCellValue(item.quantity),
         TextCellValue(item.unit),
         DoubleCellValue(quote.effectiveUnitPriceTl(item)),
@@ -95,6 +97,7 @@ class ExcelExportService {
     sheet.appendRow(const []);
     sheet.appendRow([
       TextCellValue('Sira'),
+      TextCellValue('Urun Kodu'),
       TextCellValue('Malzeme'),
       TextCellValue('Miktar'),
       TextCellValue('Birim'),
@@ -112,7 +115,8 @@ class ExcelExportService {
       for (final item in group.items) {
         sheet.appendRow([
           IntCellValue(index),
-          TextCellValue(item.description),
+          TextCellValue(item.resolvedProductCode),
+          TextCellValue(item.documentDescription),
           DoubleCellValue(item.quantity),
           TextCellValue(item.unit),
           TextCellValue(''),

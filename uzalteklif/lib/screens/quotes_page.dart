@@ -258,6 +258,24 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
     await _reload();
   }
 
+  Future<void> _copyQuote(Quote quote) async {
+    await Navigator.of(context).push<Quote>(
+      MaterialPageRoute(
+        builder: (context) => QuoteEditorPage(
+          quoteRepository: widget.quoteRepository,
+          initialRates: _rates,
+          availableProducts: _products,
+          quoteToCopy: quote,
+          userProfileRepository: widget.userProfileRepository,
+          cariRepository: widget.cariRepository,
+          ownCompanyRepository: widget.ownCompanyRepository,
+          priceAdjustmentRuleRepository: widget.priceAdjustmentRuleRepository,
+        ),
+      ),
+    );
+    await _reload();
+  }
+
   double get _appBarBottomHeight => _scopeTabController.index == 0 ? 92 : 46;
 
   @override
@@ -517,6 +535,7 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
         : _QuoteTable(
             quotes: quotes,
             onOpen: _openQuote,
+            onCopy: _copyQuote,
             showArchiveDate: showArchiveDate,
             showCustomer: _showQuoteCustomer,
             showTitle: _showQuoteTitle,
@@ -655,6 +674,7 @@ class _QuoteTable extends StatelessWidget {
   const _QuoteTable({
     required this.quotes,
     required this.onOpen,
+    required this.onCopy,
     this.showArchiveDate = false,
     this.showCustomer = true,
     this.showTitle = true,
@@ -665,6 +685,7 @@ class _QuoteTable extends StatelessWidget {
 
   final List<Quote> quotes;
   final ValueChanged<Quote> onOpen;
+  final ValueChanged<Quote> onCopy;
   final bool showArchiveDate;
   final bool showCustomer;
   final bool showTitle;
@@ -719,6 +740,7 @@ class _QuoteTable extends StatelessWidget {
                     showStatus: showStatus,
                     showAmount: showAmount,
                     onTap: () => onOpen(quote),
+                    onCopy: () => onCopy(quote),
                   );
                 },
               ),
@@ -734,6 +756,7 @@ class _QuoteTableRow extends StatelessWidget {
   const _QuoteTableRow({
     required this.quote,
     required this.onTap,
+    required this.onCopy,
     required this.showArchiveDate,
     required this.showCustomer,
     required this.showTitle,
@@ -744,6 +767,7 @@ class _QuoteTableRow extends StatelessWidget {
 
   final Quote quote;
   final VoidCallback onTap;
+  final VoidCallback onCopy;
   final bool showArchiveDate;
   final bool showCustomer;
   final bool showTitle;
@@ -893,10 +917,33 @@ class _QuoteTableRow extends StatelessWidget {
                 ),
               SizedBox(
                 width: 44,
-                child: IconButton(
-                  tooltip: 'Detay',
-                  onPressed: onTap,
-                  icon: const Icon(Icons.chevron_right_rounded),
+                child: PopupMenuButton<String>(
+                  tooltip: 'Teklif işlemleri',
+                  onSelected: (value) {
+                    if (value == 'open') onTap();
+                    if (value == 'copy') onCopy();
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: 'open',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.open_in_new_rounded),
+                        title: Text('Teklifi aç'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'copy',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.copy_all_rounded),
+                        title: Text('Teklifi kopyala'),
+                      ),
+                    ),
+                  ],
+                  icon: const Icon(Icons.more_vert_rounded),
                 ),
               ),
             ],

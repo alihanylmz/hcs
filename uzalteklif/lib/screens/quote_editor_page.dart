@@ -29,6 +29,7 @@ class QuoteEditorPage extends StatefulWidget {
     required this.initialRates,
     required this.availableProducts,
     this.quoteToRevise,
+    this.quoteToCopy,
     UserProfileRepository? userProfileRepository,
     CariRepository? cariRepository,
     OwnCompanyRepository? ownCompanyRepository,
@@ -39,7 +40,11 @@ class QuoteEditorPage extends StatefulWidget {
            ownCompanyRepository ?? const OwnCompanyRepository(),
        priceAdjustmentRuleRepository =
            priceAdjustmentRuleRepository ??
-           const PriceAdjustmentRuleRepository();
+           const PriceAdjustmentRuleRepository(),
+       assert(
+         quoteToRevise == null || quoteToCopy == null,
+         'A quote cannot be revised and copied at the same time.',
+       );
 
   final QuoteRepository quoteRepository;
   final List<MarketRate> initialRates;
@@ -47,6 +52,10 @@ class QuoteEditorPage extends StatefulWidget {
 
   /// Ayni teklifin revizyonu; kod tabani korunur, Rev numarasi artar.
   final Quote? quoteToRevise;
+
+  /// Yeni bir teklif icin kullanilacak sablon. Kalemler ve kosullar korunur;
+  /// teklif kimligi, numarasi, durumu ve musteri bilgileri tasinmaz.
+  final Quote? quoteToCopy;
 
   final UserProfileRepository userProfileRepository;
   final CariRepository cariRepository;
@@ -127,8 +136,10 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     super.initState();
     debugPrint(_liveBuildMarker);
     debugPrint(_lineCurrencyFixMarker);
-    final source = widget.quoteToRevise;
-    _draftTimestamp = source?.createdAt ?? DateTime.now();
+    final revisionSource = widget.quoteToRevise;
+    final copySource = widget.quoteToCopy;
+    final source = revisionSource ?? copySource;
+    _draftTimestamp = revisionSource?.createdAt ?? DateTime.now();
     _preparedByNameController.text = 'Alihan Uzal';
     _preparedByTitleController.text = 'Satis Muhendisi';
     _preparedByPhoneController.text = CompanyProfile.phone;
@@ -138,6 +149,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       final repairedSource = _repairLikelyDoubleConvertedQuote(source);
       _loadFromExistingQuote(repairedSource);
       _repairLoadedDraftsAgainstSource(source);
+      if (copySource != null) {
+        _resetCopiedQuoteIdentityAndCustomer();
+      }
     }
 
     if (!_displayUnits.any((u) => u.code == _selectedDisplayUnit)) {
@@ -161,7 +175,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       _selectedOwnCompanyId = _resolveOwnCompanySelection(companies);
       _issuerProfile = prof;
     });
-    if (widget.quoteToRevise == null && prof != null) {
+    if (widget.quoteToRevise == null &&
+        widget.quoteToCopy == null &&
+        prof != null) {
       _applyIssuerDefaults(prof);
       if (mounted) setState(() {});
     }
@@ -169,7 +185,10 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   }
 
   String _resolveOwnCompanySelection(List<OwnCompany> companies) {
-    final existing = widget.quoteToRevise?.documentProfile.companyName.trim();
+    final existing = (widget.quoteToRevise ?? widget.quoteToCopy)
+        ?.documentProfile
+        .companyName
+        .trim();
     if (existing != null && existing.isNotEmpty) {
       final matched = companies.where((c) => c.name.trim() == existing);
       if (matched.isNotEmpty) return matched.first.id;
@@ -420,6 +439,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       _items.add(
         _LineDraft(
           productId: productId,
+          productCode: item.resolvedProductCode,
           priceCurrencyCode: source.displayUnit,
           description: item.description,
           unit: item.unit,
@@ -445,6 +465,18 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         ),
       );
     }
+  }
+
+  void _resetCopiedQuoteIdentityAndCustomer() {
+    _draftQuoteId = null;
+    _draftQuoteCode = null;
+    _draftShareToken = null;
+    _selectedCariId = '';
+    _customerNameController.clear();
+    _customerCompanyController.clear();
+    _customerTitleController.clear();
+    _customerPhoneController.clear();
+    _customerEmailController.clear();
   }
 
   Future<void> _restoreReasonableRevisionIfCurrentLooksInflated() async {
@@ -1122,7 +1154,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
           return QuoteLineItem(
             id: _newId('line'),
-            productCode: _findProductById(draft.productId)?.code.trim() ?? '',
+            productCode:
+                _findProductById(draft.productId)?.code.trim() ??
+                draft.productCode,
             description: description,
             quantity: quantity,
             unit: unit,
@@ -1262,6 +1296,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       _items.add(
         _LineDraft(
           productId: product.id,
+          productCode: product.code.trim(),
           priceCurrencyCode: product.currencyCode,
           description:
               '${product.code} - ${product.name} - ${product.brand} ${product.model}',
@@ -1285,6 +1320,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       _items.add(
         _LineDraft(
           productId: null,
+          productCode: '',
           priceCurrencyCode: _selectedDisplayUnit,
           description: '',
           unit: 'adet',
@@ -1639,6 +1675,44 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     );
   }
 
+  Widget _buildCopyBanner() {
+    final source = widget.quoteToCopy;
+    if (source == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEAF4FF),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF9CC5E8)),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.copy_all_rounded,
+              size: 20,
+              color: Color(0xFF245B88),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '${source.code} numaralı teklif kopyalandı. '
+                'Yeni müşteriyi seçtiğinizde bu kayıt yeni bir teklif numarasıyla kaydedilecek.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: const Color(0xFF245B88),
+                  fontWeight: FontWeight.w700,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildFormPanel({required bool expandList}) {
     final lineList = _buildSectionedItemsList(expandList: expandList);
 
@@ -1647,6 +1721,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       children: [
         _buildFormHeader(),
         _buildRevisionBanner(),
+        _buildCopyBanner(),
         if (!_infoCollapsed) ...[
           const SizedBox(height: 24),
           _buildTopFormSections(),
@@ -3603,6 +3678,7 @@ const List<_HiddenCostPreset> _hiddenCostPresets = [
 class _LineDraft {
   _LineDraft({
     required this.productId,
+    required this.productCode,
     required this.priceCurrencyCode,
     required String description,
     required String unit,
@@ -3617,6 +3693,7 @@ class _LineDraft {
        discountController = TextEditingController(text: discount);
 
   final String? productId;
+  final String productCode;
   final String priceCurrencyCode;
   final TextEditingController descriptionController;
   final TextEditingController unitController;

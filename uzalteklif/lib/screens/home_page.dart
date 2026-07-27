@@ -9,7 +9,6 @@ import '../services/market_rate_service.dart';
 import '../services/price_adjustment_rule_repository.dart';
 import '../services/product_csv_service.dart';
 import '../services/product_repository.dart';
-import '../widgets/product_preview_image.dart';
 import '../widgets/workspace_background.dart';
 import 'product_detail_page.dart';
 
@@ -429,27 +428,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           )
-        : GridView.builder(
-            shrinkWrap: !expandList,
-            physics: expandList
-                ? const AlwaysScrollableScrollPhysics()
-                : const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 360,
-              mainAxisExtent: 240,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            itemCount: filteredProducts.length,
-            itemBuilder: (context, index) {
-              final product = filteredProducts[index];
-              return _ProductCard(
-                product: product,
-                rateLookup: _rateLookup,
-                onTap: () => _openProductDetail(product),
-              );
-            },
-          );
+        : _ProductTable(products: filteredProducts, onTap: _openProductDetail);
 
     return Card(
       child: Padding(
@@ -457,68 +436,7 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 98,
-                  height: 98,
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    color: Colors.white.withValues(alpha: 0.88),
-                    border: Border.all(color: const Color(0xFFD8E0E8)),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.asset(
-                      'lib/assest/logo/uzal.png',
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'UZAL TEKNIK',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.4,
-                      color: const Color(0xFF17304C),
-                      fontSize:
-                          (Theme.of(
-                                context,
-                              ).textTheme.headlineSmall?.fontSize ??
-                              24) *
-                          1.75,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: _saveCsvTemplate,
-                  icon: const Icon(Icons.download_rounded),
-                  label: const Text('CSV Sablon'),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: _isImportingCsv ? null : _importProductsFromCsv,
-                  icon: _isImportingCsv
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.upload_file_rounded),
-                  label: const Text('CSV Yukle'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.tonalIcon(
-                  onPressed: _openNewProduct,
-                  icon: const Icon(Icons.add_box_rounded),
-                  label: const Text('Yeni Urun'),
-                ),
-              ],
-            ),
+            _buildProductToolbar(),
             const SizedBox(height: 14),
             TextField(
               onChanged: (value) => setState(() => _searchQuery = value),
@@ -607,10 +525,94 @@ class _HomePageState extends State<HomePage> {
                   .toList(),
             ),
             const SizedBox(height: 12),
-            if (expandList) Expanded(child: listContent) else listContent,
+            if (expandList)
+              Expanded(child: listContent)
+            else
+              SizedBox(height: 620, child: listContent),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildProductToolbar() {
+    final logoAndTitle = Row(
+      children: [
+        Container(
+          width: 98,
+          height: 98,
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: Colors.white.withValues(alpha: 0.88),
+            border: Border.all(color: const Color(0xFFD8E0E8)),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.asset('lib/assest/logo/uzal.png', fit: BoxFit.contain),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            'UZAL TEKNIK',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.4,
+              color: const Color(0xFF17304C),
+              fontSize:
+                  (Theme.of(context).textTheme.headlineSmall?.fontSize ?? 24) *
+                  1.75,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    final actions = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _saveCsvTemplate,
+          icon: const Icon(Icons.download_rounded),
+          label: const Text('CSV Sablon'),
+        ),
+        OutlinedButton.icon(
+          onPressed: _isImportingCsv ? null : _importProductsFromCsv,
+          icon: _isImportingCsv
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.upload_file_rounded),
+          label: const Text('CSV Yukle'),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: _openNewProduct,
+          icon: const Icon(Icons.add_box_rounded),
+          label: const Text('Yeni Urun'),
+        ),
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 980) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [logoAndTitle, const SizedBox(height: 10), actions],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: logoAndTitle),
+            const SizedBox(width: 12),
+            actions,
+          ],
+        );
+      },
     );
   }
 
@@ -1186,198 +1188,136 @@ class _AdvancedSearchPanel extends StatelessWidget {
   }
 }
 
-/// Stok sayfasindaki urun kartlari. Tiklandiginda [ProductDetailPage] acilir.
-/// Eski list-row `_ProductTile`'dan farkli olarak kompakt grid icin dikey
-/// yerlesim kullanir ve onTap destekler.
-class _ProductCard extends StatelessWidget {
-  const _ProductCard({
-    required this.product,
-    required this.rateLookup,
-    required this.onTap,
-  });
+class _ProductTable extends StatelessWidget {
+  const _ProductTable({required this.products, required this.onTap});
 
-  final Product product;
-  final Map<String, double> rateLookup;
-  final VoidCallback onTap;
+  final List<Product> products;
+  final ValueChanged<Product> onTap;
 
-  Widget _buildThumbnail(Product product) {
-    const ink = Color(0xFF17304C);
-    final hasImage = product.imagePath.isNotEmpty;
-    return Container(
-      width: 62,
-      height: 62,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F4F8),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD7DEE6)),
-      ),
-      child: hasImage
-          ? ProductPreviewImage(
-              imagePath: product.imagePath,
-              fit: BoxFit.cover,
-              width: 62,
-              height: 62,
-              cacheSize: 200,
-              errorIconSize: 24,
-            )
-          : const Icon(Icons.inventory_2_outlined, size: 26, color: ink),
-    );
-  }
+  static const _tableWidth = 1390.0;
 
   @override
   Widget build(BuildContext context) {
-    const ink = Color(0xFF17304C);
-    const slate = Color(0xFF5B6F7F);
-    final statusColor = product.isLowStock
-        ? const Color(0xFF9D5C1D)
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth > _tableWidth
+            ? constraints.maxWidth
+            : _tableWidth;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: const Color(0xFFCCD6E0)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: width,
+                height: constraints.maxHeight,
+                child: Column(
+                  children: [
+                    const _ProductTableHeader(),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: products.length,
+                        itemExtent: 48,
+                        itemBuilder: (context, index) {
+                          final product = products[index];
+                          return _ProductTableRow(
+                            index: index,
+                            product: product,
+                            onTap: () => onTap(product),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ProductTableHeader extends StatelessWidget {
+  const _ProductTableHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 46,
+      color: const Color(0xFF17304C),
+      child: const Row(
+        children: [
+          _ProductTableCell(text: '#', width: 50, header: true),
+          _ProductTableCell(text: 'ÜRÜN KODU', width: 155, header: true),
+          _ProductTableCell(text: 'ÜRÜN ADI', width: 310, header: true),
+          _ProductTableCell(text: 'KATEGORİ', width: 180, header: true),
+          _ProductTableCell(text: 'MARKA', width: 135, header: true),
+          _ProductTableCell(text: 'MODEL', width: 165, header: true),
+          _ProductTableCell(text: 'DÖVİZ', width: 75, header: true),
+          _ProductTableCell(text: 'BİRİM FİYAT', width: 130, header: true),
+          _ProductTableCell(text: 'STOK', width: 105, header: true),
+          _ProductTableCell(text: 'DURUM', width: 85, header: true),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProductTableRow extends StatelessWidget {
+  const _ProductTableRow({
+    required this.index,
+    required this.product,
+    required this.onTap,
+  });
+
+  final int index;
+  final Product product;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = product.isActive ? 'Aktif' : 'Pasif';
+    final statusColor = !product.isActive
+        ? const Color(0xFF7A4B4B)
         : const Color(0xFF2C6957);
-    final statusBg = product.isLowStock
-        ? const Color(0xFFFFE7D1)
-        : const Color(0xFFE5F1EC);
 
     return Material(
-      color: Colors.transparent,
+      color: index.isEven ? Colors.white : const Color(0xFFF5F8FB),
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.9),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFD7DEE6)),
+          decoration: const BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: Color(0xFFDCE3EA), width: 0.8),
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildThumbnail(product),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                product.code,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.labelLarge
-                                    ?.copyWith(
-                                      color: ink,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 0.4,
-                                    ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: statusBg,
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                product.isLowStock ? 'Kritik' : 'Normal',
-                                style: TextStyle(
-                                  color: statusColor,
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.4,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          product.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                color: ink,
-                                height: 1.2,
-                              ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${product.brand} - ${product.model}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: slate,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              _ProductTableCell(text: '${index + 1}', width: 50),
+              _ProductTableCell(text: product.code, width: 155, strong: true),
+              _ProductTableCell(text: product.name, width: 310),
+              _ProductTableCell(text: product.category, width: 180),
+              _ProductTableCell(text: product.brand, width: 135),
+              _ProductTableCell(text: product.model, width: 165),
+              _ProductTableCell(text: product.currencyLabel, width: 75),
+              _ProductTableCell(
+                text: product.formattedSalePrice,
+                width: 130,
+                strong: true,
               ),
-              const Spacer(),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  _CardChip(
-                    icon: Icons.category_rounded,
-                    label: product.category,
-                  ),
-                  _CardChip(
-                    icon: Icons.inventory_2_outlined,
-                    label: 'Stok ${product.formattedStock}',
-                    warning: product.isLowStock,
-                  ),
-                  _CardChip(
-                    icon: Icons.schedule_rounded,
-                    label: product.leadTime.isEmpty ? '-' : product.leadTime,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          product.formattedSalePrice,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                color: ink,
-                                fontWeight: FontWeight.w900,
-                              ),
-                        ),
-                        Text(
-                          'TL ${product.formattedTlEquivalent(rateLookup)}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: slate,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.arrow_forward_rounded, size: 18, color: ink),
-                ],
+              _ProductTableCell(text: product.formattedStock, width: 105),
+              _ProductTableCell(
+                text: status,
+                width: 85,
+                strong: true,
+                color: statusColor,
               ),
             ],
           ),
@@ -1387,47 +1327,47 @@ class _ProductCard extends StatelessWidget {
   }
 }
 
-class _CardChip extends StatelessWidget {
-  const _CardChip({
-    required this.icon,
-    required this.label,
-    this.warning = false,
+class _ProductTableCell extends StatelessWidget {
+  const _ProductTableCell({
+    required this.text,
+    required this.width,
+    this.header = false,
+    this.strong = false,
+    this.color,
   });
 
-  final IconData icon;
-  final String label;
-  final bool warning;
+  final String text;
+  final double width;
+  final bool header;
+  final bool strong;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    final bg = warning ? const Color(0xFFFFF4E0) : const Color(0xFFF1F4F8);
-    final fg = warning ? const Color(0xFF9D5C1D) : const Color(0xFF17304C);
-    final borderColor = warning
-        ? const Color(0xFFE3B86C)
-        : const Color(0xFFD7DEE6);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      width: width,
+      height: double.infinity,
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: fg),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: fg,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-            ),
+        border: Border(
+          right: BorderSide(
+            color: header
+                ? Colors.white.withValues(alpha: 0.18)
+                : const Color(0xFFDCE3EA),
+            width: 0.8,
           ),
-        ],
+        ),
+      ),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: color ?? (header ? Colors.white : const Color(0xFF17304C)),
+          fontSize: header ? 11.5 : 12,
+          fontWeight: header || strong ? FontWeight.w800 : FontWeight.w600,
+        ),
       ),
     );
   }

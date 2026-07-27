@@ -42,6 +42,20 @@ class PanelHardwareSolution {
       unmetPoints.values.fold(0, (total, count) => total + count);
 }
 
+class ControlHardwareSelectionRules {
+  const ControlHardwareSelectionRules({
+    this.preferredBrand = '',
+    this.reservePercent = 10,
+    this.onlyLinkedProductsInStock = true,
+    this.inStockProductIds = const {},
+  });
+
+  final String preferredBrand;
+  final int reservePercent;
+  final bool onlyLinkedProductsInStock;
+  final Set<String> inStockProductIds;
+}
+
 class ControlHardwareSelector {
   const ControlHardwareSelector();
 
@@ -55,8 +69,24 @@ class ControlHardwareSelector {
   List<PanelHardwareSolution> select({
     required DiscoveryProject project,
     required List<ControlHardware> hardware,
+    ControlHardwareSelectionRules rules = const ControlHardwareSelectionRules(
+      onlyLinkedProductsInStock: false,
+      reservePercent: 0,
+    ),
   }) {
-    final activeHardware = hardware.where((item) => item.isActive).toList();
+    final preferredBrand = rules.preferredBrand.trim().toLowerCase();
+    final activeHardware = hardware.where((item) {
+      if (!item.isActive) return false;
+      if (rules.onlyLinkedProductsInStock &&
+          !rules.inStockProductIds.contains(item.productId.trim())) {
+        return false;
+      }
+      if (preferredBrand.isNotEmpty &&
+          item.brand.trim().toLowerCase() != preferredBrand) {
+        return false;
+      }
+      return true;
+    }).toList();
     final controllers = activeHardware
         .where((item) => item.type == ControlHardwareType.controller)
         .toList(growable: false);
@@ -70,7 +100,10 @@ class ControlHardwareSelector {
     for (final panelEntry in panels.entries) {
       final panelCode = panelEntry.key;
       final settings = project.settingsForPanel(panelCode);
-      final demands = _buildDemands(panelEntry.value);
+      final demands = _buildDemands(
+        panelEntry.value,
+        reservePercent: rules.reservePercent,
+      );
       final standalone = _bestStandalone(
         panelCode: panelCode,
         demands: demands,
@@ -125,7 +158,10 @@ class ControlHardwareSelector {
     return result;
   }
 
-  List<_DemandUnit> _buildDemands(List<DiscoveryDevice> devices) {
+  List<_DemandUnit> _buildDemands(
+    List<DiscoveryDevice> devices, {
+    required int reservePercent,
+  }) {
     final result = <_DemandUnit>[];
     for (final device in devices) {
       for (final point in device.points) {
@@ -139,6 +175,20 @@ class ControlHardwareSelector {
                   point.analogSignal != DiscoveryAnalogSignal.voltage0To10,
             ),
           );
+        }
+      }
+    }
+    final normalizedReserve = reservePercent.clamp(0, 50);
+    if (normalizedReserve > 0 && result.isNotEmpty) {
+      final groups = <String, List<_DemandUnit>>{};
+      for (final demand in result) {
+        final key = '${demand.type.storageKey}:${demand.requires420mA}';
+        groups.putIfAbsent(key, () => []).add(demand);
+      }
+      for (final group in groups.values) {
+        final extra = (group.length * normalizedReserve / 100).ceil();
+        for (var index = 0; index < extra; index++) {
+          result.add(group.first);
         }
       }
     }

@@ -4,9 +4,11 @@ import 'package:intl/intl.dart';
 import '../config/discovery_templates.dart';
 import '../models/control_hardware.dart';
 import '../models/discovery_project.dart';
+import '../models/product.dart';
 import '../services/control_hardware_repository.dart';
 import '../services/control_hardware_selector.dart';
 import '../services/discovery_repository.dart';
+import '../services/product_repository.dart';
 import '../widgets/workspace_background.dart';
 import 'control_hardware_library_page.dart';
 
@@ -15,10 +17,12 @@ class DiscoveryProjectsPage extends StatefulWidget {
     super.key,
     required this.repository,
     required this.hardwareRepository,
+    required this.productRepository,
   });
 
   final DiscoveryRepository repository;
   final ControlHardwareRepository hardwareRepository;
+  final ProductRepository productRepository;
 
   @override
   State<DiscoveryProjectsPage> createState() => _DiscoveryProjectsPageState();
@@ -88,6 +92,7 @@ class _DiscoveryProjectsPageState extends State<DiscoveryProjectsPage> {
           project: source,
           repository: widget.repository,
           hardwareRepository: widget.hardwareRepository,
+          productRepository: widget.productRepository,
         ),
       ),
     );
@@ -134,8 +139,10 @@ class _DiscoveryProjectsPageState extends State<DiscoveryProjectsPage> {
   Future<void> _openHardwareLibrary() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (context) =>
-            ControlHardwareLibraryPage(repository: widget.hardwareRepository),
+        builder: (context) => ControlHardwareLibraryPage(
+          repository: widget.hardwareRepository,
+          productRepository: widget.productRepository,
+        ),
       ),
     );
   }
@@ -376,11 +383,13 @@ class DiscoveryEditorPage extends StatefulWidget {
     required this.project,
     required this.repository,
     required this.hardwareRepository,
+    required this.productRepository,
   });
 
   final DiscoveryProject project;
   final DiscoveryRepository repository;
   final ControlHardwareRepository hardwareRepository;
+  final ProductRepository productRepository;
 
   @override
   State<DiscoveryEditorPage> createState() => _DiscoveryEditorPageState();
@@ -394,6 +403,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
   late List<DiscoveryDevice> _devices;
   late List<DiscoveryPanelSettings> _panelSettings;
   List<ControlHardware> _hardware = const [];
+  List<Product> _products = const [];
   List<PanelHardwareSolution> _hardwareSolutions = const [];
   bool _loadingHardware = true;
   bool _saving = false;
@@ -455,10 +465,16 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
 
   Future<void> _loadHardware() async {
     try {
-      final hardware = await widget.hardwareRepository.fetchAll();
+      final results = await Future.wait([
+        widget.hardwareRepository.fetchAll(),
+        widget.productRepository.fetchProducts(),
+      ]);
+      final hardware = results[0] as List<ControlHardware>;
+      final products = results[1] as List<Product>;
       if (!mounted) return;
       setState(() {
         _hardware = hardware;
+        _products = products;
         _loadingHardware = false;
       });
     } catch (_) {
@@ -657,7 +673,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     });
   }
 
-  void _analyzeHardware() {
+  Future<void> _analyzeHardware() async {
     if (_devices.isEmpty) return;
     if (_hardware.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -667,9 +683,76 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       );
       return;
     }
+    final inStockProductIds = _products
+        .where((product) => product.isActive && product.stockQuantity > 0)
+        .map((product) => product.id)
+        .toSet();
+    final linkedInStockCount = _hardware
+        .where((item) => inStockProductIds.contains(item.productId))
+        .length;
+    final brands =
+        _hardware
+            .where((item) => inStockProductIds.contains(item.productId))
+            .map((item) => item.brand.trim())
+            .where((brand) => brand.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    final decision = await showDialog<_HardwareRuleDecision>(
+      context: context,
+      builder: (context) => _HardwareRuleDialog(
+        panels: _existingPanelCodes,
+        brands: brands,
+        linkedInStockCount: linkedInStockCount,
+      ),
+    );
+    if (decision == null || !mounted) return;
+
+    final panelCodes = _existingPanelCodes;
+    var analysisProject = _currentProject;
+    if (decision.architecture == _HardwareArchitectureRule.panelSettings) {
+      analysisProject = analysisProject.copyWith(
+        panelSettings: [
+          for (final panelCode in panelCodes)
+            _settingsForPanel(panelCode).mode == DiscoveryPanelMode.automatic
+                ? _settingsForPanel(
+                    panelCode,
+                  ).copyWith(mode: DiscoveryPanelMode.controllerRequired)
+                : _settingsForPanel(panelCode),
+        ],
+      );
+    } else {
+      final firstPanel = panelCodes.isEmpty ? '' : panelCodes.first;
+      analysisProject = analysisProject.copyWith(
+        panelSettings: [
+          for (final panelCode in panelCodes)
+            DiscoveryPanelSettings(
+              panelCode: panelCode,
+              mode:
+                  decision.architecture ==
+                          _HardwareArchitectureRule.independentControllers ||
+                      panelCode == firstPanel
+                  ? DiscoveryPanelMode.controllerRequired
+                  : DiscoveryPanelMode.remoteAllowed,
+              parentPanelCode:
+                  decision.architecture ==
+                          _HardwareArchitectureRule.remoteIoPreferred &&
+                      panelCode != firstPanel
+                  ? firstPanel
+                  : '',
+            ),
+        ],
+      );
+    }
     final solutions = const ControlHardwareSelector().select(
-      project: _currentProject,
+      project: analysisProject,
       hardware: _hardware,
+      rules: ControlHardwareSelectionRules(
+        preferredBrand: decision.brand,
+        reservePercent: decision.reservePercent,
+        onlyLinkedProductsInStock: decision.onlyInStock,
+        inStockProductIds: inStockProductIds,
+      ),
     );
     setState(() => _hardwareSolutions = solutions);
   }
@@ -805,14 +888,14 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Otomatik DDC / I/O Çözümü',
+                        'Kurallı DDC / I/O Çözümü',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w900,
                         ),
                       ),
                       const Text(
-                        'Pano rolleri, esnek kanal yetenekleri ve uyumlu '
-                        'modüllere göre hesaplanır.',
+                        'Mimari, marka, stok ve yedek kapasite kararlarını '
+                        'siz verin; sistem uygun cihazları hesaplasın.',
                       ),
                     ],
                   ),
@@ -825,7 +908,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.auto_awesome_rounded),
-                  label: const Text('Ekipmanları Hesapla'),
+                  label: const Text('Kuralları Belirle'),
                 ),
               ],
             ),
@@ -1148,6 +1231,181 @@ class _HardwareSolutionTile extends StatelessWidget {
       );
     }
     return result;
+  }
+}
+
+enum _HardwareArchitectureRule {
+  panelSettings,
+  independentControllers,
+  remoteIoPreferred,
+}
+
+class _HardwareRuleDecision {
+  const _HardwareRuleDecision({
+    required this.architecture,
+    required this.brand,
+    required this.reservePercent,
+    required this.onlyInStock,
+  });
+
+  final _HardwareArchitectureRule architecture;
+  final String brand;
+  final int reservePercent;
+  final bool onlyInStock;
+}
+
+class _HardwareRuleDialog extends StatefulWidget {
+  const _HardwareRuleDialog({
+    required this.panels,
+    required this.brands,
+    required this.linkedInStockCount,
+  });
+
+  final List<String> panels;
+  final List<String> brands;
+  final int linkedInStockCount;
+
+  @override
+  State<_HardwareRuleDialog> createState() => _HardwareRuleDialogState();
+}
+
+class _HardwareRuleDialogState extends State<_HardwareRuleDialog> {
+  _HardwareArchitectureRule _architecture =
+      _HardwareArchitectureRule.panelSettings;
+  String _brand = '';
+  int _reservePercent = 10;
+  bool _onlyInStock = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.rule_rounded),
+          SizedBox(width: 10),
+          Text('DDC / I/O seçim kuralları'),
+        ],
+      ),
+      content: SizedBox(
+        width: 620,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '${widget.panels.length} pano için çözüm hazırlanacak. '
+                'Kararı sistem değil, aşağıdaki mühendislik kuralları verir.',
+              ),
+              const SizedBox(height: 18),
+              DropdownButtonFormField<_HardwareArchitectureRule>(
+                initialValue: _architecture,
+                decoration: const InputDecoration(
+                  labelText: '1. Pano mimarisi',
+                  prefixIcon: Icon(Icons.account_tree_outlined),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: _HardwareArchitectureRule.panelSettings,
+                    child: Text(
+                      'Pano kararlarımı kullan; tanımsızsa kontrolör seç',
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: _HardwareArchitectureRule.independentControllers,
+                    child: Text('Her panoda bağımsız kontrolör olsun'),
+                  ),
+                  DropdownMenuItem(
+                    value: _HardwareArchitectureRule.remoteIoPreferred,
+                    child: Text('İlk pano ana kontrolör, diğerleri Remote I/O'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _architecture = value);
+                },
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                initialValue: _brand,
+                decoration: const InputDecoration(
+                  labelText: '2. Marka tercihi',
+                  prefixIcon: Icon(Icons.factory_outlined),
+                ),
+                items: [
+                  const DropdownMenuItem(
+                    value: '',
+                    child: Text('Marka fark etmez'),
+                  ),
+                  for (final brand in widget.brands)
+                    DropdownMenuItem(value: brand, child: Text(brand)),
+                ],
+                onChanged: (value) => setState(() => _brand = value ?? ''),
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<int>(
+                initialValue: _reservePercent,
+                decoration: const InputDecoration(
+                  labelText: '3. Yedek I/O kapasitesi',
+                  prefixIcon: Icon(Icons.safety_check_outlined),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text('Yedek bırakma')),
+                  DropdownMenuItem(value: 10, child: Text('%10 yedek')),
+                  DropdownMenuItem(value: 20, child: Text('%20 yedek')),
+                  DropdownMenuItem(value: 30, child: Text('%30 yedek')),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _reservePercent = value);
+                },
+              ),
+              const SizedBox(height: 14),
+              SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                title: const Text('Yalnız stokta bulunan cihazları kullan'),
+                subtitle: Text(
+                  '${widget.linkedInStockCount} DDC/I/O ekipmanı stok ürünüyle '
+                  'bağlantılı ve kullanılabilir.',
+                ),
+                value: _onlyInStock,
+                onChanged: (value) => setState(() => _onlyInStock = value),
+              ),
+              if (_onlyInStock && widget.linkedInStockCount == 0)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Stokla bağlantılı DDC/I/O bulunmuyor. Önce kütüphanede '
+                    'cihazı bir stok ürünüyle eşleştirin.',
+                    style: TextStyle(
+                      color: Color(0xFF9D3418),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Vazgeç'),
+        ),
+        FilledButton.icon(
+          onPressed: _onlyInStock && widget.linkedInStockCount == 0
+              ? null
+              : () => Navigator.pop(
+                  context,
+                  _HardwareRuleDecision(
+                    architecture: _architecture,
+                    brand: _brand,
+                    reservePercent: _reservePercent,
+                    onlyInStock: _onlyInStock,
+                  ),
+                ),
+          icon: const Icon(Icons.calculate_outlined),
+          label: const Text('Çözümleri Hesapla'),
+        ),
+      ],
+    );
   }
 }
 

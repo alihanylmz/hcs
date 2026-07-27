@@ -152,6 +152,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         return DiscoveryProjectsPage(
           repository: widget.bootstrap.discoveryRepository,
           hardwareRepository: widget.bootstrap.controlHardwareRepository,
+          productRepository: widget.bootstrap.productRepository,
         );
       case 4:
         return ProfileSettingsPage(

@@ -48,7 +48,6 @@ class _HomePageState extends State<HomePage> {
   double? _minTlFilter;
   double? _maxTlFilter;
   bool _showAdvancedSearch = false;
-  String _selectedCategory = 'Tum Urunler';
   Timer? _refreshTimer;
 
   @override
@@ -67,12 +66,6 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  List<String> get _categories {
-    final categories =
-        _products.map((product) => product.category).toSet().toList()..sort();
-    return ['Tum Urunler', ...categories];
-  }
-
   Map<String, double> get _rateLookup {
     return {'TL': 1, for (final rate in _rates) rate.code: rate.value};
   }
@@ -86,9 +79,6 @@ class _HomePageState extends State<HomePage> {
 
     return _products
         .where((product) {
-          final matchesCategory =
-              _selectedCategory == 'Tum Urunler' ||
-              product.category == _selectedCategory;
           final haystack = [
             product.code,
             product.name,
@@ -119,8 +109,7 @@ class _HomePageState extends State<HomePage> {
           final matchesMinTl = _minTlFilter == null || tlPrice >= _minTlFilter!;
           final matchesMaxTl = _maxTlFilter == null || tlPrice <= _maxTlFilter!;
 
-          return matchesCategory &&
-              matchesQuery &&
+          return matchesQuery &&
               matchesCode &&
               matchesName &&
               matchesBrandModel &&
@@ -507,22 +496,6 @@ class _HomePageState extends State<HomePage> {
                 color: const Color(0xFF657888),
                 fontWeight: FontWeight.w700,
               ),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _categories
-                  .map(
-                    (category) => ChoiceChip(
-                      label: Text(category),
-                      selected: category == _selectedCategory,
-                      onSelected: (_) {
-                        setState(() => _selectedCategory = category);
-                      },
-                    ),
-                  )
-                  .toList(),
             ),
             const SizedBox(height: 12),
             if (expandList)

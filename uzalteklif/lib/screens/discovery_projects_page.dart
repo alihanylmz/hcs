@@ -407,6 +407,15 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     createdBy: widget.project.createdBy ?? widget.repository.currentUserId,
   );
 
+  List<String> get _existingPanelCodes {
+    final codes = <String>[];
+    for (final device in _devices) {
+      final code = device.panelCode.trim().toUpperCase();
+      if (code.isNotEmpty && !codes.contains(code)) codes.add(code);
+    }
+    return codes;
+  }
+
   Future<void> _save() async {
     if (_projectNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -429,9 +438,17 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
   }
 
   Future<void> _addDevice() async {
+    final existingPanelCodes = _existingPanelCodes;
     final result = await showDialog<_DeviceDialogResult>(
       context: context,
-      builder: (context) => const _DeviceDialog(),
+      builder: (context) => _DeviceDialog(
+        panelSuggestions: DiscoveryPanelCodeSuggestions.build(
+          existingPanelCodes,
+        ),
+        initialPanelCode: DiscoveryPanelCodeSuggestions.initialValue(
+          existingPanelCodes,
+        ),
+      ),
     );
     if (result == null) return;
     final device = result.template.instantiate(
@@ -447,7 +464,13 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     final source = _devices[index];
     final result = await showDialog<_DeviceDialogResult>(
       context: context,
-      builder: (context) => _DeviceDialog(existing: source),
+      builder: (context) => _DeviceDialog(
+        existing: source,
+        panelSuggestions: DiscoveryPanelCodeSuggestions.build(
+          _existingPanelCodes,
+        ),
+        initialPanelCode: source.panelCode,
+      ),
     );
     if (result == null) return;
     setState(() {
@@ -574,18 +597,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
             if (_devices.isEmpty)
               _buildEmptyDevices()
             else
-              for (var index = 0; index < _devices.length; index++) ...[
-                _DevicePointCard(
-                  device: _devices[index],
-                  onAddPoint: () => _addPoint(index),
-                  onEditDevice: () => _editDevice(index),
-                  onDeleteDevice: () => _deleteDevice(index),
-                  onEditPoint: (pointIndex) => _editPoint(index, pointIndex),
-                  onDeletePoint: (pointIndex) =>
-                      _deletePoint(index, pointIndex),
-                ),
-                const SizedBox(height: 12),
-              ],
+              _buildGroupedDevices(),
           ],
         ),
       ),
@@ -670,6 +682,173 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       ),
     );
   }
+
+  Widget _buildGroupedDevices() {
+    final panels = <String, List<_IndexedDevice>>{};
+    for (var index = 0; index < _devices.length; index++) {
+      final device = _devices[index];
+      final panelCode = device.panelCode.trim().isEmpty
+          ? 'PANO BELİRTİLMEDİ'
+          : device.panelCode.trim().toUpperCase();
+      panels
+          .putIfAbsent(panelCode, () => <_IndexedDevice>[])
+          .add(_IndexedDevice(index: index, device: device));
+    }
+
+    return Column(
+      children: [
+        for (final panelEntry in panels.entries) ...[
+          _buildPanelGroup(panelEntry.key, panelEntry.value),
+          const SizedBox(height: 14),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPanelGroup(String panelCode, List<_IndexedDevice> devices) {
+    final categories = <String, List<_IndexedDevice>>{};
+    for (final indexed in devices) {
+      categories
+          .putIfAbsent(indexed.device.templateKey, () => <_IndexedDevice>[])
+          .add(indexed);
+    }
+    final panelPointTotal = devices.fold(
+      0,
+      (total, indexed) => total + indexed.device.totalPoints,
+    );
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.developer_board_rounded,
+                        color: Colors.white,
+                        size: 19,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        panelCode,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '${devices.length} cihaz',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const Spacer(),
+                _SmallMetric(label: 'Pano toplamı', value: '$panelPointTotal'),
+              ],
+            ),
+            const SizedBox(height: 16),
+            for (final categoryEntry in categories.entries) ...[
+              _buildDeviceCategory(categoryEntry.key, categoryEntry.value),
+              if (categoryEntry.key != categories.keys.last)
+                const SizedBox(height: 14),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeviceCategory(
+    String templateKey,
+    List<_IndexedDevice> devices,
+  ) {
+    final categoryName =
+        DiscoveryTemplates.findByKey(templateKey)?.categoryName ?? 'Diğer';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      decoration: BoxDecoration(
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+            child: Row(
+              children: [
+                Icon(
+                  _categoryIcon(templateKey),
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  categoryName,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  label: Text('${devices.length}'),
+                ),
+              ],
+            ),
+          ),
+          for (final indexed in devices) ...[
+            _DevicePointCard(
+              device: indexed.device,
+              onAddPoint: () => _addPoint(indexed.index),
+              onEditDevice: () => _editDevice(indexed.index),
+              onDeleteDevice: () => _deleteDevice(indexed.index),
+              onEditPoint: (pointIndex) =>
+                  _editPoint(indexed.index, pointIndex),
+              onDeletePoint: (pointIndex) =>
+                  _deletePoint(indexed.index, pointIndex),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ],
+      ),
+    );
+  }
+
+  IconData _categoryIcon(String templateKey) {
+    return switch (templateKey) {
+      'pump' => Icons.water_rounded,
+      'boiler' => Icons.local_fire_department_rounded,
+      'ahu' => Icons.air_rounded,
+      _ => Icons.precision_manufacturing_rounded,
+    };
+  }
+}
+
+class _IndexedDevice {
+  const _IndexedDevice({required this.index, required this.device});
+
+  final int index;
+  final DiscoveryDevice device;
 }
 
 class _PointSummary extends StatelessWidget {
@@ -911,9 +1090,15 @@ class _DeviceDialogResult {
 }
 
 class _DeviceDialog extends StatefulWidget {
-  const _DeviceDialog({this.existing});
+  const _DeviceDialog({
+    required this.panelSuggestions,
+    required this.initialPanelCode,
+    this.existing,
+  });
 
   final DiscoveryDevice? existing;
+  final List<String> panelSuggestions;
+  final String initialPanelCode;
 
   @override
   State<_DeviceDialog> createState() => _DeviceDialogState();
@@ -921,8 +1106,8 @@ class _DeviceDialog extends StatefulWidget {
 
 class _DeviceDialogState extends State<_DeviceDialog> {
   late DiscoveryDeviceTemplate _template;
-  late final TextEditingController _panelController;
   late final TextEditingController _deviceController;
+  late String _panelCode;
 
   @override
   void initState() {
@@ -932,9 +1117,9 @@ class _DeviceDialogState extends State<_DeviceDialog> {
       (template) => template.key == key,
       orElse: () => DiscoveryTemplates.pump,
     );
-    _panelController = TextEditingController(
-      text: widget.existing?.panelCode ?? '',
-    );
+    _panelCode = widget.existing?.panelCode.trim().isNotEmpty == true
+        ? widget.existing!.panelCode.trim().toUpperCase()
+        : widget.initialPanelCode.trim().toUpperCase();
     _deviceController = TextEditingController(
       text: widget.existing?.deviceCode ?? '',
     );
@@ -942,7 +1127,6 @@ class _DeviceDialogState extends State<_DeviceDialog> {
 
   @override
   void dispose() {
-    _panelController.dispose();
     _deviceController.dispose();
     super.dispose();
   }
@@ -977,11 +1161,76 @@ class _DeviceDialogState extends State<_DeviceDialog> {
                     },
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _panelController,
-              decoration: const InputDecoration(
-                labelText: 'Pano kodu',
-                hintText: 'DDC-01',
+            Autocomplete<String>(
+              initialValue: TextEditingValue(text: _panelCode),
+              optionsBuilder: (textEditingValue) {
+                final query = textEditingValue.text.trim().toLowerCase();
+                if (query.isEmpty) return widget.panelSuggestions;
+                return widget.panelSuggestions.where(
+                  (option) => option.toLowerCase().contains(query),
+                );
+              },
+              onSelected: (value) => _panelCode = value,
+              fieldViewBuilder:
+                  (context, controller, focusNode, onFieldSubmitted) {
+                    return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Pano kodu',
+                        hintText: 'D yazın veya DDC-01 seçin',
+                        prefixIcon: Icon(Icons.developer_board_outlined),
+                        suffixIcon: Icon(Icons.arrow_drop_down_rounded),
+                      ),
+                      onChanged: (value) => _panelCode = value,
+                      onSubmitted: (_) => onFieldSubmitted(),
+                    );
+                  },
+              optionsViewBuilder: (context, onSelected, options) {
+                final values = options.toList(growable: false);
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 8,
+                    borderRadius: BorderRadius.circular(16),
+                    clipBehavior: Clip.antiAlias,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: 520,
+                        maxHeight: 220,
+                      ),
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        shrinkWrap: true,
+                        itemCount: values.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final option = values[index];
+                          return ListTile(
+                            dense: true,
+                            leading: const Icon(Icons.developer_board_rounded),
+                            title: Text(
+                              option,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            onTap: () => onSelected(option),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Mevcut veya sıradaki pano önerilir; özel bir kod da yazabilirsiniz.',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
             const SizedBox(height: 12),
@@ -1006,7 +1255,7 @@ class _DeviceDialogState extends State<_DeviceDialog> {
               context,
               _DeviceDialogResult(
                 template: _template,
-                panelCode: _panelController.text.trim(),
+                panelCode: _panelCode.trim().toUpperCase(),
                 deviceCode: _deviceController.text.trim(),
               ),
             );

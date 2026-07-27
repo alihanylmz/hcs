@@ -66,4 +66,36 @@ void main() {
     expect(freshDevice.totalPoints, 4);
     expect(freshDevice.countFor(DiscoveryPointType.ao), 0);
   });
+
+  test('pano kodu önerileri mevcut ve sıradaki DDC kodlarını üretir', () {
+    final suggestions = DiscoveryPanelCodeSuggestions.build([
+      'DDC-02',
+      'ÖZEL-PANO',
+      'ddc-01',
+      'DDC-02',
+    ]);
+
+    expect(suggestions, [
+      'DDC-01',
+      'DDC-02',
+      'ÖZEL-PANO',
+      'DDC-03',
+      'DDC-04',
+      'DDC-05',
+    ]);
+    expect(
+      DiscoveryPanelCodeSuggestions.initialValue(['DDC-01', 'DDC-02']),
+      'DDC-02',
+    );
+    expect(DiscoveryPanelCodeSuggestions.initialValue(const []), 'DDC-01');
+  });
+
+  test('cihaz şablonları kullanıcıya çoğul kategori adlarını verir', () {
+    expect(DiscoveryTemplates.pump.categoryName, 'Pompalar');
+    expect(DiscoveryTemplates.boiler.categoryName, 'Kazanlar');
+    expect(
+      DiscoveryTemplates.airHandlingUnit.categoryName,
+      'Klima Santralleri',
+    );
+  });
 }

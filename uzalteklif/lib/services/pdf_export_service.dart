@@ -219,7 +219,21 @@ class PdfExportService {
           pw.SizedBox(height: 18),
           _buildPartiesBlock(quote),
           pw.SizedBox(height: 18),
-          _buildTermsBlock(quote, displayNote),
+          _buildTermsBlock(quote),
+          if (displayNote.trim().isNotEmpty) ...[
+            pw.SizedBox(height: 12),
+            _buildOfferNoteHeader(),
+            pw.SizedBox(height: 7),
+            pw.Text(
+              displayNote,
+              overflow: pw.TextOverflow.span,
+              style: const pw.TextStyle(
+                color: _ink,
+                fontSize: 9.5,
+                lineSpacing: 2.5,
+              ),
+            ),
+          ],
           pw.SizedBox(height: 14),
           _buildBankBlock(quote),
           pw.NewPage(),
@@ -1317,7 +1331,7 @@ class PdfExportService {
   // TERMS / NOTE / BANK / SIGNATURE
   // -------------------------------------------------------------------------
 
-  pw.Widget _buildTermsBlock(Quote quote, String displayNote) {
+  pw.Widget _buildTermsBlock(Quote quote) {
     final profile = quote.documentProfile;
     final extraPaymentNote = profile.paymentTerms.trim();
     final paymentLine = extraPaymentNote.isEmpty
@@ -1343,42 +1357,28 @@ class PdfExportService {
           _equalRow([
             for (final b in bullets) _termItem(b.key, b.value),
           ], gap: 10),
-          if (displayNote.trim().isNotEmpty) ...[
-            pw.SizedBox(height: 12),
-            pw.Container(
-              width: double.infinity,
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(
-                color: _chipBg,
-                borderRadius: pw.BorderRadius.circular(3),
-                border: pw.Border.all(color: _hairline),
-              ),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'NOT',
-                    style: pw.TextStyle(
-                      color: _slate,
-                      fontSize: 7.5,
-                      letterSpacing: 1.2,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    displayNote,
-                    style: const pw.TextStyle(
-                      color: _ink,
-                      fontSize: 9.5,
-                      lineSpacing: 2.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ],
+      ),
+    );
+  }
+
+  pw.Widget _buildOfferNoteHeader() {
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: pw.BoxDecoration(
+        color: _chipBg,
+        borderRadius: pw.BorderRadius.circular(3),
+        border: pw.Border.all(color: _hairline),
+      ),
+      child: pw.Text(
+        'TEKLIF NOTLARI',
+        style: pw.TextStyle(
+          color: _slate,
+          fontSize: 8,
+          letterSpacing: 1.1,
+          fontWeight: pw.FontWeight.bold,
+        ),
       ),
     );
   }

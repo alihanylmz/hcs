@@ -19,6 +19,12 @@ void main() {
     const service = PdfExportService();
     final quote = _buildSampleQuote();
 
+    expect(quote.items.first.resolvedProductCode, 'SNS-QAE-2120');
+    expect(
+      quote.items.first.documentDescription,
+      'Kanal Tipi Sicaklik Sensoru - Siemens QAE2120.010',
+    );
+
     final bytes = await service.buildQuotePdfBytes(quote);
 
     expect(bytes.length, greaterThan(5000));
@@ -27,6 +33,26 @@ void main() {
     final outputFile = File('output/pdf/preview_quote.pdf');
     outputFile.parent.createSync(recursive: true);
     await outputFile.writeAsBytes(bytes, flush: true);
+  });
+
+  test('quote item keeps product code as a separate persisted field', () {
+    const item = QuoteLineItem(
+      id: 'line-code',
+      productCode: 'TB3026B',
+      description: 'TB3026B - BACNET FIXED FUNCTION THERMOSTAT - Honeywell',
+      quantity: 1,
+      unit: 'adet',
+      unitPriceTl: 520,
+    );
+
+    final restored = QuoteLineItem.fromJson(item.toJson());
+
+    expect(restored.productCode, 'TB3026B');
+    expect(restored.resolvedProductCode, 'TB3026B');
+    expect(
+      restored.documentDescription,
+      'BACNET FIXED FUNCTION THERMOSTAT - Honeywell',
+    );
   });
 
   test('pdf export service handles a large quote without failing', () async {

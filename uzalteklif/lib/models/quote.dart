@@ -9,11 +9,13 @@ class QuoteLineItem {
     required this.quantity,
     required this.unit,
     required this.unitPriceTl,
+    this.productCode = '',
     this.discountRate = 0,
     this.sectionId = '',
   });
 
   final String id;
+  final String productCode;
   final String description;
   final double quantity;
   final String unit;
@@ -28,8 +30,31 @@ class QuoteLineItem {
 
   double get totalTl => quantity * netUnitPriceTl;
 
+  String get resolvedProductCode {
+    final stored = productCode.trim();
+    if (stored.isNotEmpty) return stored;
+
+    final separator = description.indexOf(' - ');
+    if (separator <= 0) return '';
+    final candidate = description.substring(0, separator).trim();
+    final looksLikeCode =
+        candidate.contains(RegExp(r'[0-9]')) ||
+        candidate.contains(RegExp(r'[-/._]'));
+    return looksLikeCode ? candidate : '';
+  }
+
+  String get documentDescription {
+    final code = resolvedProductCode;
+    if (code.isEmpty) return description;
+    final prefix = '$code - ';
+    return description.startsWith(prefix)
+        ? description.substring(prefix.length).trim()
+        : description;
+  }
+
   Map<String, dynamic> toJson() => {
     'id': id,
+    'product_code': productCode,
     'description': description,
     'quantity': quantity,
     'unit': unit,
@@ -41,6 +66,7 @@ class QuoteLineItem {
   factory QuoteLineItem.fromJson(Map<String, dynamic> json) {
     return QuoteLineItem(
       id: json['id'] as String,
+      productCode: (json['product_code'] as String?)?.trim() ?? '',
       description: json['description'] as String,
       quantity: (json['quantity'] as num).toDouble(),
       unit: json['unit'] as String,

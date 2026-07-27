@@ -313,6 +313,48 @@ class _HomePageState extends State<HomePage> {
         return;
       }
 
+      final existingCodes = _products
+          .map((product) => product.code.trim().toUpperCase())
+          .toSet();
+      final updateCount = result.products
+          .where(
+            (product) =>
+                existingCodes.contains(product.code.trim().toUpperCase()),
+          )
+          .length;
+      final activeCount = result.products
+          .where((product) => product.isActive)
+          .length;
+      if (!mounted) return;
+      final confirmed =
+          await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Malzeme listesini yükle'),
+              content: Text(
+                '${result.products.length} ürün bulundu.\n'
+                '${result.products.length - updateCount} yeni ürün eklenecek, '
+                '$updateCount mevcut ürün güncellenecek.\n'
+                '$activeCount aktif, '
+                '${result.products.length - activeCount} pasif ürün var.'
+                '${result.skippedRows > 0 ? '\n${result.skippedRows} geçersiz satır atlanacak.' : ''}',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('İptal'),
+                ),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  icon: const Icon(Icons.upload_file_rounded),
+                  label: const Text('Yükle'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!confirmed) return;
+
       await widget.productRepository.saveProducts(result.products);
       final refreshed = await widget.productRepository.fetchProducts();
       if (!mounted) return;

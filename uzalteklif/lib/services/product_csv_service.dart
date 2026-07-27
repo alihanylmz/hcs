@@ -62,27 +62,46 @@ class ProductCsvService {
   }) async {
     final file = await openFile(
       acceptedTypeGroups: const [
-        XTypeGroup(label: 'CSV', extensions: ['csv']),
+        XTypeGroup(
+          label: 'CSV / Excel metin listesi',
+          extensions: ['csv', 'tsv', 'txt'],
+        ),
       ],
     );
     if (file == null) return null;
 
     final content = await file.readAsString();
-    final rows = _parseCsv(content);
+    return parseContent(content, existingProducts: existingProducts);
+  }
+
+  ProductCsvImportResult parseContent(
+    String content, {
+    required List<Product> existingProducts,
+  }) {
+    final rows = _parseDelimited(content);
     if (rows.isEmpty) {
       return const ProductCsvImportResult(products: [], skippedRows: 0);
     }
 
     final normalizedHeaders = rows.first
-        .map((header) => header.trim().toLowerCase())
+        .map(_normalizeHeader)
         .toList(growable: false);
+    final hasHeader =
+        normalizedHeaders.contains('code') &&
+        normalizedHeaders.contains('name');
+
+    if (!hasHeader) {
+      return _parseHoneywellPriceList(rows, existingProducts: existingProducts);
+    }
+
     final indexByHeader = <String, int>{
       for (var i = 0; i < normalizedHeaders.length; i++)
         normalizedHeaders[i]: i,
     };
 
     final byCode = {
-      for (final product in existingProducts) product.code.trim(): product,
+      for (final product in existingProducts)
+        product.code.trim().toUpperCase(): product,
     };
 
     var skippedRows = 0;
@@ -104,7 +123,7 @@ class ProductCsvService {
       }
 
       final now = DateTime.now().toUtc();
-      final existing = byCode[code];
+      final existing = byCode[code.toUpperCase()];
       products.add(
         Product(
           id:
@@ -133,6 +152,69 @@ class ProductCsvService {
     }
 
     return ProductCsvImportResult(products: products, skippedRows: skippedRows);
+  }
+
+  ProductCsvImportResult _parseHoneywellPriceList(
+    List<List<String>> rows, {
+    required List<Product> existingProducts,
+  }) {
+    final byCode = {
+      for (final product in existingProducts)
+        product.code.trim().toUpperCase(): product,
+    };
+    final productsByCode = <String, Product>{};
+    var skippedRows = 0;
+
+    for (final row in rows) {
+      if (row.every((cell) => cell.trim().isEmpty)) continue;
+      if (row.length < 7) {
+        skippedRows++;
+        continue;
+      }
+
+      // Honeywell fiyat listesi:
+      // kategori, ürün kodu, açıklama, para birimi, fiyat, marka, durum
+      final category = row[0].trim();
+      final code = row[1].trim();
+      final name = row[2].trim();
+      if (code.isEmpty || name.isEmpty) {
+        skippedRows++;
+        continue;
+      }
+
+      final normalizedCode = code.toUpperCase();
+      final now = DateTime.now().toUtc();
+      final existing = byCode[normalizedCode];
+      productsByCode[normalizedCode] = Product(
+        id:
+            existing?.id ??
+            productsByCode[normalizedCode]?.id ??
+            'product-${now.microsecondsSinceEpoch}-${productsByCode.length}',
+        code: code,
+        name: name,
+        category: _fallback(category, 'Genel'),
+        brand: row[5].trim(),
+        model: code,
+        unit: 'adet',
+        currencyCode: _normalizeCurrency(row[3]),
+        salePrice: _readDouble(row[4]),
+        stockQuantity: existing?.stockQuantity ?? 0,
+        minimumStock: existing?.minimumStock ?? 0,
+        vatRate: existing?.vatRate ?? 20,
+        leadTime: existing?.leadTime ?? '',
+        description: name,
+        technicalSummary: existing?.technicalSummary ?? '',
+        isActive: _readBool(row[6]),
+        updatedAt: now,
+        imagePath: existing?.imagePath ?? '',
+        specifications: existing?.specifications ?? const {},
+      );
+    }
+
+    return ProductCsvImportResult(
+      products: productsByCode.values.toList(growable: false),
+      skippedRows: skippedRows,
+    );
   }
 
   Future<bool> _saveCsv(String csv, String suggestedName) async {
@@ -167,7 +249,8 @@ class ProductCsvService {
     return escaped;
   }
 
-  static List<List<String>> _parseCsv(String input) {
+  static List<List<String>> _parseDelimited(String input) {
+    final delimiter = _detectDelimiter(input);
     final rows = <List<String>>[];
     var row = <String>[];
     final cell = StringBuffer();
@@ -182,7 +265,7 @@ class ProductCsvService {
         } else {
           inQuotes = !inQuotes;
         }
-      } else if (char == ',' && !inQuotes) {
+      } else if (char == delimiter && !inQuotes) {
         row.add(cell.toString());
         cell.clear();
       } else if ((char == '\n' || char == '\r') && !inQuotes) {
@@ -205,6 +288,34 @@ class ProductCsvService {
     return rows;
   }
 
+  static String _detectDelimiter(String input) {
+    final firstLine = input
+        .split(RegExp(r'\r?\n'))
+        .firstWhere((line) => line.trim().isNotEmpty, orElse: () => '');
+    final tabs = '\t'.allMatches(firstLine).length;
+    final semicolons = ';'.allMatches(firstLine).length;
+    final commas = ','.allMatches(firstLine).length;
+    if (tabs > commas && tabs >= semicolons) return '\t';
+    if (semicolons > commas) return ';';
+    return ',';
+  }
+
+  static String _normalizeHeader(String value) {
+    final normalized = value.trim().toLowerCase();
+    return switch (normalized) {
+      'kod' || 'ürün kodu' || 'urun kodu' => 'code',
+      'ürün adı' || 'urun adi' || 'açıklama' || 'aciklama' => 'name',
+      'kategori' => 'category',
+      'marka' => 'brand',
+      'model' => 'model',
+      'birim' => 'unit',
+      'para birimi' || 'döviz' || 'doviz' => 'currency_code',
+      'fiyat' || 'satış fiyatı' || 'satis fiyati' => 'sale_price',
+      'durum' || 'aktif' => 'is_active',
+      _ => normalized,
+    };
+  }
+
   static String _fallback(String value, String fallback) {
     return value.trim().isEmpty ? fallback : value.trim();
   }
@@ -219,7 +330,7 @@ class ProductCsvService {
   }
 
   static double _readDouble(String raw, {double fallback = 0}) {
-    final value = raw.trim();
+    final value = raw.replaceAll(RegExp(r'[^0-9,.\-]'), '').trim();
     if (value.isEmpty) return fallback;
     final normalized = value.contains(',')
         ? value.replaceAll('.', '').replaceAll(',', '.')
@@ -230,6 +341,11 @@ class ProductCsvService {
   static bool _readBool(String raw) {
     final value = raw.trim().toLowerCase();
     if (value.isEmpty) return true;
-    return value == 'true' || value == '1' || value == 'evet' || value == 'yes';
+    return value == 'true' ||
+        value == '1' ||
+        value == 'evet' ||
+        value == 'yes' ||
+        value == 'active' ||
+        value == 'aktif';
   }
 }

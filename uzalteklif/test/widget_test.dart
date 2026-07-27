@@ -28,7 +28,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('UZAL TEKNIK'), findsOneWidget);
-    expect(find.textContaining('Siemens - QAE2120.010'), findsAtLeastNWidgets(1));
+    expect(find.text('Siemens'), findsAtLeastNWidgets(1));
+    expect(find.text('QAE2120.010'), findsAtLeastNWidgets(1));
     expect(find.textContaining('urun listeleniyor'), findsOneWidget);
   });
 }

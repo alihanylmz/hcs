@@ -303,6 +303,23 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     }
   }
 
+  Future<void> _copyQuote() async {
+    await Navigator.of(context).push<Quote>(
+      MaterialPageRoute(
+        builder: (context) => QuoteEditorPage(
+          quoteRepository: widget.quoteRepository,
+          initialRates: widget.initialRates,
+          availableProducts: widget.availableProducts,
+          quoteToCopy: _quote,
+          userProfileRepository: widget.userProfileRepository,
+          cariRepository: widget.cariRepository,
+          ownCompanyRepository: widget.ownCompanyRepository,
+          priceAdjustmentRuleRepository: widget.priceAdjustmentRuleRepository,
+        ),
+      ),
+    );
+  }
+
   Future<void> _exportPdf() async {
     await _runBusy(() async {
       final messenger = ScaffoldMessenger.of(context);
@@ -413,8 +430,19 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
               if (v == 'accepted') _markAccepted();
               if (v == 'arch') _toggleArchive(true);
               if (v == 'unarch') _toggleArchive(false);
+              if (v == 'copy') _copyQuote();
             },
             itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'copy',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.copy_all_rounded),
+                  title: Text('Teklifi kopyala'),
+                ),
+              ),
+              const PopupMenuDivider(),
               _statusMenuItem(QuoteStatus.draft),
               _statusMenuItem(QuoteStatus.pending),
               _statusMenuItem(QuoteStatus.approved),

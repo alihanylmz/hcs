@@ -367,16 +367,18 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktopWide = MediaQuery.of(context).size.width >= 1180;
+    final viewport = MediaQuery.sizeOf(context);
+    final showMarketSidebar = viewport.width >= 1500;
+    final compactLayout = viewport.width < 1500;
 
     return Scaffold(
       body: WorkspaceBackground(
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(compactLayout ? 12 : 20),
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : isDesktopWide
+                : showMarketSidebar
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -501,7 +503,7 @@ class _HomePageState extends State<HomePage> {
             if (expandList)
               Expanded(child: listContent)
             else
-              SizedBox(height: 620, child: listContent),
+              SizedBox(height: _responsiveTableHeight(), child: listContent),
           ],
         ),
       ),
@@ -509,11 +511,13 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildProductToolbar() {
+    final compact = MediaQuery.sizeOf(context).width < 1500;
+    final logoSize = compact ? 64.0 : 98.0;
     final logoAndTitle = Row(
       children: [
         Container(
-          width: 98,
-          height: 98,
+          width: logoSize,
+          height: logoSize,
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
@@ -535,7 +539,7 @@ class _HomePageState extends State<HomePage> {
               color: const Color(0xFF17304C),
               fontSize:
                   (Theme.of(context).textTheme.headlineSmall?.fontSize ?? 24) *
-                  1.75,
+                  (compact ? 1.25 : 1.75),
             ),
           ),
         ),
@@ -587,6 +591,13 @@ class _HomePageState extends State<HomePage> {
         );
       },
     );
+  }
+
+  double _responsiveTableHeight() {
+    final proposed = MediaQuery.sizeOf(context).height - 330;
+    if (proposed < 420) return 420;
+    if (proposed > 700) return 700;
+    return proposed;
   }
 
   Widget _buildSidebar({required bool expandContent}) {
@@ -1161,7 +1172,7 @@ class _AdvancedSearchPanel extends StatelessWidget {
   }
 }
 
-class _ProductTable extends StatelessWidget {
+class _ProductTable extends StatefulWidget {
   const _ProductTable({required this.products, required this.onTap});
 
   final List<Product> products;
@@ -1170,12 +1181,25 @@ class _ProductTable extends StatelessWidget {
   static const _tableWidth = 1390.0;
 
   @override
+  State<_ProductTable> createState() => _ProductTableState();
+}
+
+class _ProductTableState extends State<_ProductTable> {
+  final _horizontalController = ScrollController();
+
+  @override
+  void dispose() {
+    _horizontalController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = constraints.maxWidth > _tableWidth
+        final width = constraints.maxWidth > _ProductTable._tableWidth
             ? constraints.maxWidth
-            : _tableWidth;
+            : _ProductTable._tableWidth;
         return DecoratedBox(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -1184,29 +1208,38 @@ class _ProductTable extends StatelessWidget {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: width,
-                height: constraints.maxHeight,
-                child: Column(
-                  children: [
-                    const _ProductTableHeader(),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: products.length,
-                        itemExtent: 48,
-                        itemBuilder: (context, index) {
-                          final product = products[index];
-                          return _ProductTableRow(
-                            index: index,
-                            product: product,
-                            onTap: () => onTap(product),
-                          );
-                        },
+            child: Scrollbar(
+              controller: _horizontalController,
+              thumbVisibility: true,
+              trackVisibility: true,
+              thickness: 8,
+              scrollbarOrientation: ScrollbarOrientation.bottom,
+              child: SingleChildScrollView(
+                controller: _horizontalController,
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: width,
+                  height: constraints.maxHeight,
+                  child: Column(
+                    children: [
+                      const _ProductTableHeader(),
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: widget.products.length,
+                          itemExtent: 48,
+                          padding: const EdgeInsets.only(bottom: 10),
+                          itemBuilder: (context, index) {
+                            final product = widget.products[index];
+                            return _ProductTableRow(
+                              index: index,
+                              product: product,
+                              onTap: () => widget.onTap(product),
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -321,6 +321,38 @@ on public.discovery_projects (updated_at desc);
 create index if not exists discovery_projects_created_by_idx
 on public.discovery_projects (created_by);
 
+-- ---------------------------------------------------------------------------
+-- CONTROL HARDWARE CATALOG (DDC controllers and flexible I/O modules)
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.control_hardware_catalog (
+  id text primary key,
+  equipment_type text not null default 'controller',
+  brand text not null,
+  model text not null,
+  family text not null default '',
+  product_id text not null default '',
+  channel_pools jsonb not null default '[]'::jsonb,
+  compatibility_mode text not null default 'same_family',
+  connection_protocol text not null default '',
+  compatible_families jsonb not null default '[]'::jsonb,
+  max_expansion_modules integer not null default 0,
+  is_active boolean not null default true,
+  note text not null default '',
+  created_by uuid references auth.users (id) on delete set null,
+  updated_at timestamptz not null default now(),
+  constraint control_hardware_type_check
+    check (equipment_type in ('controller', 'io_module')),
+  constraint control_hardware_max_modules_check
+    check (max_expansion_modules >= 0)
+);
+
+create index if not exists control_hardware_brand_model_idx
+on public.control_hardware_catalog (brand, model);
+
+create index if not exists control_hardware_type_idx
+on public.control_hardware_catalog (equipment_type, is_active);
+
 create or replace function public.quotes_set_creator()
 returns trigger
 language plpgsql
@@ -851,6 +883,7 @@ alter table public.audit_logs enable row level security;
 alter table public.quote_revisions enable row level security;
 alter table public.quote_line_items enable row level security;
 alter table public.discovery_projects enable row level security;
+alter table public.control_hardware_catalog enable row level security;
 
 drop policy if exists "Allow authenticated users to read products" on public.products;
 drop policy if exists "Allow authenticated users to write products" on public.products;
@@ -879,6 +912,10 @@ drop policy if exists "discovery_projects_select_scope" on public.discovery_proj
 drop policy if exists "discovery_projects_insert_authenticated" on public.discovery_projects;
 drop policy if exists "discovery_projects_update_scope" on public.discovery_projects;
 drop policy if exists "discovery_projects_delete_scope" on public.discovery_projects;
+drop policy if exists "control_hardware_select_authenticated" on public.control_hardware_catalog;
+drop policy if exists "control_hardware_insert_authenticated" on public.control_hardware_catalog;
+drop policy if exists "control_hardware_update_scope" on public.control_hardware_catalog;
+drop policy if exists "control_hardware_delete_scope" on public.control_hardware_catalog;
 
 create policy "Users manage own profile"
 on public.user_profiles
@@ -1054,6 +1091,42 @@ with check (
 
 create policy "discovery_projects_delete_scope"
 on public.discovery_projects
+for delete
+to authenticated
+using (
+  public.is_quote_manager()
+  or created_by = auth.uid()
+);
+
+create policy "control_hardware_select_authenticated"
+on public.control_hardware_catalog
+for select
+to authenticated
+using (true);
+
+create policy "control_hardware_insert_authenticated"
+on public.control_hardware_catalog
+for insert
+to authenticated
+with check (
+  created_by is null or created_by = auth.uid()
+);
+
+create policy "control_hardware_update_scope"
+on public.control_hardware_catalog
+for update
+to authenticated
+using (
+  public.is_quote_manager()
+  or created_by = auth.uid()
+)
+with check (
+  public.is_quote_manager()
+  or created_by = auth.uid()
+);
+
+create policy "control_hardware_delete_scope"
+on public.control_hardware_catalog
 for delete
 to authenticated
 using (

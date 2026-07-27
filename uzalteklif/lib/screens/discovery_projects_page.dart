@@ -3,13 +3,20 @@ import 'package:intl/intl.dart';
 
 import '../config/discovery_templates.dart';
 import '../models/discovery_project.dart';
+import '../services/control_hardware_repository.dart';
 import '../services/discovery_repository.dart';
 import '../widgets/workspace_background.dart';
+import 'control_hardware_library_page.dart';
 
 class DiscoveryProjectsPage extends StatefulWidget {
-  const DiscoveryProjectsPage({super.key, required this.repository});
+  const DiscoveryProjectsPage({
+    super.key,
+    required this.repository,
+    required this.hardwareRepository,
+  });
 
   final DiscoveryRepository repository;
+  final ControlHardwareRepository hardwareRepository;
 
   @override
   State<DiscoveryProjectsPage> createState() => _DiscoveryProjectsPageState();
@@ -119,12 +126,26 @@ class _DiscoveryProjectsPageState extends State<DiscoveryProjectsPage> {
     }
   }
 
+  Future<void> _openHardwareLibrary() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (context) =>
+            ControlHardwareLibraryPage(repository: widget.hardwareRepository),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Keşif ve Nokta Analizi'),
         actions: [
+          TextButton.icon(
+            onPressed: _openHardwareLibrary,
+            icon: const Icon(Icons.memory_rounded),
+            label: const Text('DDC/I/O Kütüphanesi'),
+          ),
           IconButton(
             tooltip: 'Yenile',
             onPressed: _loading ? null : _reload,

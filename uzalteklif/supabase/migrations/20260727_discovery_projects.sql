@@ -8,10 +8,14 @@ create table if not exists public.discovery_projects (
   revision text not null default '00',
   prepared_by text not null default '',
   devices jsonb not null default '[]'::jsonb,
+  panel_settings jsonb not null default '[]'::jsonb,
   created_by uuid references auth.users (id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.discovery_projects
+add column if not exists panel_settings jsonb not null default '[]'::jsonb;
 
 create index if not exists discovery_projects_updated_at_idx
 on public.discovery_projects (updated_at desc);

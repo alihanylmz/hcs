@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../config/discovery_templates.dart';
+import '../models/control_hardware.dart';
 import '../models/discovery_project.dart';
 import '../services/control_hardware_repository.dart';
+import '../services/control_hardware_selector.dart';
 import '../services/discovery_repository.dart';
 import '../widgets/workspace_background.dart';
 import 'control_hardware_library_page.dart';
@@ -82,8 +84,11 @@ class _DiscoveryProjectsPageState extends State<DiscoveryProjectsPage> {
         );
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (context) =>
-            DiscoveryEditorPage(project: source, repository: widget.repository),
+        builder: (context) => DiscoveryEditorPage(
+          project: source,
+          repository: widget.repository,
+          hardwareRepository: widget.hardwareRepository,
+        ),
       ),
     );
     if (saved == true && mounted) await _reload();
@@ -370,10 +375,12 @@ class DiscoveryEditorPage extends StatefulWidget {
     super.key,
     required this.project,
     required this.repository,
+    required this.hardwareRepository,
   });
 
   final DiscoveryProject project;
   final DiscoveryRepository repository;
+  final ControlHardwareRepository hardwareRepository;
 
   @override
   State<DiscoveryEditorPage> createState() => _DiscoveryEditorPageState();
@@ -385,6 +392,10 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
   late final TextEditingController _revisionController;
   late final TextEditingController _preparedByController;
   late List<DiscoveryDevice> _devices;
+  late List<DiscoveryPanelSettings> _panelSettings;
+  List<ControlHardware> _hardware = const [];
+  List<PanelHardwareSolution> _hardwareSolutions = const [];
+  bool _loadingHardware = true;
   bool _saving = false;
   int _idCounter = 0;
 
@@ -402,6 +413,10 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       text: widget.project.preparedBy,
     );
     _devices = List<DiscoveryDevice>.from(widget.project.devices);
+    _panelSettings = List<DiscoveryPanelSettings>.from(
+      widget.project.panelSettings,
+    );
+    _loadHardware();
   }
 
   @override
@@ -424,6 +439,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     revision: _revisionController.text.trim(),
     preparedBy: _preparedByController.text.trim(),
     devices: List<DiscoveryDevice>.unmodifiable(_devices),
+    panelSettings: List<DiscoveryPanelSettings>.unmodifiable(_panelSettings),
     updatedAt: DateTime.now(),
     createdBy: widget.project.createdBy ?? widget.repository.currentUserId,
   );
@@ -435,6 +451,20 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       if (code.isNotEmpty && !codes.contains(code)) codes.add(code);
     }
     return codes;
+  }
+
+  Future<void> _loadHardware() async {
+    try {
+      final hardware = await widget.hardwareRepository.fetchAll();
+      if (!mounted) return;
+      setState(() {
+        _hardware = hardware;
+        _loadingHardware = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingHardware = false);
+    }
   }
 
   Future<void> _save() async {
@@ -478,7 +508,11 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       deviceCode: result.deviceCode,
       idBuilder: _buildId,
     );
-    setState(() => _devices.add(device));
+    setState(() {
+      _devices.add(device);
+      _ensurePanelSettings(device.panelCode);
+      _hardwareSolutions = const [];
+    });
   }
 
   Future<void> _editDevice(int index) async {
@@ -500,6 +534,8 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
         panelCode: result.panelCode,
         deviceCode: result.deviceCode,
       );
+      _ensurePanelSettings(result.panelCode);
+      _hardwareSolutions = const [];
     });
   }
 
@@ -528,7 +564,12 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
         ],
       ),
     );
-    if (confirmed == true) setState(() => _devices.removeAt(index));
+    if (confirmed == true) {
+      setState(() {
+        _devices.removeAt(index);
+        _hardwareSolutions = const [];
+      });
+    }
   }
 
   Future<void> _addPoint(int deviceIndex) async {
@@ -542,6 +583,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       _devices[deviceIndex] = device.copyWith(
         points: [...device.points, point],
       );
+      _hardwareSolutions = const [];
     });
   }
 
@@ -557,14 +599,79 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     if (point == null) return;
     final points = List<DiscoveryPoint>.from(device.points);
     points[pointIndex] = point;
-    setState(() => _devices[deviceIndex] = device.copyWith(points: points));
+    setState(() {
+      _devices[deviceIndex] = device.copyWith(points: points);
+      _hardwareSolutions = const [];
+    });
   }
 
   void _deletePoint(int deviceIndex, int pointIndex) {
     final device = _devices[deviceIndex];
     final points = List<DiscoveryPoint>.from(device.points)
       ..removeAt(pointIndex);
-    setState(() => _devices[deviceIndex] = device.copyWith(points: points));
+    setState(() {
+      _devices[deviceIndex] = device.copyWith(points: points);
+      _hardwareSolutions = const [];
+    });
+  }
+
+  void _ensurePanelSettings(String panelCode) {
+    final code = panelCode.trim().toUpperCase();
+    if (code.isEmpty ||
+        _panelSettings.any((settings) => settings.panelCode == code)) {
+      return;
+    }
+    _panelSettings.add(DiscoveryPanelSettings(panelCode: code));
+  }
+
+  DiscoveryPanelSettings _settingsForPanel(String panelCode) {
+    final code = panelCode.trim().toUpperCase();
+    for (final settings in _panelSettings) {
+      if (settings.panelCode == code) return settings;
+    }
+    return DiscoveryPanelSettings(panelCode: code);
+  }
+
+  Future<void> _editPanelSettings(String panelCode) async {
+    final current = _settingsForPanel(panelCode);
+    final result = await showDialog<DiscoveryPanelSettings>(
+      context: context,
+      builder: (context) => _PanelSettingsDialog(
+        settings: current,
+        availableParentPanels: _existingPanelCodes
+            .where((code) => code != panelCode)
+            .toList(growable: false),
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      final index = _panelSettings.indexWhere(
+        (settings) => settings.panelCode == panelCode,
+      );
+      if (index == -1) {
+        _panelSettings.add(result);
+      } else {
+        _panelSettings[index] = result;
+      }
+      _hardwareSolutions = const [];
+    });
+  }
+
+  void _analyzeHardware() {
+    if (_devices.isEmpty) return;
+    if (_hardware.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Önce DDC/I/O kütüphanesine ekipman ekleyin.'),
+        ),
+      );
+      return;
+    }
+    final solutions = const ControlHardwareSelector().select(
+      project: _currentProject,
+      hardware: _hardware,
+    );
+    setState(() => _hardwareSolutions = solutions);
   }
 
   @override
@@ -596,6 +703,8 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
             _buildProjectInformation(),
             const SizedBox(height: 14),
             _PointSummary(project: project),
+            const SizedBox(height: 14),
+            _buildHardwareAnalysis(),
             const SizedBox(height: 18),
             Row(
               children: [
@@ -674,6 +783,60 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHardwareAnalysis() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.hub_rounded),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Otomatik DDC / I/O Çözümü',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const Text(
+                        'Pano rolleri, esnek kanal yetenekleri ve uyumlu '
+                        'modüllere göre hesaplanır.',
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: _loadingHardware ? null : _analyzeHardware,
+                  icon: _loadingHardware
+                      ? const SizedBox.square(
+                          dimension: 17,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.auto_awesome_rounded),
+                  label: const Text('Ekipmanları Hesapla'),
+                ),
+              ],
+            ),
+            if (_hardwareSolutions.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              for (final solution in _hardwareSolutions) ...[
+                _HardwareSolutionTile(solution: solution),
+                if (solution != _hardwareSolutions.last)
+                  const SizedBox(height: 9),
+              ],
+            ],
           ],
         ),
       ),
@@ -780,6 +943,12 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
                   '${devices.length} cihaz',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
+                const SizedBox(width: 10),
+                ActionChip(
+                  avatar: const Icon(Icons.account_tree_outlined, size: 18),
+                  label: Text(_settingsForPanel(panelCode).mode.label),
+                  onPressed: () => _editPanelSettings(panelCode),
+                ),
                 const Spacer(),
                 _SmallMetric(label: 'Pano toplamı', value: '$panelPointTotal'),
               ],
@@ -870,6 +1039,223 @@ class _IndexedDevice {
 
   final int index;
   final DiscoveryDevice device;
+}
+
+class _HardwareSolutionTile extends StatelessWidget {
+  const _HardwareSolutionTile({required this.solution});
+
+  final PanelHardwareSolution solution;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final statusColor = solution.isSatisfied
+        ? const Color(0xFF2C7A5A)
+        : colors.error;
+    final equipment = <String>[
+      if (solution.role == PanelHardwareRole.controller &&
+          solution.controller != null)
+        '1 × ${solution.controller!.displayName}',
+      for (final entry in _moduleCounts(solution.modules).entries)
+        '${entry.value} × ${entry.key}',
+    ];
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: colors.outlineVariant),
+        color: statusColor.withValues(alpha: 0.06),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            solution.isSatisfied
+                ? Icons.check_circle_rounded
+                : Icons.warning_amber_rounded,
+            color: statusColor,
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      solution.panelCode,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Chip(
+                      visualDensity: VisualDensity.compact,
+                      label: Text(solution.role.label),
+                    ),
+                    if (solution.parentPanelCode.isNotEmpty)
+                      Chip(
+                        visualDensity: VisualDensity.compact,
+                        avatar: const Icon(Icons.link_rounded, size: 17),
+                        label: Text('Ana pano: ${solution.parentPanelCode}'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  equipment.isEmpty
+                      ? 'Uygun ekipman kombinasyonu bulunamadı.'
+                      : equipment.join('  •  '),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${solution.matchedPoints} / ${solution.totalDemand} '
+                  'fiziksel nokta karşılandı',
+                ),
+                if (solution.unmetPoints.isNotEmpty)
+                  Text(
+                    'Eksik: ${solution.unmetPoints.entries.map((entry) => '${entry.value} ${entry.key.label}').join(', ')}',
+                    style: TextStyle(
+                      color: colors.error,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                if (solution.warning.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    solution.warning,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Map<String, int> _moduleCounts(List<ControlHardware> modules) {
+    final result = <String, int>{};
+    for (final module in modules) {
+      result.update(
+        module.displayName,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    return result;
+  }
+}
+
+class _PanelSettingsDialog extends StatefulWidget {
+  const _PanelSettingsDialog({
+    required this.settings,
+    required this.availableParentPanels,
+  });
+
+  final DiscoveryPanelSettings settings;
+  final List<String> availableParentPanels;
+
+  @override
+  State<_PanelSettingsDialog> createState() => _PanelSettingsDialogState();
+}
+
+class _PanelSettingsDialogState extends State<_PanelSettingsDialog> {
+  late DiscoveryPanelMode _mode;
+  late String _parentPanelCode;
+
+  @override
+  void initState() {
+    super.initState();
+    _mode = widget.settings.mode;
+    _parentPanelCode =
+        widget.availableParentPanels.contains(widget.settings.parentPanelCode)
+        ? widget.settings.parentPanelCode
+        : '';
+  }
+
+  bool get _canUseRemote =>
+      _mode == DiscoveryPanelMode.remoteAllowed ||
+      _mode == DiscoveryPanelMode.remoteOnly ||
+      _mode == DiscoveryPanelMode.automatic;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('${widget.settings.panelCode} Çözüm Ayarı'),
+      content: SizedBox(
+        width: 540,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<DiscoveryPanelMode>(
+              initialValue: _mode,
+              decoration: const InputDecoration(labelText: 'Pano çalışma rolü'),
+              items: DiscoveryPanelMode.values
+                  .map(
+                    (mode) =>
+                        DropdownMenuItem(value: mode, child: Text(mode.label)),
+                  )
+                  .toList(growable: false),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _mode = value;
+                    if (!_canUseRemote) _parentPanelCode = '';
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _parentPanelCode,
+              decoration: const InputDecoration(
+                labelText: 'Ana kontrolör panosu',
+                helperText:
+                    'Boş bırakılırsa önceki uygun pano otomatik seçilir.',
+              ),
+              items: [
+                const DropdownMenuItem(value: '', child: Text('Otomatik seç')),
+                for (final panelCode in widget.availableParentPanels)
+                  DropdownMenuItem(value: panelCode, child: Text(panelCode)),
+              ],
+              onChanged: _canUseRemote
+                  ? (value) => setState(() => _parentPanelCode = value ?? '')
+                  : null,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Remote I/O çözümü yalnız seçilen ana kontrolörle uyumlu '
+              'modül ve yeterli modül kapasitesi varsa önerilir.',
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Vazgeç'),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(
+              context,
+              DiscoveryPanelSettings(
+                panelCode: widget.settings.panelCode,
+                mode: _mode,
+                parentPanelCode: _canUseRemote ? _parentPanelCode : '',
+              ),
+            );
+          },
+          child: const Text('Uygula'),
+        ),
+      ],
+    );
+  }
 }
 
 class _PointSummary extends StatelessWidget {
@@ -1063,7 +1449,13 @@ class _DevicePointCard extends StatelessWidget {
                         DataCell(
                           Chip(
                             visualDensity: VisualDensity.compact,
-                            label: Text(device.points[index].type.label),
+                            label: Text(
+                              device.points[index].type ==
+                                      DiscoveryPointType.aiActive
+                                  ? '${device.points[index].type.label} · '
+                                        '${device.points[index].analogSignal.label}'
+                                  : device.points[index].type.label,
+                            ),
                           ),
                         ),
                         DataCell(Text('${device.points[index].quantity}')),
@@ -1302,6 +1694,7 @@ class _PointDialogState extends State<_PointDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _quantityController;
   late DiscoveryPointType _type;
+  late DiscoveryAnalogSignal _analogSignal;
 
   @override
   void initState() {
@@ -1311,6 +1704,8 @@ class _PointDialogState extends State<_PointDialog> {
       text: '${widget.existing?.quantity ?? 1}',
     );
     _type = widget.existing?.type ?? DiscoveryPointType.di;
+    _analogSignal =
+        widget.existing?.analogSignal ?? DiscoveryAnalogSignal.unspecified;
   }
 
   @override
@@ -1368,6 +1763,30 @@ class _PointDialogState extends State<_PointDialog> {
                 ),
               ],
             ),
+            if (_type == DiscoveryPointType.aiActive) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<DiscoveryAnalogSignal>(
+                initialValue: _analogSignal,
+                decoration: const InputDecoration(
+                  labelText: 'AI-A sinyal tipi',
+                  helperText:
+                      'Belirtilmedi seçimi güvenli olarak 4–20 mA kabul edilir.',
+                ),
+                items: DiscoveryAnalogSignal.values
+                    .map(
+                      (signal) => DropdownMenuItem(
+                        value: signal,
+                        child: Text(signal.label),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _analogSignal = value);
+                  }
+                },
+              ),
+            ],
           ],
         ),
       ),
@@ -1388,6 +1807,9 @@ class _PointDialogState extends State<_PointDialog> {
                 name: name,
                 type: _type,
                 quantity: quantity,
+                analogSignal: _type == DiscoveryPointType.aiActive
+                    ? _analogSignal
+                    : DiscoveryAnalogSignal.unspecified,
               ),
             );
           },

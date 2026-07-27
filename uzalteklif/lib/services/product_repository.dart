@@ -387,7 +387,7 @@ class ProductRepository {
       return;
     }
 
-    await _client.from('products').upsert(product.toJson());
+    await _client.from('products').upsert(product.toJson(), onConflict: 'code');
   }
 
   Future<void> saveProducts(List<Product> products) async {
@@ -399,9 +399,20 @@ class ProductRepository {
       return;
     }
 
-    await _client
-        .from('products')
-        .upsert(products.map((product) => product.toJson()).toList());
+    // Büyük tedarikçi listelerini tek HTTP isteğine sığdırmaya çalışmak,
+    // ağ/geçit sınırlarında eksik veya başarısız aktarıma yol açabilir.
+    // Kod alanı benzersizdir; küçük paketlerle mevcut ürünleri güncelleyip
+    // eksik olanları güvenli biçimde ekliyoruz.
+    const batchSize = 200;
+    for (var offset = 0; offset < products.length; offset += batchSize) {
+      final proposedEnd = offset + batchSize;
+      final end = proposedEnd < products.length ? proposedEnd : products.length;
+      final batch = products
+          .sublist(offset, end)
+          .map((product) => product.toJson())
+          .toList(growable: false);
+      await _client.from('products').upsert(batch, onConflict: 'code');
+    }
   }
 
   Future<int> applyPriceAdjustmentRule(PriceAdjustmentRule rule) async {
@@ -438,7 +449,12 @@ class ProductRepository {
   }
 
   void _upsertMemoryProduct(Product product) {
-    final index = _memoryProducts.indexWhere((item) => item.id == product.id);
+    final normalizedCode = product.code.trim().toUpperCase();
+    final index = _memoryProducts.indexWhere(
+      (item) =>
+          item.id == product.id ||
+          item.code.trim().toUpperCase() == normalizedCode,
+    );
     if (index == -1) {
       _memoryProducts.add(product);
       return;

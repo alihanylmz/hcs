@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 
 import '../screens/admin_panel_page.dart';
 import '../screens/cariler_page.dart';
+import '../screens/discovery_projects_page.dart';
 import '../screens/home_page.dart';
 import '../screens/profile_settings_page.dart';
 import '../screens/quotes_page.dart';
 import 'bootstrap.dart';
 import '../services/app_update_coordinator.dart';
 
-/// Ana [NavigationRail]: Stok, Teklifler, Cariler, Profil, Yönetim.
+/// Ana [NavigationRail]: Stok, Teklifler, Cariler, Keşif, Profil, Yönetim.
 class MainNavigationShell extends StatefulWidget {
   const MainNavigationShell({
     super.key,
@@ -44,7 +45,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     if (!mounted) return;
     setState(() {
       _isManager = p?.isManager ?? false;
-      if (!_isManager && _index > 3) _index = 3;
+      if (!_isManager && _index > 4) _index = 4;
     });
   }
 
@@ -57,7 +58,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
             selectedIndex: _index,
             onDestinationSelected: (i) {
               setState(() => _index = i);
-              if (i == 1 || i == 2 || i == 3) {
+              if (i == 1 || i == 2 || i == 3 || i == 4) {
                 _refreshRole();
               }
             },
@@ -88,6 +89,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                 icon: Icon(Icons.business_outlined),
                 selectedIcon: Icon(Icons.business_rounded),
                 label: Text('Cariler'),
+              ),
+              const NavigationRailDestination(
+                icon: Icon(Icons.account_tree_outlined),
+                selectedIcon: Icon(Icons.account_tree_rounded),
+                label: Text('Keşif'),
               ),
               const NavigationRailDestination(
                 icon: Icon(Icons.person_outline_rounded),
@@ -143,11 +149,15 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           isManager: _isManager,
         );
       case 3:
+        return DiscoveryProjectsPage(
+          repository: widget.bootstrap.discoveryRepository,
+        );
+      case 4:
         return ProfileSettingsPage(
           repository: widget.bootstrap.userProfileRepository,
           themePreferenceService: widget.bootstrap.themePreferenceService,
         );
-      case 4:
+      case 5:
         if (_isManager) {
           return AdminPanelPage(
             userProfileRepository: widget.bootstrap.userProfileRepository,

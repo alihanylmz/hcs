@@ -354,15 +354,30 @@ class ProductRepository {
       return _sortedMemoryProducts();
     }
 
-    final rows = await _client
-        .from('products')
-        .select()
-        .order('updated_at', ascending: false);
+    const pageSize = 500;
+    final products = <Product>[];
+    var offset = 0;
 
-    return rows
-        .cast<Map<String, dynamic>>()
-        .map(Product.fromJson)
-        .toList(growable: false);
+    while (true) {
+      final rows = await _client
+          .from('products')
+          .select()
+          .order('updated_at', ascending: false)
+          .order('id')
+          .range(offset, offset + pageSize - 1);
+      final page = rows
+          .cast<Map<String, dynamic>>()
+          .map(Product.fromJson)
+          .toList(growable: false);
+      products.addAll(page);
+
+      if (page.length < pageSize) {
+        break;
+      }
+      offset += pageSize;
+    }
+
+    return products;
   }
 
   Future<void> saveProduct(Product product) async {

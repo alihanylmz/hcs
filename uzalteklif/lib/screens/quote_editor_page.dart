@@ -441,7 +441,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
           productId: productId,
           productCode: item.resolvedProductCode,
           priceCurrencyCode: source.displayUnit,
-          description: item.description,
+          description: item.documentDescription,
           unit: item.unit,
           quantity: _formatQuantityForInput(item.quantity),
           unitPriceTl: _formatUnitPriceForEditableInput(
@@ -1297,14 +1297,15 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         _LineDraft(
           productId: product.id,
           productCode: product.code.trim(),
-          priceCurrencyCode: product.currencyCode,
-          description:
-              '${product.code} - ${product.name} - ${product.brand} ${product.model}',
+          priceCurrencyCode: _selectedDisplayUnit,
+          description: product.name.trim().isEmpty
+              ? '${product.brand} ${product.model}'.trim()
+              : product.name.trim(),
           unit: product.unit,
           quantity: '1',
           unitPriceTl: _formatUnitPriceForEditableInput(
             defaultUnitPrice,
-            product.currencyCode,
+            _selectedDisplayUnit,
           ),
           discount: discount,
           sectionId: targetSectionId,
@@ -1561,6 +1562,20 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     return raw * (_rateLookup[draft.priceCurrencyCode] ?? 1);
   }
 
+  void _changeDisplayUnit(String nextUnit) {
+    if (nextUnit == _selectedDisplayUnit) return;
+
+    for (final draft in _items) {
+      final unitPriceTl = _lineUnitPriceTl(draft);
+      draft.unitPriceController.text = _formatUnitPriceForEditableInput(
+        unitPriceTl,
+        nextUnit,
+      );
+      draft.priceCurrencyCode = nextUnit;
+    }
+    setState(() => _selectedDisplayUnit = nextUnit);
+  }
+
   String _formatTotalForDisplay(double total, String unitCode) {
     final formatter = NumberFormat.currency(
       locale: 'tr_TR',
@@ -1569,7 +1584,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         'EURTRY' => 'EUR ',
         _ => 'TL ',
       },
-      decimalDigits: unitCode == 'TL' ? 2 : 4,
+      decimalDigits: 2,
     );
     return formatter.format(total);
   }
@@ -1582,7 +1597,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 1180;
+    final isWide = MediaQuery.of(context).size.width >= 1450;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Teklif Olustur')),
@@ -1596,13 +1611,10 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                   ? Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          flex: 8,
-                          child: _buildFormPanel(expandList: true),
-                        ),
+                        Expanded(child: _buildFormPanel(expandList: true)),
                         const SizedBox(width: 16),
-                        Expanded(
-                          flex: 2,
+                        SizedBox(
+                          width: 300,
                           child: _buildSummaryPanel(expandActions: true),
                         ),
                       ],
@@ -1727,51 +1739,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
           _buildTopFormSections(),
         ],
         const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Secilen Kalemler',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
-            ),
-            Text(
-              '${_items.length} kalem',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF5B6F7F),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              _formatTlForDisplayUnit(_visibleSubtotalTl),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF17304C),
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(width: 12),
-            FilledButton.icon(
-              onPressed: _openMaterialListDialog,
-              icon: const Icon(Icons.inventory_2_outlined, size: 18),
-              label: const Text('Malzeme Listesi'),
-            ),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: _addCustomLine,
-              icon: const Icon(Icons.edit_note_rounded),
-              label: const Text('Ozel Kalem'),
-            ),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: () => _openHiddenCostDialog(),
-              icon: const Icon(Icons.visibility_off_outlined, size: 18),
-              label: const Text('Gizli Yukleme'),
-            ),
-          ],
-        ),
+        _buildLinesToolbar(),
         const SizedBox(height: 12),
         if (widget.availableProducts.isEmpty)
           Container(
@@ -1807,6 +1775,81 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     );
   }
 
+  Widget _buildLinesToolbar() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final title = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Teklif Kalemleri',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEEF3F8),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                '${_items.length} kalem',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFF17304C),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              _formatTlForDisplayUnit(_visibleSubtotalTl),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: const Color(0xFF17304C),
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        );
+        final actions = Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed: _openMaterialListDialog,
+              icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+              label: const Text('Ürün Ekle'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _addCustomLine,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Özel Kalem'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _openHiddenCostDialog(),
+              icon: const Icon(Icons.visibility_off_outlined, size: 18),
+              label: const Text('Gizli Maliyet'),
+            ),
+          ],
+        );
+
+        if (constraints.maxWidth < 980) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [title, const SizedBox(height: 12), actions],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: title),
+            actions,
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildFormHeader() {
     final codePlate = _QuoteCodePlate(code: _visibleQuoteCode);
     final collapseTooltip = _infoCollapsed
@@ -1814,13 +1857,14 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         : 'Bilgileri kuculterek kalem alanina odaklan';
     final toggleButton = Tooltip(
       message: collapseTooltip,
-      child: IconButton.filledTonal(
+      child: FilledButton.tonalIcon(
         onPressed: () => setState(() => _infoCollapsed = !_infoCollapsed),
         icon: Icon(
           _infoCollapsed
-              ? Icons.unfold_more_rounded
-              : Icons.unfold_less_rounded,
+              ? Icons.edit_note_rounded
+              : Icons.keyboard_arrow_up_rounded,
         ),
+        label: Text(_infoCollapsed ? 'Bilgileri Düzenle' : 'Kalemlere Dön'),
       ),
     );
 
@@ -1848,15 +1892,15 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             const SizedBox(height: 8),
             Text(
               _infoCollapsed
-                  ? 'Bilgi bolumu kapali. Asagida kalem listesi genisletildi.'
-                  : 'Teklif kodu ustte sabit kalir; ayni kod PDF ve Excel dosya adina da yansir.',
+                  ? 'Temel bilgileri buradan gir; ayrıntılar gerektiğinde açılır.'
+                  : 'Firma, yetkili, not ve ticari koşulları düzenliyorsun.',
               style: Theme.of(
                 context,
               ).textTheme.bodyLarge?.copyWith(color: const Color(0xFF5B6F7F)),
             ),
             if (_infoCollapsed) ...[
-              const SizedBox(height: 10),
-              _buildCollapsedInfoSummary(),
+              const SizedBox(height: 14),
+              _buildQuickInfoFields(),
             ],
           ],
         );
@@ -1880,6 +1924,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildCollapsedInfoSummary() {
     final company = _customerCompanyController.text.trim();
     final contact = _customerNameController.text.trim();
@@ -1921,6 +1966,66 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildQuickInfoFields() {
+    Widget companyField() => TextFormField(
+      controller: _customerCompanyController,
+      decoration: const InputDecoration(
+        labelText: 'Müşteri Firma',
+        prefixIcon: Icon(Icons.business_outlined),
+        isDense: true,
+      ),
+      validator: (value) =>
+          value == null || value.trim().isEmpty ? 'Zorunlu alan' : null,
+      onChanged: (_) => setState(() {}),
+    );
+    Widget contactField() => TextFormField(
+      controller: _customerNameController,
+      decoration: const InputDecoration(
+        labelText: 'Yetkili',
+        prefixIcon: Icon(Icons.person_outline_rounded),
+        isDense: true,
+      ),
+      validator: (value) =>
+          value == null || value.trim().isEmpty ? 'Zorunlu alan' : null,
+    );
+    Widget topicField() => TextFormField(
+      controller: _titleController,
+      decoration: const InputDecoration(
+        labelText: 'Teklif Konusu',
+        prefixIcon: Icon(Icons.subject_rounded),
+        isDense: true,
+      ),
+      validator: (value) =>
+          value == null || value.trim().isEmpty ? 'Zorunlu alan' : null,
+      onChanged: (_) => setState(() {}),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 850) {
+          return Column(
+            children: [
+              companyField(),
+              const SizedBox(height: 10),
+              contactField(),
+              const SizedBox(height: 10),
+              topicField(),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: companyField()),
+            const SizedBox(width: 10),
+            Expanded(child: contactField()),
+            const SizedBox(width: 10),
+            Expanded(child: topicField()),
+          ],
+        );
+      },
     );
   }
 
@@ -2327,7 +2432,6 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   /// Aktif chip bir sonraki eklenecek urunun hangi kovaya gidecegini belirler.
   Widget _buildCategoryBar() {
     const ink = Color(0xFF17304C);
-    const slate = Color(0xFF5B6F7F);
 
     final uncategorizedCount = _uncategorizedItemCount;
     final chips = <Widget>[
@@ -2349,49 +2453,50 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     ];
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         color: Colors.white.withValues(alpha: 0.66),
         border: Border.all(color: const Color(0xFFD7DEE6)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              const Icon(Icons.category_rounded, size: 18, color: ink),
-              const SizedBox(width: 8),
-              Text(
-                'Kategoriler',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: ink,
-                ),
+          const Icon(Icons.my_location_rounded, size: 18, color: ink),
+          const SizedBox(width: 8),
+          Tooltip(
+            message: 'Yeni eklenen ürünler seçili kategoriye yerleştirilir.',
+            child: Text(
+              'Hedef kategori',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: ink,
               ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: _addSection,
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Kategori Ekle'),
-                style: TextButton.styleFrom(
-                  foregroundColor: ink,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'Secili kategori bir sonraki eklenecek kalemin grubunu belirler.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: slate,
-              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 10),
-          Wrap(spacing: 8, runSpacing: 8, children: chips),
+          const SizedBox(width: 12),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (var i = 0; i < chips.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    chips[i],
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton.icon(
+            onPressed: _addSection,
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Kategori'),
+            style: TextButton.styleFrom(
+              foregroundColor: ink,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
         ],
       ),
     );
@@ -2649,7 +2754,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                           _lineNetTotal(draft),
                         ),
                         displayUnit: draft.priceCurrencyCode,
-                        useDesktopLayout: expandList,
+                        useDesktopLayout: true,
                         discountLocked: _isBulkDiscountEnabled(group),
                         numberValidator: _numberValidator,
                         discountValidator: _discountValidator,
@@ -3240,7 +3345,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
               .toList(),
           onChanged: (value) {
             if (value != null) {
-              setState(() => _selectedDisplayUnit = value);
+              _changeDisplayUnit(value);
             }
           },
         ),
@@ -3694,7 +3799,7 @@ class _LineDraft {
 
   final String? productId;
   final String productCode;
-  final String priceCurrencyCode;
+  String priceCurrencyCode;
   final TextEditingController descriptionController;
   final TextEditingController unitController;
   final TextEditingController quantityController;
@@ -3826,31 +3931,39 @@ class _QuoteCodePlate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
         color: const Color(0xFFF5F8FB),
         border: Border.all(color: const Color(0xFFD7DEE6)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            'Teklif Kodu',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: const Color(0xFF5B6F7F),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            code,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: const Color(0xFF17304C),
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.2,
+          const Icon(Icons.tag_rounded, size: 19, color: Color(0xFF5B6F7F)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Teklif Kodu',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: const Color(0xFF5B6F7F),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  code,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF17304C),
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -4152,12 +4265,15 @@ class _QuoteLineEditorRow extends StatelessWidget {
     final rowKey =
         draft.productId ?? draft.descriptionController.hashCode.toString();
     final productMeta = product == null
-        ? 'Ozel kalem'
-        : '${product!.code} - ${product!.brand} ${product!.model}';
+        ? 'Özel kalem'
+        : [
+            product!.brand,
+            product!.model,
+          ].where((value) => value.trim().isNotEmpty).join(' · ');
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final showDesktopRow = useDesktopLayout && constraints.maxWidth >= 720;
+        final showDesktopRow = useDesktopLayout && constraints.maxWidth >= 1120;
 
         if (!showDesktopRow) {
           return Container(
@@ -4172,7 +4288,24 @@ class _QuoteLineEditorRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    SizedBox(
+                      width: 160,
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Ürün Kodu',
+                          isDense: true,
+                        ),
+                        child: Text(
+                          draft.productCode.isEmpty ? '—' : draft.productCode,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: TextFormField(
                         controller: draft.descriptionController,
@@ -4265,7 +4398,7 @@ class _QuoteLineEditorRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Satir net: $lineTotalText',
+                  'Satır toplamı: $lineTotalText',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: const Color(0xFF17304C),
                     fontWeight: FontWeight.w800,
@@ -4296,6 +4429,22 @@ class _QuoteLineEditorRow extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: const Color(0xFF5B6F7F),
                     fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const _SheetDivider(),
+              SizedBox(
+                width: 160,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    draft.productCode.isEmpty ? '—' : draft.productCode,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF17304C),
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
               ),
@@ -4469,7 +4618,7 @@ class _QuoteLineSheetHeader extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 720) return const SizedBox.shrink();
+        if (constraints.maxWidth < 1120) return const SizedBox.shrink();
 
         return Container(
           height: 36,
@@ -4480,6 +4629,8 @@ class _QuoteLineSheetHeader extends StatelessWidget {
           child: Row(
             children: [
               cell('#', 38, align: TextAlign.center),
+              const _SheetDivider(),
+              cell('Ürün kodu', 160),
               const _SheetDivider(),
               Expanded(
                 child: Padding(
@@ -4500,7 +4651,7 @@ class _QuoteLineSheetHeader extends StatelessWidget {
               const _SheetDivider(),
               cell('Isk. %', 104, align: TextAlign.right),
               const _SheetDivider(),
-              cell('Satir net', 132, align: TextAlign.right),
+              cell('Satır toplamı', 132, align: TextAlign.right),
               const _SheetDivider(),
               const SizedBox(width: 96),
             ],

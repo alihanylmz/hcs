@@ -245,4 +245,35 @@ void main() {
     );
     expect(restored.settingsForPanel('DDC-02').parentPanelCode, 'DDC-01');
   });
+
+  test('stok ve marka kuralları aday kontrolörleri sınırlar', () {
+    final input = project(
+      devices: [
+        device('pump', 'DDC-01', [
+          point('di', DiscoveryPointType.di, 3),
+          point('do', DiscoveryPointType.doOutput, 1),
+        ]),
+      ],
+    );
+    final abb = ControlHardwareDefaults.abbFbxi8r8.copyWith(
+      productId: 'stock-abb',
+    );
+    final honeywell = ControlHardwareDefaults.honeywellUnitary16.copyWith(
+      productId: 'stock-honeywell',
+    );
+
+    final result = const ControlHardwareSelector().select(
+      project: input,
+      hardware: [abb, honeywell],
+      rules: const ControlHardwareSelectionRules(
+        preferredBrand: 'Honeywell',
+        reservePercent: 0,
+        onlyLinkedProductsInStock: true,
+        inStockProductIds: {'stock-honeywell'},
+      ),
+    );
+
+    expect(result.single.isSatisfied, true);
+    expect(result.single.controller?.brand, 'Honeywell');
+  });
 }

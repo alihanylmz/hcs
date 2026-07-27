@@ -2,13 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../models/control_hardware.dart';
 import '../models/discovery_project.dart';
+import '../models/product.dart';
 import '../services/control_hardware_repository.dart';
+import '../services/product_repository.dart';
 import '../widgets/workspace_background.dart';
 
 class ControlHardwareLibraryPage extends StatefulWidget {
-  const ControlHardwareLibraryPage({super.key, required this.repository});
+  const ControlHardwareLibraryPage({
+    super.key,
+    required this.repository,
+    this.productRepository,
+  });
 
   final ControlHardwareRepository repository;
+  final ProductRepository? productRepository;
 
   @override
   State<ControlHardwareLibraryPage> createState() =>
@@ -18,6 +25,7 @@ class ControlHardwareLibraryPage extends StatefulWidget {
 class _ControlHardwareLibraryPageState
     extends State<ControlHardwareLibraryPage> {
   List<ControlHardware> _items = const [];
+  List<Product> _products = const [];
   bool _loading = true;
   String _query = '';
   ControlHardwareType? _typeFilter;
@@ -48,9 +56,12 @@ class _ControlHardwareLibraryPageState
     setState(() => _loading = true);
     try {
       final items = await widget.repository.fetchAll();
+      final products =
+          await widget.productRepository?.fetchProducts() ?? const <Product>[];
       if (!mounted) return;
       setState(() {
         _items = items;
+        _products = products;
         _loading = false;
       });
     } catch (error) {
@@ -73,6 +84,7 @@ class _ControlHardwareLibraryPageState
         existing: existing,
         initialType: initialType,
         createdBy: widget.repository.currentUserId,
+        products: _products,
       ),
     );
     if (item == null) return;
@@ -227,13 +239,14 @@ class _ControlHardwareLibraryPageState
             crossAxisCount: columns,
             crossAxisSpacing: 14,
             mainAxisSpacing: 14,
-            mainAxisExtent: 330,
+            mainAxisExtent: 380,
           ),
           itemCount: items.length,
           itemBuilder: (context, index) {
             final item = items[index];
             return _HardwareCard(
               item: item,
+              product: _productFor(item.productId),
               onEdit: () => _edit(existing: item),
               onDelete: () => _delete(item),
             );
@@ -242,16 +255,25 @@ class _ControlHardwareLibraryPageState
       },
     );
   }
+
+  Product? _productFor(String productId) {
+    for (final product in _products) {
+      if (product.id == productId) return product;
+    }
+    return null;
+  }
 }
 
 class _HardwareCard extends StatelessWidget {
   const _HardwareCard({
     required this.item,
+    this.product,
     required this.onEdit,
     required this.onDelete,
   });
 
   final ControlHardware item;
+  final Product? product;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -326,6 +348,15 @@ class _HardwareCard extends StatelessWidget {
                     label: Text('${item.physicalChannelCount} fiziksel kanal'),
                   ),
                   if (!item.isActive) const Chip(label: Text('Pasif')),
+                  if (product != null)
+                    Chip(
+                      avatar: const Icon(Icons.inventory_2_outlined, size: 17),
+                      label: Text(
+                        '${product!.code} · ${product!.formattedStock}',
+                      ),
+                    ),
+                  if (item.productId.isEmpty)
+                    const Chip(label: Text('Stok ürünü bağlı değil')),
                 ],
               ),
               const SizedBox(height: 10),
@@ -396,16 +427,138 @@ class _HardwareCard extends StatelessWidget {
   }
 }
 
+class _StockProductPickerDialog extends StatefulWidget {
+  const _StockProductPickerDialog({
+    required this.products,
+    required this.selectedProductId,
+  });
+
+  final List<Product> products;
+  final String selectedProductId;
+
+  @override
+  State<_StockProductPickerDialog> createState() =>
+      _StockProductPickerDialogState();
+}
+
+class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
+  String _query = '';
+
+  List<Product> get _visibleProducts {
+    final query = _query.trim().toLowerCase();
+    return widget.products
+        .where((product) {
+          if (!product.isActive || product.stockQuantity <= 0) return false;
+          if (query.isEmpty) return true;
+          return [
+            product.code,
+            product.name,
+            product.brand,
+            product.model,
+            product.category,
+          ].join(' ').toLowerCase().contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final products = _visibleProducts;
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 820, maxHeight: 720),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.inventory_2_outlined),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Stoktan cihaz seç',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Ürün kodu, adı, marka veya model ara',
+                  prefixIcon: Icon(Icons.search_rounded),
+                ),
+                onChanged: (value) => setState(() => _query = value),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${products.length} stok ürünü',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: products.isEmpty
+                    ? const Center(
+                        child: Text('Aramaya uygun stok ürünü bulunamadı.'),
+                      )
+                    : ListView.separated(
+                        itemCount: products.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final product = products[index];
+                          final selected =
+                              product.id == widget.selectedProductId;
+                          return ListTile(
+                            selected: selected,
+                            leading: Icon(
+                              selected
+                                  ? Icons.check_circle_rounded
+                                  : Icons.inventory_2_outlined,
+                            ),
+                            title: Text(
+                              '${product.code} · ${product.name}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              '${product.brand} ${product.model} · '
+                              '${product.formattedStock} · '
+                              '${product.formattedSalePrice}',
+                            ),
+                            onTap: () => Navigator.pop(context, product),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _HardwareEditorDialog extends StatefulWidget {
   const _HardwareEditorDialog({
     required this.initialType,
     required this.createdBy,
+    required this.products,
     this.existing,
   });
 
   final ControlHardware? existing;
   final ControlHardwareType initialType;
   final String? createdBy;
+  final List<Product> products;
 
   @override
   State<_HardwareEditorDialog> createState() => _HardwareEditorDialogState();
@@ -487,6 +640,32 @@ class _HardwareEditorDialogState extends State<_HardwareEditorDialog> {
     final removed = _pools.removeAt(index);
     removed.dispose();
     setState(() {});
+  }
+
+  Product? get _selectedProduct {
+    final productId = _productIdController.text.trim();
+    for (final product in widget.products) {
+      if (product.id == productId) return product;
+    }
+    return null;
+  }
+
+  Future<void> _pickStockProduct() async {
+    final product = await showDialog<Product>(
+      context: context,
+      builder: (context) => _StockProductPickerDialog(
+        products: widget.products,
+        selectedProductId: _productIdController.text.trim(),
+      ),
+    );
+    if (product == null) return;
+    setState(() {
+      _productIdController.text = product.id;
+      _brandController.text = product.brand;
+      _modelController.text = product.model.trim().isEmpty
+          ? product.code
+          : product.model;
+    });
   }
 
   void _submit() {
@@ -664,12 +843,33 @@ class _HardwareEditorDialogState extends State<_HardwareEditorDialog> {
             label: 'Aile/Seri',
             hint: 'FBXi',
           ),
-          _SizedField(
-            width: 250,
-            controller: _productIdController,
-            label: 'Ürün kataloğu ID',
-            hint: 'Opsiyonel',
+          SizedBox(
+            width: 360,
+            child: OutlinedButton.icon(
+              onPressed: widget.products.isEmpty ? null : _pickStockProduct,
+              icon: const Icon(Icons.inventory_2_outlined),
+              label: Text(
+                _selectedProduct == null
+                    ? 'Stoktan ürün bağla'
+                    : '${_selectedProduct!.code} · '
+                          '${_selectedProduct!.formattedStock}',
+                overflow: TextOverflow.ellipsis,
+              ),
+              style: OutlinedButton.styleFrom(
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 18,
+                ),
+              ),
+            ),
           ),
+          if (_selectedProduct != null)
+            IconButton(
+              tooltip: 'Stok bağlantısını kaldır',
+              onPressed: () => setState(_productIdController.clear),
+              icon: const Icon(Icons.link_off_rounded),
+            ),
           if (_type == ControlHardwareType.controller)
             _SizedField(
               width: 210,

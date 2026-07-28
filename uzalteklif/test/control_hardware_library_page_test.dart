@@ -20,6 +20,7 @@ void main() {
         theme: AppTheme.light,
         home: ControlHardwareLibraryPage(
           repository: ControlHardwareRepository(),
+          productRepository: _FakeProductRepository(const []),
         ),
       ),
     );
@@ -89,6 +90,48 @@ void main() {
       expect(find.textContaining('SNS-1'), findsNWidgets(2));
     },
   );
+
+  testWidgets('boş ilk yüklemeden sonra stok butonu ürünleri yeniden alır', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(1440, 960));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final repository = _RetryProductRepository([
+      _product(
+        id: 'retry-controller',
+        code: 'CTRL-RETRY',
+        name: 'Yeniden Yüklenen Kontrolör',
+        category: 'Kontrolörler',
+        stockQuantity: 0,
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: ControlHardwareLibraryPage(
+          repository: ControlHardwareRepository(),
+          productRepository: repository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Kontrolör Ekle'));
+    await tester.pumpAndSettle();
+    final stockButton = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Stoktan ürün bağla'),
+    );
+    expect(stockButton.onPressed, isNotNull);
+
+    await tester.tap(find.text('Stoktan ürün bağla'));
+    await tester.pumpAndSettle();
+
+    expect(repository.fetchCount, 2);
+    expect(find.text('Stoktan cihaz seç'), findsOneWidget);
+    expect(find.textContaining('CTRL-RETRY'), findsNWidgets(2));
+  });
 }
 
 class _FakeProductRepository extends ProductRepository {
@@ -98,6 +141,19 @@ class _FakeProductRepository extends ProductRepository {
 
   @override
   Future<List<Product>> fetchProducts() async => products;
+}
+
+class _RetryProductRepository extends ProductRepository {
+  _RetryProductRepository(this.products);
+
+  final List<Product> products;
+  int fetchCount = 0;
+
+  @override
+  Future<List<Product>> fetchProducts() async {
+    fetchCount += 1;
+    return fetchCount == 1 ? const [] : products;
+  }
 }
 
 Product _product({

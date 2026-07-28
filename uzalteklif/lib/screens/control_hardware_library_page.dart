@@ -12,11 +12,11 @@ class ControlHardwareLibraryPage extends StatefulWidget {
   const ControlHardwareLibraryPage({
     super.key,
     required this.repository,
-    this.productRepository,
+    required this.productRepository,
   });
 
   final ControlHardwareRepository repository;
-  final ProductRepository? productRepository;
+  final ProductRepository productRepository;
 
   @override
   State<ControlHardwareLibraryPage> createState() =>
@@ -57,8 +57,7 @@ class _ControlHardwareLibraryPageState
     setState(() => _loading = true);
     try {
       final items = await widget.repository.fetchAll();
-      final products =
-          await widget.productRepository?.fetchProducts() ?? const <Product>[];
+      final products = await widget.productRepository.fetchProducts();
       if (!mounted) return;
       setState(() {
         _items = items;
@@ -86,6 +85,7 @@ class _ControlHardwareLibraryPageState
         initialType: initialType,
         createdBy: widget.repository.currentUserId,
         products: _products,
+        loadProducts: _loadProductsForEditor,
       ),
     );
     if (item == null) return;
@@ -98,6 +98,14 @@ class _ControlHardwareLibraryPageState
         context,
       ).showSnackBar(SnackBar(content: Text('Ekipman kaydedilemedi: $error')));
     }
+  }
+
+  Future<List<Product>> _loadProductsForEditor() async {
+    final products = await widget.productRepository.fetchProducts();
+    if (mounted) {
+      setState(() => _products = products);
+    }
+    return products;
   }
 
   Future<void> _delete(ControlHardware item) async {
@@ -617,6 +625,7 @@ class _HardwareEditorDialog extends StatefulWidget {
     required this.initialType,
     required this.createdBy,
     required this.products,
+    required this.loadProducts,
     this.existing,
   });
 
@@ -624,6 +633,7 @@ class _HardwareEditorDialog extends StatefulWidget {
   final ControlHardwareType initialType;
   final String? createdBy;
   final List<Product> products;
+  final Future<List<Product>> Function() loadProducts;
 
   @override
   State<_HardwareEditorDialog> createState() => _HardwareEditorDialogState();
@@ -642,6 +652,8 @@ class _HardwareEditorDialogState extends State<_HardwareEditorDialog> {
   late final TextEditingController _compatibleFamiliesController;
   late final TextEditingController _noteController;
   late final List<_ChannelPoolDraft> _pools;
+  late List<Product> _products;
+  bool _loadingProducts = false;
   int _idCounter = 0;
   String _error = '';
 
@@ -653,6 +665,7 @@ class _HardwareEditorDialogState extends State<_HardwareEditorDialog> {
     _compatibilityMode =
         existing?.compatibilityMode ?? HardwareCompatibilityMode.sameFamily;
     _isActive = existing?.isActive ?? true;
+    _products = List<Product>.from(widget.products);
     _brandController = TextEditingController(text: existing?.brand ?? '');
     _modelController = TextEditingController(text: existing?.model ?? '');
     _familyController = TextEditingController(text: existing?.family ?? '');
@@ -709,17 +722,40 @@ class _HardwareEditorDialogState extends State<_HardwareEditorDialog> {
 
   Product? get _selectedProduct {
     final productId = _productIdController.text.trim();
-    for (final product in widget.products) {
+    for (final product in _products) {
       if (product.id == productId) return product;
     }
     return null;
   }
 
   Future<void> _pickStockProduct() async {
+    if (_products.isEmpty) {
+      setState(() => _loadingProducts = true);
+      try {
+        final products = await widget.loadProducts();
+        if (!mounted) return;
+        setState(() => _products = List<Product>.from(products));
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Stok ürünleri alınamadı: $error')),
+        );
+        return;
+      } finally {
+        if (mounted) setState(() => _loadingProducts = false);
+      }
+    }
+    if (_products.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Stok kataloğunda ürün bulunamadı.')),
+      );
+      return;
+    }
     final product = await showDialog<Product>(
       context: context,
       builder: (context) => _StockProductPickerDialog(
-        products: widget.products,
+        products: _products,
         selectedProductId: _productIdController.text.trim(),
         hardwareType: _type,
       ),
@@ -913,10 +949,17 @@ class _HardwareEditorDialogState extends State<_HardwareEditorDialog> {
           SizedBox(
             width: 360,
             child: OutlinedButton.icon(
-              onPressed: widget.products.isEmpty ? null : _pickStockProduct,
-              icon: const Icon(Icons.inventory_2_outlined),
+              onPressed: _loadingProducts ? null : _pickStockProduct,
+              icon: _loadingProducts
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.inventory_2_outlined),
               label: Text(
-                _selectedProduct == null
+                _loadingProducts
+                    ? 'Stok ürünleri yükleniyor...'
+                    : _selectedProduct == null
                     ? 'Stoktan ürün bağla'
                     : '${_selectedProduct!.code} · '
                           '${_selectedProduct!.formattedStock}',

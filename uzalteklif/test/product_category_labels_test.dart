@@ -48,10 +48,7 @@ void main() {
   });
 
   test('explicit catalog classification overrides inferred category', () {
-    final source = _product(
-      name: 'Generic transmitter',
-      category: 'General',
-    );
+    final source = _product(name: 'Generic transmitter', category: 'General');
     final classified = withProductCatalogClassification(
       source,
       mainCategory: 'Sensörler',
@@ -59,9 +56,102 @@ void main() {
     );
 
     expect(productMainCategoryTurkishLabel(classified), 'Sensörler');
+    expect(productSubcategoryTurkishLabel(classified), 'Basınç Sensörleri');
+  });
+
+  test('ABB FBXi ve Honeywell Unitary 16 kontrolör olarak eşleşir', () {
+    final abb = _product(name: 'ABB FBXi 8R8', category: 'Genel');
+    final honeywell = _product(name: 'Honeywell Unitary 16', category: 'Genel');
+
     expect(
-      productSubcategoryTurkishLabel(classified),
-      'Basınç Sensörleri',
+      productMatchesHardwareCategory(abb, ProductMainCategory.controller),
+      isTrue,
+    );
+    expect(
+      productMatchesHardwareCategory(honeywell, ProductMainCategory.controller),
+      isTrue,
+    );
+  });
+
+  test('kontrolör lisansı, servis parçası ve sıcaklık kontrolörü elenir', () {
+    final license = _product(
+      name: 'EAGLEHAWK NX BASIC LICENSE',
+      category: 'Plant Controllers w/ Onboard IO',
+    );
+    final servicePart = _product(
+      name: 'PUSH TERMINALS 4 WAY',
+      category: 'Controller Service Parts',
+    );
+    final temperatureController = _product(
+      name: 'Electronic remote temperature controller',
+      category: 'Remote Temperature Controllers',
+    );
+
+    for (final product in [license, servicePart, temperatureController]) {
+      expect(
+        productMatchesHardwareCategory(product, ProductMainCategory.controller),
+        isFalse,
+      );
+    }
+    expect(
+      productMainCategoryFor(temperatureController),
+      ProductMainCategory.thermostat,
+    );
+  });
+
+  test('tesis kontrolörü kategorisinde yalnızca fiziksel cihazlar eşleşir', () {
+    final hardware = _product(
+      name: 'HAWK8 NO WIFI W/O LICENSE',
+      category: 'Plant Controllers w/o Onboard IO',
+    );
+    final pointLicense = _product(
+      name: 'ADV 500 GLOBPTS 100 PBPTS + SM',
+      category: 'Plant Controllers w/o Onboard IO',
+    );
+
+    expect(
+      productMatchesHardwareCategory(hardware, ProductMainCategory.controller),
+      isTrue,
+    );
+    expect(
+      productMatchesHardwareCategory(
+        pointLicense,
+        ProductMainCategory.controller,
+      ),
+      isFalse,
+    );
+  });
+
+  test('gerçek I/O modülü eşleşir, I/O adaptörü elenir', () {
+    final module = _product(
+      name: '16UIO SERIAL PUSH TB',
+      category: 'Dedicated IO',
+    );
+    final adapter = _product(
+      name: 'I/O ADAPTORS PWR&COM',
+      category: 'Dedicated IO',
+    );
+
+    expect(
+      productMatchesHardwareCategory(module, ProductMainCategory.ioModule),
+      isTrue,
+    );
+    expect(
+      productMatchesHardwareCategory(adapter, ProductMainCategory.ioModule),
+      isFalse,
+    );
+  });
+
+  test('elle verilen donanım kategorisi otomatik elemenin önüne geçer', () {
+    final classified = withProductCatalogClassification(
+      _product(name: 'Özel haberleşme kartı', category: 'Genel'),
+      mainCategory: 'I/O Modülleri',
+      subcategory: 'Remote I/O Modülleri',
+    );
+
+    expect(
+      productMatchesHardwareCategory(classified, ProductMainCategory.ioModule),
+      isTrue,
     );
   });
 

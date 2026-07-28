@@ -459,7 +459,8 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
     final query = _query.trim().toLowerCase();
     final products = widget.products.where((product) {
       if (!product.isActive) return false;
-      if (!_showAllStock && productMainCategoryFor(product) != _targetGroup) {
+      if (!_showAllStock &&
+          !productMatchesHardwareCategory(product, _targetGroup)) {
         return false;
       }
       if (query.isEmpty) return true;

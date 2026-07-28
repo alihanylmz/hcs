@@ -795,6 +795,54 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     });
   }
 
+  Future<void> _selectPanelController(String panelCode) async {
+    final current = _settingsForPanel(panelCode);
+    final result = await showDialog<_ControllerSelectionResult>(
+      context: context,
+      builder: (context) => _PanelControllerPickerDialog(
+        controllers: _hardware
+            .where(
+              (item) =>
+                  item.type == ControlHardwareType.controller && item.isActive,
+            )
+            .toList(growable: false),
+        products: _products,
+        selectedControllerId: current.controllerHardwareId,
+      ),
+    );
+    if (result == null) return;
+    final updated = current.copyWith(
+      controllerHardwareId: result.controller?.id ?? '',
+      ioModuleHardwareIds: const [],
+      mode: result.controller == null
+          ? current.mode
+          : DiscoveryPanelMode.controllerRequired,
+      parentPanelCode: result.controller == null ? current.parentPanelCode : '',
+    );
+    setState(() {
+      final index = _panelSettings.indexWhere(
+        (settings) => settings.panelCode == panelCode,
+      );
+      if (index == -1) {
+        _panelSettings.add(updated);
+      } else {
+        _panelSettings[index] = updated;
+      }
+      _hardwareSolutions = const [];
+    });
+  }
+
+  ControlHardware? _selectedControllerForPanel(String panelCode) {
+    final id = _settingsForPanel(panelCode).controllerHardwareId;
+    if (id.isEmpty) return null;
+    for (final item in _hardware) {
+      if (item.id == id && item.type == ControlHardwareType.controller) {
+        return item;
+      }
+    }
+    return null;
+  }
+
   Future<void> _analyzeHardware() async {
     if (_devices.isEmpty) return;
     if (_hardware.isEmpty) {
@@ -851,17 +899,24 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
             DiscoveryPanelSettings(
               panelCode: panelCode,
               mode:
-                  decision.architecture ==
+                  _settingsForPanel(
+                        panelCode,
+                      ).controllerHardwareId.isNotEmpty ||
+                      decision.architecture ==
                           _HardwareArchitectureRule.independentControllers ||
                       panelCode == firstPanel
                   ? DiscoveryPanelMode.controllerRequired
                   : DiscoveryPanelMode.remoteAllowed,
               parentPanelCode:
-                  decision.architecture ==
+                  _settingsForPanel(panelCode).controllerHardwareId.isEmpty &&
+                      decision.architecture ==
                           _HardwareArchitectureRule.remoteIoPreferred &&
                       panelCode != firstPanel
                   ? firstPanel
                   : '',
+              controllerHardwareId: _settingsForPanel(
+                panelCode,
+              ).controllerHardwareId,
             ),
         ],
       );
@@ -876,7 +931,27 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
         inStockProductIds: inStockProductIds,
       ),
     );
-    setState(() => _hardwareSolutions = solutions);
+    setState(() {
+      _hardwareSolutions = solutions;
+      for (final solution in solutions) {
+        final index = _panelSettings.indexWhere(
+          (settings) => settings.panelCode == solution.panelCode,
+        );
+        final current = index == -1
+            ? DiscoveryPanelSettings(panelCode: solution.panelCode)
+            : _panelSettings[index];
+        final updated = current.copyWith(
+          ioModuleHardwareIds: solution.modules
+              .map((module) => module.id)
+              .toList(growable: false),
+        );
+        if (index == -1) {
+          _panelSettings.add(updated);
+        } else {
+          _panelSettings[index] = updated;
+        }
+      }
+    });
   }
 
   @override
@@ -1063,6 +1138,51 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
         );
       }
     }
+    for (final settings in _panelSettings) {
+      if (settings.controllerHardwareId.isNotEmpty) {
+        final controller = _hardware.where(
+          (item) => item.id == settings.controllerHardwareId,
+        );
+        if (controller.isNotEmpty && controller.first.productId.isNotEmpty) {
+          quantities.update(
+            controller.first.productId,
+            (value) => value + 1,
+            ifAbsent: () => 1,
+          );
+        }
+      }
+      for (final moduleId in settings.ioModuleHardwareIds) {
+        final module = _hardware.where((item) => item.id == moduleId);
+        if (module.isEmpty || module.first.productId.isEmpty) continue;
+        quantities.update(
+          module.first.productId,
+          (value) => value + 1,
+          ifAbsent: () => 1,
+        );
+      }
+    }
+    for (final solution in _hardwareSolutions) {
+      final settings = _settingsForPanel(solution.panelCode);
+      if (settings.controllerHardwareId.isEmpty &&
+          solution.role == PanelHardwareRole.controller &&
+          solution.controller?.productId.isNotEmpty == true) {
+        quantities.update(
+          solution.controller!.productId,
+          (value) => value + 1,
+          ifAbsent: () => 1,
+        );
+      }
+      if (settings.ioModuleHardwareIds.isEmpty) {
+        for (final module in solution.modules) {
+          if (module.productId.isEmpty) continue;
+          quantities.update(
+            module.productId,
+            (value) => value + 1,
+            ifAbsent: () => 1,
+          );
+        }
+      }
+    }
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -1232,6 +1352,20 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
                   avatar: const Icon(Icons.account_tree_outlined, size: 18),
                   label: Text(_settingsForPanel(panelCode).mode.label),
                   onPressed: () => _editPanelSettings(panelCode),
+                ),
+                const SizedBox(width: 8),
+                ActionChip(
+                  avatar: const Icon(Icons.memory_rounded, size: 18),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 210),
+                    child: Text(
+                      _selectedControllerForPanel(panelCode)?.displayName ??
+                          'Kontrolör Seç',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  onPressed: () => _selectPanelController(panelCode),
                 ),
                 const Spacer(),
                 _SmallMetric(label: 'Pano toplamı', value: '$panelPointTotal'),
@@ -1436,6 +1570,206 @@ class _HardwareSolutionTile extends StatelessWidget {
       );
     }
     return result;
+  }
+}
+
+class _ControllerSelectionResult {
+  const _ControllerSelectionResult(this.controller);
+
+  final ControlHardware? controller;
+}
+
+class _PanelControllerPickerDialog extends StatefulWidget {
+  const _PanelControllerPickerDialog({
+    required this.controllers,
+    required this.products,
+    required this.selectedControllerId,
+  });
+
+  final List<ControlHardware> controllers;
+  final List<Product> products;
+  final String selectedControllerId;
+
+  @override
+  State<_PanelControllerPickerDialog> createState() =>
+      _PanelControllerPickerDialogState();
+}
+
+class _PanelControllerPickerDialogState
+    extends State<_PanelControllerPickerDialog> {
+  String _query = '';
+  bool _onlyInStock = true;
+
+  Product? _linkedProduct(ControlHardware controller) {
+    for (final product in widget.products) {
+      if (product.id == controller.productId) return product;
+    }
+    return null;
+  }
+
+  List<ControlHardware> get _visibleControllers {
+    final query = _query.trim().toLowerCase();
+    return widget.controllers
+        .where((controller) {
+          final product = _linkedProduct(controller);
+          if (_onlyInStock &&
+              (product == null ||
+                  !product.isActive ||
+                  product.stockQuantity <= 0)) {
+            return false;
+          }
+          if (query.isEmpty) return true;
+          return [
+            controller.brand,
+            controller.model,
+            controller.family,
+            product?.code ?? '',
+            product?.name ?? '',
+          ].join(' ').toLowerCase().contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controllers = _visibleControllers;
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 820, maxHeight: 680),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.memory_rounded),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Panoya Kontrolör Eşleştir',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  if (widget.selectedControllerId.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: () => Navigator.pop(
+                        context,
+                        const _ControllerSelectionResult(null),
+                      ),
+                      icon: const Icon(Icons.link_off_rounded),
+                      label: const Text('Eşleştirmeyi Kaldır'),
+                    ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Marka, model veya ürün kodu ara',
+                        prefixIcon: Icon(Icons.search_rounded),
+                      ),
+                      onChanged: (value) => setState(() => _query = value),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilterChip(
+                    selected: _onlyInStock,
+                    label: const Text('Yalnız stoktakiler'),
+                    onSelected: (value) => setState(() => _onlyInStock = value),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '${controllers.length} kontrolör',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: controllers.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.memory_outlined, size: 42),
+                            const SizedBox(height: 10),
+                            Text(
+                              _onlyInStock
+                                  ? 'Stokla eşleştirilmiş kontrolör bulunamadı.'
+                                  : 'DDC/I/O kütüphanesinde kontrolör bulunamadı.',
+                            ),
+                            if (_onlyInStock) ...[
+                              const SizedBox(height: 8),
+                              OutlinedButton(
+                                onPressed: () =>
+                                    setState(() => _onlyInStock = false),
+                                child: const Text(
+                                  'Stokta Olmayanları da Göster',
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: controllers.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final controller = controllers[index];
+                          final product = _linkedProduct(controller);
+                          final selected =
+                              controller.id == widget.selectedControllerId;
+                          final channels = controller.channelPools
+                              .map((pool) => '${pool.quantity} ${pool.name}')
+                              .join(' · ');
+                          return ListTile(
+                            selected: selected,
+                            leading: Icon(
+                              selected
+                                  ? Icons.check_circle_rounded
+                                  : Icons.memory_outlined,
+                            ),
+                            title: Text(
+                              controller.displayName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '${product == null ? "Stok ürünü bağlı değil" : "${product.code} · ${product.formattedStock}"}\n'
+                              '${channels.isEmpty ? "Dahili I/O yok" : channels} · '
+                              'En fazla ${controller.maxExpansionModules} modül',
+                            ),
+                            isThreeLine: true,
+                            trailing:
+                                product != null &&
+                                    product.isActive &&
+                                    product.stockQuantity > 0
+                                ? const Chip(label: Text('Stokta'))
+                                : const Chip(label: Text('Stok dışı')),
+                            onTap: () => Navigator.pop(
+                              context,
+                              _ControllerSelectionResult(controller),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -1711,6 +2045,12 @@ class _PanelSettingsDialogState extends State<_PanelSettingsDialog> {
                 panelCode: widget.settings.panelCode,
                 mode: _mode,
                 parentPanelCode: _canUseRemote ? _parentPanelCode : '',
+                controllerHardwareId: _mode == DiscoveryPanelMode.remoteOnly
+                    ? ''
+                    : widget.settings.controllerHardwareId,
+                ioModuleHardwareIds: _mode == DiscoveryPanelMode.remoteOnly
+                    ? const []
+                    : widget.settings.ioModuleHardwareIds,
               ),
             );
           },

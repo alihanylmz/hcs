@@ -13,6 +13,8 @@ class DiscoveryDeviceTemplate {
   final String categoryName;
   final List<DiscoveryTemplatePoint> points;
 
+  bool get isUserDefined => key.startsWith('user-template-');
+
   DiscoveryDevice instantiate({
     required String id,
     required String panelCode,
@@ -32,6 +34,31 @@ class DiscoveryDeviceTemplate {
               name: point.name,
               type: point.type,
               quantity: point.quantity,
+              analogSignal: point.analogSignal,
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': key,
+    'name': name,
+    'category_name': categoryName,
+    'points': points.map((point) => point.toJson()).toList(growable: false),
+  };
+
+  factory DiscoveryDeviceTemplate.fromJson(Map<String, dynamic> json) {
+    final rawPoints = json['points'] as List<dynamic>? ?? const [];
+    return DiscoveryDeviceTemplate(
+      key: (json['id'] as String?)?.trim() ?? '',
+      name: (json['name'] as String?)?.trim() ?? '',
+      categoryName: (json['category_name'] as String?)?.trim() ?? '',
+      points: rawPoints
+          .whereType<Map>()
+          .map(
+            (point) => DiscoveryTemplatePoint.fromJson(
+              Map<String, dynamic>.from(point),
             ),
           )
           .toList(growable: false),
@@ -40,11 +67,35 @@ class DiscoveryDeviceTemplate {
 }
 
 class DiscoveryTemplatePoint {
-  const DiscoveryTemplatePoint(this.name, this.type, {this.quantity = 1});
+  const DiscoveryTemplatePoint(
+    this.name,
+    this.type, {
+    this.quantity = 1,
+    this.analogSignal = DiscoveryAnalogSignal.unspecified,
+  });
 
   final String name;
   final DiscoveryPointType type;
   final int quantity;
+  final DiscoveryAnalogSignal analogSignal;
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'type': type.storageKey,
+    'quantity': quantity,
+    'analog_signal': analogSignal.storageKey,
+  };
+
+  factory DiscoveryTemplatePoint.fromJson(Map<String, dynamic> json) {
+    return DiscoveryTemplatePoint(
+      (json['name'] as String?)?.trim() ?? '',
+      DiscoveryPointTypeX.fromStorageKey(json['type'] as String?),
+      quantity: (json['quantity'] as num?)?.toInt() ?? 1,
+      analogSignal: DiscoveryAnalogSignalX.fromStorageKey(
+        json['analog_signal'] as String?,
+      ),
+    );
+  }
 }
 
 abstract final class DiscoveryTemplates {

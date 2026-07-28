@@ -92,10 +92,16 @@ void main() {
 
   test('cihaz şablonları kullanıcıya çoğul kategori adlarını verir', () {
     expect(DiscoveryTemplates.pump.categoryName, 'Pompalar');
-    expect(DiscoveryTemplates.boiler.categoryName, 'Kazanlar');
+    expect(DiscoveryTemplates.boiler.categoryName, 'Isıtma Kazanları');
     expect(
       DiscoveryTemplates.airHandlingUnit.categoryName,
       'Klima Santralleri',
     );
+  });
+
+  test('manuel cihaz seçenekleri özel cihaz şablonunu içerir', () {
+    expect(DiscoveryTemplates.values, contains(DiscoveryTemplates.custom));
+    expect(DiscoveryTemplates.custom.points, isEmpty);
+    expect(DiscoveryTemplates.boiler.name, 'Isıtma Kazanı');
   });
 }

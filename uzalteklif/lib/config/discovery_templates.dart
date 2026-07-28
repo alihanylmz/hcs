@@ -62,8 +62,8 @@ abstract final class DiscoveryTemplates {
 
   static const boiler = DiscoveryDeviceTemplate(
     key: 'boiler',
-    name: 'Kazan',
-    categoryName: 'Kazanlar',
+    name: 'Isıtma Kazanı',
+    categoryName: 'Isıtma Kazanları',
     points: [
       DiscoveryTemplatePoint(
         'KAZAN GİDİŞ SUYU SICAKLIK BİLGİSİ',
@@ -182,7 +182,14 @@ abstract final class DiscoveryTemplates {
     ],
   );
 
-  static const values = [pump, boiler, airHandlingUnit];
+  static const custom = DiscoveryDeviceTemplate(
+    key: 'custom',
+    name: 'Özel Cihaz',
+    categoryName: 'Özel Cihazlar',
+    points: [],
+  );
+
+  static const values = [pump, boiler, airHandlingUnit, custom];
 
   static DiscoveryDeviceTemplate? findByKey(String key) {
     for (final template in values) {

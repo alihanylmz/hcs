@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uzalteklif/models/discovery_project.dart';
 import 'package:uzalteklif/models/product.dart';
+import 'package:uzalteklif/utils/discovery_product_matcher.dart';
 import 'package:uzalteklif/utils/product_category_labels.dart';
 
 void main() {
@@ -44,4 +46,74 @@ void main() {
     expect(productMainCategoryFor(product), ProductMainCategory.sensor);
     expect(productSubcategoryTurkishLabel(product), 'Sıcaklık Sensörleri');
   });
+
+  test('explicit catalog classification overrides inferred category', () {
+    final source = _product(
+      name: 'Generic transmitter',
+      category: 'General',
+    );
+    final classified = withProductCatalogClassification(
+      source,
+      mainCategory: 'Sensörler',
+      subcategory: 'Basınç Sensörleri',
+    );
+
+    expect(productMainCategoryTurkishLabel(classified), 'Sensörler');
+    expect(
+      productSubcategoryTurkishLabel(classified),
+      'Basınç Sensörleri',
+    );
+  });
+
+  test('temperature discovery point matches classified temperature sensor', () {
+    final point = DiscoveryPoint(
+      id: 'point-1',
+      name: 'ÜFLEME HAVASI SICAKLIĞI',
+      type: DiscoveryPointType.aiPassive,
+    );
+    final product = withProductCatalogClassification(
+      _product(name: 'Duct sensor', category: 'General'),
+      mainCategory: 'Sensörler',
+      subcategory: 'Sıcaklık Sensörleri',
+    );
+
+    final recommendation = recommendationForDiscoveryPoint(point);
+
+    expect(recommendation.matches(product), isTrue);
+  });
+
+  test('discovery point keeps placed product in json', () {
+    const point = DiscoveryPoint(
+      id: 'point-1',
+      name: 'Kazan gidiş suyu sıcaklığı',
+      type: DiscoveryPointType.aiPassive,
+      productId: 'product-42',
+    );
+
+    final restored = DiscoveryPoint.fromJson(point.toJson());
+
+    expect(restored.productId, 'product-42');
+  });
+}
+
+Product _product({required String name, required String category}) {
+  return Product(
+    id: 'product-test',
+    code: 'TEST-01',
+    name: name,
+    category: category,
+    brand: 'Test',
+    model: 'T1',
+    unit: 'adet',
+    currencyCode: 'TL',
+    salePrice: 1,
+    stockQuantity: 1,
+    minimumStock: 0,
+    vatRate: 20,
+    leadTime: '',
+    description: '',
+    technicalSummary: '',
+    isActive: true,
+    updatedAt: DateTime.utc(2026, 7, 28),
+  );
 }

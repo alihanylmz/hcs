@@ -74,6 +74,7 @@ class DiscoveryPoint {
     required this.type,
     this.quantity = 1,
     this.analogSignal = DiscoveryAnalogSignal.unspecified,
+    this.productId = '',
   });
 
   final String id;
@@ -81,6 +82,7 @@ class DiscoveryPoint {
   final DiscoveryPointType type;
   final int quantity;
   final DiscoveryAnalogSignal analogSignal;
+  final String productId;
 
   DiscoveryPoint copyWith({
     String? id,
@@ -88,6 +90,7 @@ class DiscoveryPoint {
     DiscoveryPointType? type,
     int? quantity,
     DiscoveryAnalogSignal? analogSignal,
+    String? productId,
   }) {
     return DiscoveryPoint(
       id: id ?? this.id,
@@ -95,6 +98,7 @@ class DiscoveryPoint {
       type: type ?? this.type,
       quantity: quantity ?? this.quantity,
       analogSignal: analogSignal ?? this.analogSignal,
+      productId: productId ?? this.productId,
     );
   }
 
@@ -104,6 +108,7 @@ class DiscoveryPoint {
     'type': type.storageKey,
     'quantity': quantity,
     'analog_signal': analogSignal.storageKey,
+    'product_id': productId,
   };
 
   factory DiscoveryPoint.fromJson(Map<String, dynamic> json) {
@@ -115,6 +120,7 @@ class DiscoveryPoint {
       analogSignal: DiscoveryAnalogSignalX.fromStorageKey(
         json['analog_signal'] as String?,
       ),
+      productId: (json['product_id'] as String?)?.trim() ?? '',
     );
   }
 }

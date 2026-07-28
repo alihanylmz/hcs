@@ -1,5 +1,8 @@
 import '../models/product.dart';
 
+const productCatalogMainCategoryKey = 'catalog_main_category';
+const productCatalogSubcategoryKey = 'catalog_subcategory';
+
 enum ProductMainCategory {
   controller,
   ioModule,
@@ -32,7 +35,32 @@ extension ProductMainCategoryX on ProductMainCategory {
   };
 }
 
+String productMainCategoryTurkishLabel(Product product) {
+  final explicit =
+      product.specifications[productCatalogMainCategoryKey]?.trim() ?? '';
+  return explicit.isEmpty ? productMainCategoryFor(product).label : explicit;
+}
+
 ProductMainCategory productMainCategoryFor(Product product) {
+  final explicit =
+      product.specifications[productCatalogMainCategoryKey]?.trim() ?? '';
+  if (explicit.isNotEmpty) {
+    final normalized = _normalizeCatalogText(explicit);
+    for (final category in ProductMainCategory.values) {
+      if (_normalizeCatalogText(category.label) == normalized) return category;
+    }
+    if (normalized.contains('kontrolor')) {
+      return ProductMainCategory.controller;
+    }
+    if (normalized.contains('i/o') || normalized.contains('io modul')) {
+      return ProductMainCategory.ioModule;
+    }
+    if (normalized.contains('sensor')) return ProductMainCategory.sensor;
+    if (normalized.contains('hmi')) return ProductMainCategory.hmi;
+    if (normalized.contains('vana') || normalized.contains('aktuator')) {
+      return ProductMainCategory.actuatorValve;
+    }
+  }
   final searchable = [product.category, product.name].join(' ').toLowerCase();
   if (searchable.contains('accessor')) return ProductMainCategory.accessory;
   if (searchable.contains('hmi') ||
@@ -97,6 +125,9 @@ ProductMainCategory productMainCategoryFor(Product product) {
 }
 
 String productSubcategoryTurkishLabel(Product product) {
+  final explicit =
+      product.specifications[productCatalogSubcategoryKey]?.trim() ?? '';
+  if (explicit.isNotEmpty) return explicit;
   final searchable = [
     product.category,
     product.name,
@@ -158,6 +189,43 @@ String productSubcategoryTurkishLabel(Product product) {
     default:
       return productCategoryTurkishLabel(product.category);
   }
+}
+
+Product withProductCatalogClassification(
+  Product product, {
+  required String mainCategory,
+  required String subcategory,
+}) {
+  final specifications = Map<String, String>.from(product.specifications);
+  final normalizedMain = mainCategory.trim();
+  final normalizedSub = subcategory.trim();
+  if (normalizedMain.isEmpty) {
+    specifications.remove(productCatalogMainCategoryKey);
+  } else {
+    specifications[productCatalogMainCategoryKey] = normalizedMain;
+  }
+  if (normalizedSub.isEmpty) {
+    specifications.remove(productCatalogSubcategoryKey);
+  } else {
+    specifications[productCatalogSubcategoryKey] = normalizedSub;
+  }
+  return product.copyWith(
+    specifications: specifications,
+    updatedAt: DateTime.now().toUtc(),
+  );
+}
+
+String _normalizeCatalogText(String value) {
+  return value
+      .trim()
+      .toLowerCase()
+      .replaceAll('ı', 'i')
+      .replaceAll('ş', 's')
+      .replaceAll('ğ', 'g')
+      .replaceAll('ü', 'u')
+      .replaceAll('ö', 'o')
+      .replaceAll('ç', 'c')
+      .replaceAll(RegExp(r'\s+'), ' ');
 }
 
 String productCategoryTurkishLabel(String raw) {

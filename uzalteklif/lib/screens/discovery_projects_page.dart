@@ -9,8 +9,11 @@ import '../services/control_hardware_repository.dart';
 import '../services/control_hardware_selector.dart';
 import '../services/discovery_repository.dart';
 import '../services/product_repository.dart';
+import '../utils/discovery_product_matcher.dart';
+import '../utils/product_category_labels.dart';
 import '../widgets/workspace_background.dart';
 import 'control_hardware_library_page.dart';
+import 'product_category_management_page.dart';
 
 class DiscoveryProjectsPage extends StatefulWidget {
   const DiscoveryProjectsPage({
@@ -147,12 +150,27 @@ class _DiscoveryProjectsPageState extends State<DiscoveryProjectsPage> {
     );
   }
 
+  Future<void> _openCategoryManagement() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (context) => ProductCategoryManagementPage(
+          productRepository: widget.productRepository,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Keşif ve Nokta Analizi'),
         actions: [
+          TextButton.icon(
+            onPressed: _openCategoryManagement,
+            icon: const Icon(Icons.category_outlined),
+            label: const Text('Kategori Yönetimi'),
+          ),
           TextButton.icon(
             onPressed: _openHardwareLibrary,
             icon: const Icon(Icons.memory_rounded),
@@ -483,6 +501,34 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     }
   }
 
+  Future<void> _openCategoryManagement() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (context) => ProductCategoryManagementPage(
+          productRepository: widget.productRepository,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    final products = await widget.productRepository.fetchProducts();
+    if (!mounted) return;
+    setState(() => _products = products);
+  }
+
+  Future<void> _selectProduct(int deviceIndex, int pointIndex) async {
+    final point = _devices[deviceIndex].points[pointIndex];
+    final result = await showDialog<_ProductSelectionResult>(
+      context: context,
+      builder: (context) =>
+          _DiscoveryProductPickerDialog(point: point, products: _products),
+    );
+    if (result == null) return;
+    final device = _devices[deviceIndex];
+    final points = List<DiscoveryPoint>.from(device.points);
+    points[pointIndex] = point.copyWith(productId: result.product?.id ?? '');
+    setState(() => _devices[deviceIndex] = device.copyWith(points: points));
+  }
+
   Future<void> _save() async {
     if (_projectNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -787,6 +833,8 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
             const SizedBox(height: 14),
             _PointSummary(project: project),
             const SizedBox(height: 14),
+            _buildPlacedProductSummary(),
+            const SizedBox(height: 14),
             _buildHardwareAnalysis(),
             const SizedBox(height: 18),
             Row(
@@ -920,6 +968,83 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
                   const SizedBox(height: 9),
               ],
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlacedProductSummary() {
+    final productsById = {for (final product in _products) product.id: product};
+    final quantities = <String, int>{};
+    for (final device in _devices) {
+      for (final point in device.points) {
+        if (point.productId.isEmpty) continue;
+        quantities.update(
+          point.productId,
+          (value) => value + point.quantity,
+          ifAbsent: () => point.quantity,
+        );
+      }
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.playlist_add_check_circle_outlined),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    'Keşfe Yerleştirilen Ürünler',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                Chip(label: Text('${quantities.length} kalem')),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _openCategoryManagement,
+                  icon: const Icon(Icons.category_outlined),
+                  label: const Text('Kategorileri Düzenle'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (quantities.isEmpty)
+              const Text(
+                'Henüz bir noktaya ürün yerleştirilmedi. Nokta satırındaki '
+                '“Ürün Seç” alanını kullanabilirsiniz.',
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final entry in quantities.entries)
+                    Builder(
+                      builder: (context) {
+                        final product = productsById[entry.key];
+                        return Chip(
+                          avatar: const Icon(
+                            Icons.inventory_2_outlined,
+                            size: 17,
+                          ),
+                          label: Text(
+                            product == null
+                                ? '${entry.value} × Kayıtlı ürün'
+                                : '${entry.value} × ${product.code} · '
+                                      '${product.name}',
+                          ),
+                        );
+                      },
+                    ),
+                ],
+              ),
           ],
         ),
       ),
@@ -1092,6 +1217,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
           for (final indexed in devices) ...[
             _DevicePointCard(
               device: indexed.device,
+              products: _products,
               onAddPoint: () => _addPoint(indexed.index),
               onEditDevice: () => _editDevice(indexed.index),
               onDeleteDevice: () => _deleteDevice(indexed.index),
@@ -1099,6 +1225,8 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
                   _editPoint(indexed.index, pointIndex),
               onDeletePoint: (pointIndex) =>
                   _deletePoint(indexed.index, pointIndex),
+              onSelectProduct: (pointIndex) =>
+                  _selectProduct(indexed.index, pointIndex),
             ),
             const SizedBox(height: 12),
           ],
@@ -1621,19 +1749,23 @@ class _SmallMetric extends StatelessWidget {
 class _DevicePointCard extends StatelessWidget {
   const _DevicePointCard({
     required this.device,
+    required this.products,
     required this.onAddPoint,
     required this.onEditDevice,
     required this.onDeleteDevice,
     required this.onEditPoint,
     required this.onDeletePoint,
+    required this.onSelectProduct,
   });
 
   final DiscoveryDevice device;
+  final List<Product> products;
   final VoidCallback onAddPoint;
   final VoidCallback onEditDevice;
   final VoidCallback onDeleteDevice;
   final ValueChanged<int> onEditPoint;
   final ValueChanged<int> onDeletePoint;
+  final ValueChanged<int> onSelectProduct;
 
   @override
   Widget build(BuildContext context) {
@@ -1692,6 +1824,7 @@ class _DevicePointCard extends StatelessWidget {
                   DataColumn(label: Text('Kontrol Noktası')),
                   DataColumn(label: Text('Tür')),
                   DataColumn(label: Text('Adet'), numeric: true),
+                  DataColumn(label: Text('Yerleştirilen Ürün')),
                   DataColumn(label: Text('İşlem')),
                 ],
                 rows: [
@@ -1718,6 +1851,16 @@ class _DevicePointCard extends StatelessWidget {
                         ),
                         DataCell(Text('${device.points[index].quantity}')),
                         DataCell(
+                          _PointProductButton(
+                            point: device.points[index],
+                            product: _findProduct(
+                              products,
+                              device.points[index].productId,
+                            ),
+                            onPressed: () => onSelectProduct(index),
+                          ),
+                        ),
+                        DataCell(
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -1743,6 +1886,300 @@ class _DevicePointCard extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Product? _findProduct(List<Product> products, String productId) {
+    if (productId.isEmpty) return null;
+    for (final product in products) {
+      if (product.id == productId) return product;
+    }
+    return null;
+  }
+}
+
+class _PointProductButton extends StatelessWidget {
+  const _PointProductButton({
+    required this.point,
+    required this.product,
+    required this.onPressed,
+  });
+
+  final DiscoveryPoint point;
+  final Product? product;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSelection = point.productId.isNotEmpty;
+    final selectedProduct = product;
+    return SizedBox(
+      width: 310,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(
+          hasSelection
+              ? Icons.check_circle_rounded
+              : Icons.add_shopping_cart_rounded,
+          size: 18,
+        ),
+        label: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            selectedProduct == null
+                ? (hasSelection ? 'Ürün kaydı bulunamadı' : 'Ürün Seç')
+                : '${selectedProduct.code} · ${selectedProduct.name}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProductSelectionResult {
+  const _ProductSelectionResult(this.product);
+
+  final Product? product;
+}
+
+class _DiscoveryProductPickerDialog extends StatefulWidget {
+  const _DiscoveryProductPickerDialog({
+    required this.point,
+    required this.products,
+  });
+
+  final DiscoveryPoint point;
+  final List<Product> products;
+
+  @override
+  State<_DiscoveryProductPickerDialog> createState() =>
+      _DiscoveryProductPickerDialogState();
+}
+
+class _DiscoveryProductPickerDialogState
+    extends State<_DiscoveryProductPickerDialog> {
+  String _query = '';
+  bool _showAllProducts = false;
+  bool _onlyInStock = true;
+
+  DiscoveryProductRecommendation get _recommendation =>
+      recommendationForDiscoveryPoint(widget.point);
+
+  List<Product> get _visibleProducts {
+    final query = _query.trim().toLowerCase();
+    final result = widget.products
+        .where((product) {
+          if (!product.isActive) return false;
+          if (_onlyInStock && product.stockQuantity <= 0) return false;
+          if (!_showAllProducts && !_recommendation.matches(product)) {
+            return false;
+          }
+          if (query.isEmpty) return true;
+          return [
+            product.code,
+            product.name,
+            product.brand,
+            product.model,
+            product.category,
+            productMainCategoryTurkishLabel(product),
+            productSubcategoryTurkishLabel(product),
+          ].join(' ').toLowerCase().contains(query);
+        })
+        .toList(growable: false);
+    result.sort((left, right) {
+      final leftStock = left.stockQuantity > 0 ? 0 : 1;
+      final rightStock = right.stockQuantity > 0 ? 0 : 1;
+      if (leftStock != rightStock) return leftStock.compareTo(rightStock);
+      return left.name.toLowerCase().compareTo(right.name.toLowerCase());
+    });
+    return result;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recommendation = _recommendation;
+    final products = _visibleProducts;
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 940, maxHeight: 760),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.add_shopping_cart_rounded),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Noktaya Ürün Yerleştir',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        Text(
+                          widget.point.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (widget.point.productId.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: () => Navigator.pop(
+                        context,
+                        const _ProductSelectionResult(null),
+                      ),
+                      icon: const Icon(Icons.link_off_rounded),
+                      label: const Text('Seçimi Kaldır'),
+                    ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.filter_alt_outlined),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        recommendation.mainCategory.isEmpty
+                            ? recommendation.reason
+                            : '${recommendation.mainCategory}'
+                                  '${recommendation.subcategories.isEmpty ? "" : " › ${recommendation.subcategories.join(" / ")}"}\n'
+                                  '${recommendation.reason}',
+                      ),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: () =>
+                          setState(() => _showAllProducts = !_showAllProducts),
+                      icon: Icon(
+                        _showAllProducts
+                            ? Icons.filter_alt_rounded
+                            : Icons.manage_search_rounded,
+                      ),
+                      label: Text(
+                        _showAllProducts
+                            ? 'Uygun Ürünlere Dön'
+                            : 'Filtre Dışı Ürün Ara',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        labelText: _showAllProducts
+                            ? 'Tüm katalogda kod, ürün, marka veya model ara'
+                            : 'Uygun ürünlerde ara',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                      ),
+                      onChanged: (value) => setState(() => _query = value),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilterChip(
+                    selected: _onlyInStock,
+                    label: const Text('Yalnız stoktakiler'),
+                    onSelected: (value) => setState(() => _onlyInStock = value),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${products.length} ürün gösteriliyor'
+                '${_showAllProducts ? " · filtre dışı arama açık" : ""}',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: products.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.search_off_rounded, size: 42),
+                            const SizedBox(height: 10),
+                            const Text('Filtreye uygun ürün bulunamadı.'),
+                            const SizedBox(height: 8),
+                            if (!_showAllProducts)
+                              OutlinedButton.icon(
+                                onPressed: () =>
+                                    setState(() => _showAllProducts = true),
+                                icon: const Icon(Icons.manage_search_rounded),
+                                label: const Text('Tüm Ürünlerde Ara'),
+                              ),
+                          ],
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: products.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final product = products[index];
+                          final selected = product.id == widget.point.productId;
+                          final recommended = recommendation.matches(product);
+                          return ListTile(
+                            selected: selected,
+                            leading: Icon(
+                              selected
+                                  ? Icons.check_circle_rounded
+                                  : Icons.inventory_2_outlined,
+                            ),
+                            title: Text(
+                              '${product.code} · ${product.name}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              '${productMainCategoryTurkishLabel(product)} › '
+                              '${productSubcategoryTurkishLabel(product)} · '
+                              '${product.brand} ${product.model} · '
+                              '${product.formattedStock}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: recommended
+                                ? const Chip(
+                                    avatar: Icon(Icons.check_rounded, size: 16),
+                                    label: Text('Filtreye uygun'),
+                                  )
+                                : const Chip(label: Text('Manuel seçim')),
+                            onTap: () => Navigator.pop(
+                              context,
+                              _ProductSelectionResult(product),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2065,6 +2502,7 @@ class _PointDialogState extends State<_PointDialog> {
                 name: name,
                 type: _type,
                 quantity: quantity,
+                productId: widget.existing?.productId ?? '',
                 analogSignal: _type == DiscoveryPointType.aiActive
                     ? _analogSignal
                     : DiscoveryAnalogSignal.unspecified,

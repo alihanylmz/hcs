@@ -1203,17 +1203,32 @@ class _ProductTableState extends State<_ProductTable> {
   List<_ProductTableEntry> _buildEntries() {
     final entries = <_ProductTableEntry>[];
     var rowNumber = 0;
-    for (final mainCategory in ProductMainCategory.values) {
-      final mainProducts = widget.products
-          .where((product) => productMainCategoryFor(product) == mainCategory)
-          .toList(growable: false);
+    final grouped = <String, List<Product>>{};
+    for (final product in widget.products) {
+      grouped
+          .putIfAbsent(productMainCategoryTurkishLabel(product), () => [])
+          .add(product);
+    }
+    final standardOrder = ProductMainCategory.values
+        .map((category) => category.label)
+        .toList(growable: false);
+    final mainCategoryNames = grouped.keys.toList()
+      ..sort((left, right) {
+        final leftIndex = standardOrder.indexOf(left);
+        final rightIndex = standardOrder.indexOf(right);
+        if (leftIndex != -1 || rightIndex != -1) {
+          if (leftIndex == -1) return 1;
+          if (rightIndex == -1) return -1;
+          return leftIndex.compareTo(rightIndex);
+        }
+        return left.toLowerCase().compareTo(right.toLowerCase());
+      });
+    for (final mainCategory in mainCategoryNames) {
+      final mainProducts = grouped[mainCategory]!;
       if (mainProducts.isEmpty) continue;
 
       entries.add(
-        _ProductTableEntry.mainCategory(
-          mainCategory.label,
-          mainProducts.length,
-        ),
+        _ProductTableEntry.mainCategory(mainCategory, mainProducts.length),
       );
       final subcategories = <String, List<Product>>{};
       for (final product in mainProducts) {

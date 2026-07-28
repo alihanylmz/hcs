@@ -5,6 +5,7 @@ import '../models/discovery_project.dart';
 import '../models/product.dart';
 import '../services/control_hardware_repository.dart';
 import '../services/product_repository.dart';
+import '../utils/product_category_labels.dart';
 import '../widgets/workspace_background.dart';
 
 class ControlHardwareLibraryPage extends StatefulWidget {
@@ -482,10 +483,7 @@ _StockProductGroup _stockGroupFor(Product product) {
 }
 
 String _normalizedStockCategory(String raw) {
-  final category = raw.trim();
-  final normalized = category.toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
-  if (normalized == 'hmi' || normalized == 'hmis') return 'HMI';
-  return category.isEmpty ? 'Kategorisiz' : category;
+  return productCategoryTurkishLabel(raw);
 }
 
 class _StockProductPickerDialog extends StatefulWidget {
@@ -541,6 +539,17 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
     return result;
   }
 
+  int _groupCount(_StockProductGroup group) {
+    return widget.products
+        .where(
+          (product) =>
+              product.isActive &&
+              product.stockQuantity > 0 &&
+              _stockGroupFor(product) == group,
+        )
+        .length;
+  }
+
   List<Product> get _visibleProducts {
     final query = _query.trim().toLowerCase();
     return widget.products
@@ -593,60 +602,48 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
                 ],
               ),
               const SizedBox(height: 14),
-              Row(
+              const Text(
+                'Ana Kategoriler',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Expanded(
-                    child: DropdownButtonFormField<_StockProductGroup>(
-                      initialValue: _group,
-                      decoration: const InputDecoration(
-                        labelText: 'Ana ürün grubu',
-                        prefixIcon: Icon(Icons.account_tree_outlined),
-                      ),
-                      items: _StockProductGroup.values
-                          .map(
-                            (group) => DropdownMenuItem(
-                              value: group,
-                              child: Text(group.label),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: (value) {
-                        if (value == null) return;
+                  for (final group in _StockProductGroup.values)
+                    ChoiceChip(
+                      selected: _group == group,
+                      label: Text('${group.label} (${_groupCount(group)})'),
+                      onSelected: (_) {
                         setState(() {
-                          _group = value;
+                          _group = group;
                           _category = '';
                         });
                       },
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      key: ValueKey('stock-category-${_group.name}'),
-                      initialValue: _category,
-                      decoration: const InputDecoration(
-                        labelText: 'Alt kategori',
-                        prefixIcon: Icon(Icons.category_outlined),
-                      ),
-                      items: [
-                        const DropdownMenuItem(
-                          value: '',
-                          child: Text('Tüm alt kategoriler'),
-                        ),
-                        for (final category in _categories)
-                          DropdownMenuItem(
-                            value: category,
-                            child: Text(
-                              category,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                      onChanged: (value) =>
-                          setState(() => _category = value ?? ''),
-                    ),
-                  ),
                 ],
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                key: ValueKey('stock-category-${_group.name}'),
+                initialValue: _category,
+                decoration: const InputDecoration(
+                  labelText: 'Türkçe Alt Kategori',
+                  prefixIcon: Icon(Icons.category_outlined),
+                ),
+                items: [
+                  const DropdownMenuItem(
+                    value: '',
+                    child: Text('Tüm alt kategoriler'),
+                  ),
+                  for (final category in _categories)
+                    DropdownMenuItem(
+                      value: category,
+                      child: Text(category, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (value) => setState(() => _category = value ?? ''),
               ),
               const SizedBox(height: 12),
               TextField(

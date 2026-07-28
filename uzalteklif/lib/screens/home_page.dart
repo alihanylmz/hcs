@@ -9,6 +9,7 @@ import '../services/market_rate_service.dart';
 import '../services/price_adjustment_rule_repository.dart';
 import '../services/product_csv_service.dart';
 import '../services/product_repository.dart';
+import '../utils/product_category_labels.dart';
 import '../widgets/workspace_background.dart';
 import 'product_detail_page.dart';
 
@@ -83,6 +84,7 @@ class _HomePageState extends State<HomePage> {
             product.code,
             product.name,
             product.category,
+            productCategoryTurkishLabel(product.category),
             product.brand,
             product.model,
             product.description,
@@ -755,9 +757,11 @@ class _PriceRuleTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final target = switch (rule.scope) {
       PriceAdjustmentScope.brand => rule.brand,
-      PriceAdjustmentScope.category => rule.category,
+      PriceAdjustmentScope.category => productCategoryTurkishLabel(
+        rule.category,
+      ),
       PriceAdjustmentScope.brandAndCategory =>
-        '${rule.brand} / ${rule.category}',
+        '${rule.brand} / ${productCategoryTurkishLabel(rule.category)}',
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -954,7 +958,10 @@ class _PriceRuleDialogState extends State<_PriceRuleDialog> {
                   decoration: const InputDecoration(labelText: 'Kategori'),
                   items: _categories
                       .map(
-                        (cat) => DropdownMenuItem(value: cat, child: Text(cat)),
+                        (cat) => DropdownMenuItem(
+                          value: cat,
+                          child: Text(productCategoryTurkishLabel(cat)),
+                        ),
                       )
                       .toList(),
                   onChanged: (value) => setState(() => _category = value ?? ''),
@@ -1309,7 +1316,10 @@ class _ProductTableRow extends StatelessWidget {
               _ProductTableCell(text: '${index + 1}', width: 50),
               _ProductTableCell(text: product.code, width: 155, strong: true),
               _ProductTableCell(text: product.name, width: 310),
-              _ProductTableCell(text: product.category, width: 180),
+              _ProductTableCell(
+                text: productCategoryTurkishLabel(product.category),
+                width: 180,
+              ),
               _ProductTableCell(text: product.brand, width: 135),
               _ProductTableCell(text: product.model, width: 165),
               _ProductTableCell(text: product.currencyLabel, width: 75),

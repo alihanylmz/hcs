@@ -565,6 +565,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       context: context,
       builder: (context) => _DeviceDialog(
         templates: _availableDeviceTemplates,
+        onSaveTemplate: _persistDeviceTemplate,
         panelSuggestions: DiscoveryPanelCodeSuggestions.build(
           existingPanelCodes,
         ),
@@ -596,6 +597,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       builder: (context) => _DeviceDialog(
         existing: source,
         templates: _availableDeviceTemplates,
+        onSaveTemplate: _persistDeviceTemplate,
         panelSuggestions: DiscoveryPanelCodeSuggestions.build(
           _existingPanelCodes,
         ),
@@ -636,12 +638,8 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
           ),
       ],
     );
-    try {
-      await widget.repository.saveDeviceTemplate(template);
-      if (!mounted) return;
-      setState(
-        () => _savedDeviceTemplates = [..._savedDeviceTemplates, template],
-      );
+    final saved = await _persistDeviceTemplate(template);
+    if (saved && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -650,11 +648,32 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
           ),
         ),
       );
+    }
+  }
+
+  Future<bool> _persistDeviceTemplate(DiscoveryDeviceTemplate template) async {
+    try {
+      await widget.repository.saveDeviceTemplate(template);
+      if (!mounted) return false;
+      setState(() {
+        final templates = List<DiscoveryDeviceTemplate>.from(
+          _savedDeviceTemplates,
+        );
+        final index = templates.indexWhere((item) => item.key == template.key);
+        if (index == -1) {
+          templates.add(template);
+        } else {
+          templates[index] = template;
+        }
+        _savedDeviceTemplates = templates;
+      });
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Cihaz şablonu kaydedilemedi: $error')),
       );
+      return false;
     }
   }
 
@@ -2347,6 +2366,190 @@ class _SaveDeviceTemplateDialogState extends State<_SaveDeviceTemplateDialog> {
   }
 }
 
+class _DeviceTemplateBuilderDialog extends StatefulWidget {
+  const _DeviceTemplateBuilderDialog();
+
+  @override
+  State<_DeviceTemplateBuilderDialog> createState() =>
+      _DeviceTemplateBuilderDialogState();
+}
+
+class _DeviceTemplateBuilderDialogState
+    extends State<_DeviceTemplateBuilderDialog> {
+  final _nameController = TextEditingController();
+  final _categoryController = TextEditingController();
+  final List<DiscoveryPoint> _points = [];
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _categoryController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addPoint() async {
+    final id = 'template-point-${DateTime.now().microsecondsSinceEpoch}';
+    final point = await showDialog<DiscoveryPoint>(
+      context: context,
+      builder: (context) => _PointDialog(id: id),
+    );
+    if (point == null || !mounted) return;
+    setState(() => _points.add(point));
+  }
+
+  Future<void> _editPoint(int index) async {
+    final point = await showDialog<DiscoveryPoint>(
+      context: context,
+      builder: (context) =>
+          _PointDialog(id: _points[index].id, existing: _points[index]),
+    );
+    if (point == null || !mounted) return;
+    setState(() => _points[index] = point);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Yeni Hazır Cihaz Şablonu'),
+      content: SizedBox(
+        width: 620,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _nameController,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Şablon adı',
+                      hintText: 'Örn. Boyler',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _categoryController,
+                    decoration: const InputDecoration(
+                      labelText: 'Cihaz grubu',
+                      hintText: 'Örn. Boylerler',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Kontrol Noktaları',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _addPoint,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Nokta Ekle'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 280),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: _points.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'Pompa şablonundaki gibi kontrol noktalarını ekleyin.',
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: _points.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final point = _points[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text(point.name),
+                          subtitle: Text(
+                            '${point.type.label} · ${point.quantity} adet'
+                            '${point.type == DiscoveryPointType.aiActive ? " · ${point.analogSignal.label}" : ""}',
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: 'Düzenle',
+                                onPressed: () => _editPoint(index),
+                                icon: const Icon(Icons.edit_outlined, size: 19),
+                              ),
+                              IconButton(
+                                tooltip: 'Sil',
+                                onPressed: () =>
+                                    setState(() => _points.removeAt(index)),
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 19,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Vazgeç'),
+        ),
+        FilledButton.icon(
+          onPressed: () {
+            final name = _nameController.text.trim();
+            final category = _categoryController.text.trim();
+            if (name.isEmpty || category.isEmpty || _points.isEmpty) return;
+            Navigator.pop(
+              context,
+              DiscoveryDeviceTemplate(
+                key: 'user-template-${DateTime.now().microsecondsSinceEpoch}',
+                name: name,
+                categoryName: category,
+                points: [
+                  for (final point in _points)
+                    DiscoveryTemplatePoint(
+                      point.name,
+                      point.type,
+                      quantity: point.quantity,
+                      analogSignal: point.analogSignal,
+                    ),
+                ],
+              ),
+            );
+          },
+          icon: const Icon(Icons.save_outlined),
+          label: const Text('Şablonu Kaydet'),
+        ),
+      ],
+    );
+  }
+}
+
 class _DeviceDialogResult {
   const _DeviceDialogResult({
     required this.template,
@@ -2364,6 +2567,7 @@ class _DeviceDialogResult {
 class _DeviceDialog extends StatefulWidget {
   const _DeviceDialog({
     required this.templates,
+    required this.onSaveTemplate,
     required this.panelSuggestions,
     required this.initialPanelCode,
     this.existing,
@@ -2371,6 +2575,7 @@ class _DeviceDialog extends StatefulWidget {
 
   final DiscoveryDevice? existing;
   final List<DiscoveryDeviceTemplate> templates;
+  final Future<bool> Function(DiscoveryDeviceTemplate template) onSaveTemplate;
   final List<String> panelSuggestions;
   final String initialPanelCode;
 
@@ -2379,6 +2584,7 @@ class _DeviceDialog extends StatefulWidget {
 }
 
 class _DeviceDialogState extends State<_DeviceDialog> {
+  late List<DiscoveryDeviceTemplate> _templates;
   late DiscoveryDeviceTemplate _template;
   late final TextEditingController _nameController;
   late final TextEditingController _deviceController;
@@ -2387,8 +2593,9 @@ class _DeviceDialogState extends State<_DeviceDialog> {
   @override
   void initState() {
     super.initState();
+    _templates = List<DiscoveryDeviceTemplate>.from(widget.templates);
     final key = widget.existing?.templateKey;
-    _template = widget.templates.firstWhere(
+    _template = _templates.firstWhere(
       (template) => template.key == key,
       orElse: () => DiscoveryTemplates.pump,
     );
@@ -2401,6 +2608,21 @@ class _DeviceDialogState extends State<_DeviceDialog> {
     _nameController = TextEditingController(
       text: widget.existing?.name ?? _template.name,
     );
+  }
+
+  Future<void> _createTemplate() async {
+    final template = await showDialog<DiscoveryDeviceTemplate>(
+      context: context,
+      builder: (context) => const _DeviceTemplateBuilderDialog(),
+    );
+    if (template == null) return;
+    final saved = await widget.onSaveTemplate(template);
+    if (!saved || !mounted) return;
+    setState(() {
+      _templates = [..._templates, template];
+      _template = template;
+      _nameController.text = template.name;
+    });
   }
 
   @override
@@ -2423,7 +2645,7 @@ class _DeviceDialogState extends State<_DeviceDialog> {
             DropdownButtonFormField<DiscoveryDeviceTemplate>(
               initialValue: _template,
               decoration: const InputDecoration(labelText: 'Cihaz şablonu'),
-              items: widget.templates
+              items: _templates
                   .map(
                     (template) => DropdownMenuItem(
                       value: template,
@@ -2443,6 +2665,15 @@ class _DeviceDialogState extends State<_DeviceDialog> {
                       });
                     },
             ),
+            if (!editing)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _createTemplate,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Yeni Şablon'),
+                ),
+              ),
             if (_template.key == DiscoveryTemplates.custom.key) ...[
               const SizedBox(height: 12),
               TextField(

@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uzalteklif/config/discovery_templates.dart';
 import 'package:uzalteklif/models/discovery_project.dart';
+import 'package:uzalteklif/services/discovery_repository.dart';
 
 void main() {
   var id = 0;
@@ -103,5 +105,58 @@ void main() {
     expect(DiscoveryTemplates.values, contains(DiscoveryTemplates.custom));
     expect(DiscoveryTemplates.custom.points, isEmpty);
     expect(DiscoveryTemplates.boiler.name, 'Isıtma Kazanı');
+  });
+
+  test('kullanıcı cihaz şablonu noktalarıyla json kaydında korunur', () {
+    const template = DiscoveryDeviceTemplate(
+      key: 'user-template-1',
+      name: 'Boyler',
+      categoryName: 'Boylerler',
+      points: [
+        DiscoveryTemplatePoint(
+          'BOYLER SICAKLIĞI',
+          DiscoveryPointType.aiActive,
+          analogSignal: DiscoveryAnalogSignal.current4To20,
+        ),
+      ],
+    );
+
+    final restored = DiscoveryDeviceTemplate.fromJson(template.toJson());
+
+    expect(restored.isUserDefined, isTrue);
+    expect(restored.name, 'Boyler');
+    expect(restored.points.single.name, 'BOYLER SICAKLIĞI');
+    expect(
+      restored.points.single.analogSignal,
+      DiscoveryAnalogSignal.current4To20,
+    );
+  });
+
+  test('kullanıcı cihaz şablonu yerel kayıtta tekrar yüklenir', () async {
+    SharedPreferences.setMockInitialValues({});
+    final repository = DiscoveryRepository();
+    const template = DiscoveryDeviceTemplate(
+      key: 'user-template-local',
+      name: 'Eşanjör',
+      categoryName: 'Eşanjörler',
+      points: [
+        DiscoveryTemplatePoint(
+          'EŞANJÖR GİDİŞ SICAKLIĞI',
+          DiscoveryPointType.aiPassive,
+        ),
+      ],
+    );
+
+    await repository.saveDeviceTemplate(template);
+    final restored = await DiscoveryRepository().fetchDeviceTemplates();
+
+    expect(
+      restored.any(
+        (item) =>
+            item.key == template.key &&
+            item.points.single.name == 'EŞANJÖR GİDİŞ SICAKLIĞI',
+      ),
+      isTrue,
+    );
   });
 }

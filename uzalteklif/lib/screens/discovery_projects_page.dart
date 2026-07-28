@@ -422,6 +422,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
   late List<DiscoveryPanelSettings> _panelSettings;
   List<ControlHardware> _hardware = const [];
   List<Product> _products = const [];
+  List<DiscoveryDeviceTemplate> _savedDeviceTemplates = const [];
   List<PanelHardwareSolution> _hardwareSolutions = const [];
   bool _loadingHardware = true;
   bool _saving = false;
@@ -481,18 +482,26 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     return codes;
   }
 
+  List<DiscoveryDeviceTemplate> get _availableDeviceTemplates => [
+    ...DiscoveryTemplates.values,
+    ..._savedDeviceTemplates,
+  ];
+
   Future<void> _loadHardware() async {
     try {
       final results = await Future.wait([
         widget.hardwareRepository.fetchAll(),
         widget.productRepository.fetchProducts(),
+        widget.repository.fetchDeviceTemplates(),
       ]);
       final hardware = results[0] as List<ControlHardware>;
       final products = results[1] as List<Product>;
+      final templates = results[2] as List<DiscoveryDeviceTemplate>;
       if (!mounted) return;
       setState(() {
         _hardware = hardware;
         _products = products;
+        _savedDeviceTemplates = templates;
         _loadingHardware = false;
       });
     } catch (_) {
@@ -555,6 +564,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     final result = await showDialog<_DeviceDialogResult>(
       context: context,
       builder: (context) => _DeviceDialog(
+        templates: _availableDeviceTemplates,
         panelSuggestions: DiscoveryPanelCodeSuggestions.build(
           existingPanelCodes,
         ),
@@ -591,6 +601,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       context: context,
       builder: (context) => _DeviceDialog(
         existing: source,
+        templates: _availableDeviceTemplates,
         panelSuggestions: DiscoveryPanelCodeSuggestions.build(
           _existingPanelCodes,
         ),
@@ -619,6 +630,49 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     final rawNumber = match.group(2) ?? '1';
     final number = (int.tryParse(rawNumber) ?? 1) + index;
     return '$prefix${number.toString().padLeft(rawNumber.length, '0')}';
+  }
+
+  Future<void> _saveDeviceAsTemplate(int deviceIndex) async {
+    final device = _devices[deviceIndex];
+    final result = await showDialog<_SaveDeviceTemplateResult>(
+      context: context,
+      builder: (context) => _SaveDeviceTemplateDialog(device: device),
+    );
+    if (result == null) return;
+    final template = DiscoveryDeviceTemplate(
+      key: 'user-template-${DateTime.now().microsecondsSinceEpoch}',
+      name: result.name,
+      categoryName: result.categoryName,
+      points: [
+        for (final point in device.points)
+          DiscoveryTemplatePoint(
+            point.name,
+            point.type,
+            quantity: point.quantity,
+            analogSignal: point.analogSignal,
+          ),
+      ],
+    );
+    try {
+      await widget.repository.saveDeviceTemplate(template);
+      if (!mounted) return;
+      setState(
+        () => _savedDeviceTemplates = [..._savedDeviceTemplates, template],
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${template.name} şablonlara kaydedildi. Yeni keşiflerde '
+            'Cihaz Ekle penceresinde görünecek.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cihaz şablonu kaydedilemedi: $error')),
+      );
+    }
   }
 
   Future<void> _deleteDevice(int index) async {
@@ -1241,6 +1295,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
               onAddPoint: () => _addPoint(indexed.index),
               onEditDevice: () => _editDevice(indexed.index),
               onDeleteDevice: () => _deleteDevice(indexed.index),
+              onSaveTemplate: () => _saveDeviceAsTemplate(indexed.index),
               onEditPoint: (pointIndex) =>
                   _editPoint(indexed.index, pointIndex),
               onDeletePoint: (pointIndex) =>
@@ -1773,6 +1828,7 @@ class _DevicePointCard extends StatelessWidget {
     required this.onAddPoint,
     required this.onEditDevice,
     required this.onDeleteDevice,
+    required this.onSaveTemplate,
     required this.onEditPoint,
     required this.onDeletePoint,
     required this.onSelectProduct,
@@ -1783,6 +1839,7 @@ class _DevicePointCard extends StatelessWidget {
   final VoidCallback onAddPoint;
   final VoidCallback onEditDevice;
   final VoidCallback onDeleteDevice;
+  final VoidCallback onSaveTemplate;
   final ValueChanged<int> onEditPoint;
   final ValueChanged<int> onDeletePoint;
   final ValueChanged<int> onSelectProduct;
@@ -1807,6 +1864,11 @@ class _DevicePointCard extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            IconButton(
+              tooltip: 'Cihazı ve noktalarını şablon olarak kaydet',
+              onPressed: onSaveTemplate,
+              icon: const Icon(Icons.bookmark_add_outlined),
+            ),
             IconButton(
               tooltip: 'Cihaz bilgilerini düzenle',
               onPressed: onEditDevice,
@@ -2205,6 +2267,103 @@ class _DiscoveryProductPickerDialogState
   }
 }
 
+class _SaveDeviceTemplateResult {
+  const _SaveDeviceTemplateResult({
+    required this.name,
+    required this.categoryName,
+  });
+
+  final String name;
+  final String categoryName;
+}
+
+class _SaveDeviceTemplateDialog extends StatefulWidget {
+  const _SaveDeviceTemplateDialog({required this.device});
+
+  final DiscoveryDevice device;
+
+  @override
+  State<_SaveDeviceTemplateDialog> createState() =>
+      _SaveDeviceTemplateDialogState();
+}
+
+class _SaveDeviceTemplateDialogState extends State<_SaveDeviceTemplateDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _categoryController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.device.name);
+    _categoryController = TextEditingController(
+      text: '${widget.device.name} Şablonları',
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _categoryController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Cihazı Şablon Olarak Kaydet'),
+      content: SizedBox(
+        width: 500,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '${widget.device.points.length} kontrol noktası cihazla '
+              'birlikte kaydedilecek.',
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _nameController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Şablon adı',
+                hintText: 'Örn. Sirkülasyon Pompası',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _categoryController,
+              decoration: const InputDecoration(
+                labelText: 'Cihaz grubu',
+                hintText: 'Örn. Pompalar',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Vazgeç'),
+        ),
+        FilledButton.icon(
+          onPressed: () {
+            final name = _nameController.text.trim();
+            final category = _categoryController.text.trim();
+            if (name.isEmpty || category.isEmpty) return;
+            Navigator.pop(
+              context,
+              _SaveDeviceTemplateResult(name: name, categoryName: category),
+            );
+          },
+          icon: const Icon(Icons.bookmark_add_rounded),
+          label: const Text('Şablonu Kaydet'),
+        ),
+      ],
+    );
+  }
+}
+
 class _DeviceDialogResult {
   const _DeviceDialogResult({
     required this.template,
@@ -2223,12 +2382,14 @@ class _DeviceDialogResult {
 
 class _DeviceDialog extends StatefulWidget {
   const _DeviceDialog({
+    required this.templates,
     required this.panelSuggestions,
     required this.initialPanelCode,
     this.existing,
   });
 
   final DiscoveryDevice? existing;
+  final List<DiscoveryDeviceTemplate> templates;
   final List<String> panelSuggestions;
   final String initialPanelCode;
 
@@ -2247,7 +2408,7 @@ class _DeviceDialogState extends State<_DeviceDialog> {
   void initState() {
     super.initState();
     final key = widget.existing?.templateKey;
-    _template = DiscoveryTemplates.values.firstWhere(
+    _template = widget.templates.firstWhere(
       (template) => template.key == key,
       orElse: () => DiscoveryTemplates.custom,
     );
@@ -2298,7 +2459,7 @@ class _DeviceDialogState extends State<_DeviceDialog> {
                       spacing: 10,
                       runSpacing: 10,
                       children: [
-                        for (final template in DiscoveryTemplates.values)
+                        for (final template in widget.templates)
                           SizedBox(
                             width: itemWidth,
                             child: _DeviceTemplateChoice(
@@ -2517,7 +2678,9 @@ class _DeviceTemplateChoice extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
                     Text(
-                      template.points.isEmpty
+                      template.isUserDefined
+                          ? 'Kayıtlı şablon · ${template.points.length} nokta'
+                          : template.points.isEmpty
                           ? 'Noktaları manuel ekle'
                           : '${template.points.length} otomatik nokta',
                       style: Theme.of(context).textTheme.bodySmall,
@@ -2539,6 +2702,8 @@ class _DeviceTemplateChoice extends StatelessWidget {
       'pump' => Icons.water_rounded,
       'boiler' => Icons.local_fire_department_rounded,
       'ahu' => Icons.air_rounded,
+      final value when value.startsWith('user-template-') =>
+        Icons.bookmark_added_outlined,
       _ => Icons.add_box_outlined,
     };
   }

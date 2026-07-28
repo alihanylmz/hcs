@@ -446,60 +446,22 @@ class _StockProductPickerDialog extends StatefulWidget {
 
 class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
   String _query = '';
-  late ProductMainCategory _group;
-  String _category = '';
+  bool _showAllStock = false;
 
-  @override
-  void initState() {
-    super.initState();
-    Product? selectedProduct;
-    for (final product in widget.products) {
-      if (product.id == widget.selectedProductId) {
-        selectedProduct = product;
-        break;
-      }
-    }
-    _group = selectedProduct == null
-        ? (widget.hardwareType == ControlHardwareType.controller
-              ? ProductMainCategory.controller
-              : ProductMainCategory.ioModule)
-        : productMainCategoryFor(selectedProduct);
-  }
+  ProductMainCategory get _targetGroup =>
+      widget.hardwareType == ControlHardwareType.controller
+      ? ProductMainCategory.controller
+      : ProductMainCategory.ioModule;
 
-  List<String> get _categories {
-    final result = widget.products
-        .where(
-          (product) =>
-              product.isActive &&
-              product.stockQuantity > 0 &&
-              productMainCategoryFor(product) == _group,
-        )
-        .map(productSubcategoryTurkishLabel)
-        .toSet()
-        .toList();
-    result.sort();
-    return result;
-  }
-
-  int _groupCount(ProductMainCategory group) {
-    return widget.products
-        .where(
-          (product) =>
-              product.isActive &&
-              product.stockQuantity > 0 &&
-              productMainCategoryFor(product) == group,
-        )
-        .length;
-  }
+  String get _targetLabel => widget.hardwareType.label;
 
   List<Product> get _visibleProducts {
     final query = _query.trim().toLowerCase();
     return widget.products
         .where((product) {
           if (!product.isActive || product.stockQuantity <= 0) return false;
-          if (productMainCategoryFor(product) != _group) return false;
-          if (_category.isNotEmpty &&
-              productSubcategoryTurkishLabel(product) != _category) {
+          if (!_showAllStock &&
+              productMainCategoryFor(product) != _targetGroup) {
             return false;
           }
           if (query.isEmpty) return true;
@@ -544,48 +506,44 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
                 ],
               ),
               const SizedBox(height: 14),
-              const Text(
-                'Ana Kategoriler',
-                style: TextStyle(fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final group in ProductMainCategory.values)
-                    ChoiceChip(
-                      selected: _group == group,
-                      label: Text('${group.label} (${_groupCount(group)})'),
-                      onSelected: (_) {
-                        setState(() {
-                          _group = group;
-                          _category = '';
-                        });
-                      },
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                key: ValueKey('stock-category-${_group.name}'),
-                initialValue: _category,
-                decoration: const InputDecoration(
-                  labelText: 'Türkçe Alt Kategori',
-                  prefixIcon: Icon(Icons.category_outlined),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
                 ),
-                items: [
-                  const DropdownMenuItem(
-                    value: '',
-                    child: Text('Tüm alt kategoriler'),
-                  ),
-                  for (final category in _categories)
-                    DropdownMenuItem(
-                      value: category,
-                      child: Text(category, overflow: TextOverflow.ellipsis),
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.filter_alt_outlined, size: 20),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        _showAllStock
+                            ? 'Tüm stok ürünlerinde aranıyor'
+                            : 'Yalnız $_targetLabel ürünleri gösteriliyor',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
                     ),
-                ],
-                onChanged: (value) => setState(() => _category = value ?? ''),
+                    TextButton.icon(
+                      onPressed: () =>
+                          setState(() => _showAllStock = !_showAllStock),
+                      icon: Icon(
+                        _showAllStock
+                            ? Icons.filter_alt_rounded
+                            : Icons.manage_search_rounded,
+                        size: 18,
+                      ),
+                      label: Text(
+                        _showAllStock ? 'Uygun Ürünlere Dön' : 'Tüm Stokta Ara',
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -598,7 +556,8 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
               ),
               const SizedBox(height: 12),
               Text(
-                '${products.length} stok ürünü',
+                '${products.length} stok ürünü'
+                '${_showAllStock ? " · filtre dışı arama açık" : ""}',
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),

@@ -1200,8 +1200,50 @@ class _ProductTableState extends State<_ProductTable> {
     super.dispose();
   }
 
+  List<_ProductTableEntry> _buildEntries() {
+    final entries = <_ProductTableEntry>[];
+    var rowNumber = 0;
+    for (final mainCategory in ProductMainCategory.values) {
+      final mainProducts = widget.products
+          .where((product) => productMainCategoryFor(product) == mainCategory)
+          .toList(growable: false);
+      if (mainProducts.isEmpty) continue;
+
+      entries.add(
+        _ProductTableEntry.mainCategory(
+          mainCategory.label,
+          mainProducts.length,
+        ),
+      );
+      final subcategories = <String, List<Product>>{};
+      for (final product in mainProducts) {
+        final subcategory = productSubcategoryTurkishLabel(product);
+        subcategories.putIfAbsent(subcategory, () => []).add(product);
+      }
+      final sortedSubcategoryNames = subcategories.keys.toList()..sort();
+      for (final subcategory in sortedSubcategoryNames) {
+        final products = subcategories[subcategory]!
+          ..sort((left, right) {
+            final byName = left.name.toLowerCase().compareTo(
+              right.name.toLowerCase(),
+            );
+            return byName != 0 ? byName : left.code.compareTo(right.code);
+          });
+        entries.add(
+          _ProductTableEntry.subcategory(subcategory, products.length),
+        );
+        for (final product in products) {
+          rowNumber += 1;
+          entries.add(_ProductTableEntry.product(product, rowNumber));
+        }
+      }
+    }
+    return entries;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final entries = _buildEntries();
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth > _ProductTable._tableWidth
@@ -1232,16 +1274,30 @@ class _ProductTableState extends State<_ProductTable> {
                       const _ProductTableHeader(),
                       Expanded(
                         child: ListView.builder(
-                          itemCount: widget.products.length,
-                          itemExtent: 48,
+                          itemCount: entries.length,
                           padding: const EdgeInsets.only(bottom: 10),
                           itemBuilder: (context, index) {
-                            final product = widget.products[index];
-                            return _ProductTableRow(
-                              index: index,
-                              product: product,
-                              onTap: () => widget.onTap(product),
-                            );
+                            final entry = entries[index];
+                            return switch (entry.type) {
+                              _ProductTableEntryType.mainCategory =>
+                                _ProductCategoryBand(
+                                  label: entry.label,
+                                  count: entry.count,
+                                  main: true,
+                                ),
+                              _ProductTableEntryType.subcategory =>
+                                _ProductCategoryBand(
+                                  label: entry.label,
+                                  count: entry.count,
+                                  main: false,
+                                ),
+                              _ProductTableEntryType.product =>
+                                _ProductTableRow(
+                                  index: entry.rowNumber - 1,
+                                  product: entry.product!,
+                                  onTap: () => widget.onTap(entry.product!),
+                                ),
+                            };
                           },
                         ),
                       ),
@@ -1253,6 +1309,104 @@ class _ProductTableState extends State<_ProductTable> {
           ),
         );
       },
+    );
+  }
+}
+
+enum _ProductTableEntryType { mainCategory, subcategory, product }
+
+class _ProductTableEntry {
+  const _ProductTableEntry._({
+    required this.type,
+    this.label = '',
+    this.count = 0,
+    this.product,
+    this.rowNumber = 0,
+  });
+
+  factory _ProductTableEntry.mainCategory(String label, int count) =>
+      _ProductTableEntry._(
+        type: _ProductTableEntryType.mainCategory,
+        label: label,
+        count: count,
+      );
+
+  factory _ProductTableEntry.subcategory(String label, int count) =>
+      _ProductTableEntry._(
+        type: _ProductTableEntryType.subcategory,
+        label: label,
+        count: count,
+      );
+
+  factory _ProductTableEntry.product(Product product, int rowNumber) =>
+      _ProductTableEntry._(
+        type: _ProductTableEntryType.product,
+        product: product,
+        rowNumber: rowNumber,
+      );
+
+  final _ProductTableEntryType type;
+  final String label;
+  final int count;
+  final Product? product;
+  final int rowNumber;
+}
+
+class _ProductCategoryBand extends StatelessWidget {
+  const _ProductCategoryBand({
+    required this.label,
+    required this.count,
+    required this.main,
+  });
+
+  final String label;
+  final int count;
+  final bool main;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = main ? const Color(0xFF17304C) : const Color(0xFF526A82);
+    return Container(
+      height: main ? 42 : 34,
+      padding: EdgeInsets.symmetric(horizontal: main ? 16 : 28),
+      color: background,
+      child: Row(
+        children: [
+          Icon(
+            main
+                ? Icons.folder_rounded
+                : Icons.subdirectory_arrow_right_rounded,
+            size: main ? 19 : 17,
+            color: Colors.white,
+          ),
+          const SizedBox(width: 9),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: main ? 13.5 : 12.5,
+              fontWeight: main ? FontWeight.w900 : FontWeight.w800,
+              letterSpacing: main ? 0.35 : 0.1,
+            ),
+          ),
+          const SizedBox(width: 9),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '$count ürün',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1301,41 +1455,44 @@ class _ProductTableRow extends StatelessWidget {
         ? const Color(0xFF7A4B4B)
         : const Color(0xFF2C6957);
 
-    return Material(
-      color: index.isEven ? Colors.white : const Color(0xFFF5F8FB),
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: Color(0xFFDCE3EA), width: 0.8),
+    return SizedBox(
+      height: 48,
+      child: Material(
+        color: index.isEven ? Colors.white : const Color(0xFFF5F8FB),
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFDCE3EA), width: 0.8),
+              ),
             ),
-          ),
-          child: Row(
-            children: [
-              _ProductTableCell(text: '${index + 1}', width: 50),
-              _ProductTableCell(text: product.code, width: 155, strong: true),
-              _ProductTableCell(text: product.name, width: 310),
-              _ProductTableCell(
-                text: productCategoryTurkishLabel(product.category),
-                width: 180,
-              ),
-              _ProductTableCell(text: product.brand, width: 135),
-              _ProductTableCell(text: product.model, width: 165),
-              _ProductTableCell(text: product.currencyLabel, width: 75),
-              _ProductTableCell(
-                text: product.formattedSalePrice,
-                width: 130,
-                strong: true,
-              ),
-              _ProductTableCell(text: product.formattedStock, width: 105),
-              _ProductTableCell(
-                text: status,
-                width: 85,
-                strong: true,
-                color: statusColor,
-              ),
-            ],
+            child: Row(
+              children: [
+                _ProductTableCell(text: '${index + 1}', width: 50),
+                _ProductTableCell(text: product.code, width: 155, strong: true),
+                _ProductTableCell(text: product.name, width: 310),
+                _ProductTableCell(
+                  text: productSubcategoryTurkishLabel(product),
+                  width: 180,
+                ),
+                _ProductTableCell(text: product.brand, width: 135),
+                _ProductTableCell(text: product.model, width: 165),
+                _ProductTableCell(text: product.currencyLabel, width: 75),
+                _ProductTableCell(
+                  text: product.formattedSalePrice,
+                  width: 130,
+                  strong: true,
+                ),
+                _ProductTableCell(text: product.formattedStock, width: 105),
+                _ProductTableCell(
+                  text: status,
+                  width: 85,
+                  strong: true,
+                  color: statusColor,
+                ),
+              ],
+            ),
           ),
         ),
       ),

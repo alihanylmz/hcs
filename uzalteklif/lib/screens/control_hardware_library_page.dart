@@ -457,23 +457,28 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
 
   List<Product> get _visibleProducts {
     final query = _query.trim().toLowerCase();
-    return widget.products
-        .where((product) {
-          if (!product.isActive || product.stockQuantity <= 0) return false;
-          if (!_showAllStock &&
-              productMainCategoryFor(product) != _targetGroup) {
-            return false;
-          }
-          if (query.isEmpty) return true;
-          return [
-            product.code,
-            product.name,
-            product.brand,
-            product.model,
-            product.category,
-          ].join(' ').toLowerCase().contains(query);
-        })
-        .toList(growable: false);
+    final products = widget.products.where((product) {
+      if (!product.isActive) return false;
+      if (!_showAllStock && productMainCategoryFor(product) != _targetGroup) {
+        return false;
+      }
+      if (query.isEmpty) return true;
+      return [
+        product.code,
+        product.name,
+        product.brand,
+        product.model,
+        product.category,
+      ].join(' ').toLowerCase().contains(query);
+    }).toList();
+    products.sort((left, right) {
+      final leftStockOrder = left.stockQuantity > 0 ? 0 : 1;
+      final rightStockOrder = right.stockQuantity > 0 ? 0 : 1;
+      final stockComparison = leftStockOrder.compareTo(rightStockOrder);
+      if (stockComparison != 0) return stockComparison;
+      return left.name.toLowerCase().compareTo(right.name.toLowerCase());
+    });
+    return products;
   }
 
   @override
@@ -524,7 +529,7 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
                     Expanded(
                       child: Text(
                         _showAllStock
-                            ? 'Tüm stok ürünlerinde aranıyor'
+                            ? 'Tüm ürün kataloğunda aranıyor'
                             : 'Yalnız $_targetLabel ürünleri gösteriliyor',
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
@@ -539,7 +544,9 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
                         size: 18,
                       ),
                       label: Text(
-                        _showAllStock ? 'Uygun Ürünlere Dön' : 'Tüm Stokta Ara',
+                        _showAllStock
+                            ? 'Uygun Ürünlere Dön'
+                            : 'Tüm Ürünlerde Ara',
                       ),
                     ),
                   ],
@@ -556,7 +563,7 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
               ),
               const SizedBox(height: 12),
               Text(
-                '${products.length} stok ürünü'
+                '${products.length} ürün'
                 '${_showAllStock ? " · filtre dışı arama açık" : ""}',
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
@@ -564,7 +571,7 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
               Expanded(
                 child: products.isEmpty
                     ? const Center(
-                        child: Text('Aramaya uygun stok ürünü bulunamadı.'),
+                        child: Text('Aramaya uygun ürün bulunamadı.'),
                       )
                     : ListView.separated(
                         itemCount: products.length,
@@ -870,6 +877,7 @@ class _HardwareEditorDialogState extends State<_HardwareEditorDialog> {
           SizedBox(
             width: 210,
             child: DropdownButtonFormField<ControlHardwareType>(
+              isExpanded: true,
               initialValue: _type,
               decoration: const InputDecoration(labelText: 'Ekipman türü'),
               items: ControlHardwareType.values
@@ -985,6 +993,7 @@ class _HardwareEditorDialogState extends State<_HardwareEditorDialog> {
               SizedBox(
                 width: 270,
                 child: DropdownButtonFormField<HardwareCompatibilityMode>(
+                  isExpanded: true,
                   initialValue: _compatibilityMode,
                   decoration: const InputDecoration(
                     labelText: 'Uyumluluk tipi',

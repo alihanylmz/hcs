@@ -19,6 +19,7 @@ import '../services/price_adjustment_rule_repository.dart';
 import '../services/quote_code_generator.dart';
 import '../services/quote_repository.dart';
 import '../services/user_profile_repository.dart';
+import '../utils/product_category_labels.dart';
 import '../widgets/workspace_background.dart';
 import 'cariler_page.dart';
 
@@ -2195,7 +2196,13 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                                 .map(
                                   (category) => DropdownMenuItem(
                                     value: category,
-                                    child: Text(category),
+                                    child: Text(
+                                      category == 'Tum Kategoriler'
+                                          ? 'Tüm Kategoriler'
+                                          : productCategoryTurkishLabel(
+                                              category,
+                                            ),
+                                    ),
                                   ),
                                 )
                                 .toList(),
@@ -4039,7 +4046,8 @@ class _CatalogRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${product.brand} - ${product.model} - ${product.category}',
+                  '${product.brand} - ${product.model} - '
+                  '${productCategoryTurkishLabel(product.category)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -4152,7 +4160,9 @@ class _CompactCatalogItem extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _MiniInfoPill(label: product.category),
+              _MiniInfoPill(
+                label: productCategoryTurkishLabel(product.category),
+              ),
               _MiniInfoPill(label: product.formattedStock),
               _MiniInfoPill(label: product.formattedSalePrice),
             ],

@@ -75,6 +75,10 @@ class ControlHardwareSelector {
     ),
   }) {
     final preferredBrand = rules.preferredBrand.trim().toLowerCase();
+    final forcedControllerIds = project.panelSettings
+        .map((settings) => settings.controllerHardwareId.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
     final activeHardware = hardware.where((item) {
       if (!item.isActive) return false;
       if (rules.onlyLinkedProductsInStock &&
@@ -82,6 +86,8 @@ class ControlHardwareSelector {
         return false;
       }
       if (preferredBrand.isNotEmpty &&
+          item.type == ControlHardwareType.controller &&
+          !forcedControllerIds.contains(item.id) &&
           item.brand.trim().toLowerCase() != preferredBrand) {
         return false;
       }
@@ -109,6 +115,7 @@ class ControlHardwareSelector {
         demands: demands,
         controllers: controllers,
         modules: modules,
+        forcedControllerId: settings.controllerHardwareId,
       );
 
       final parentResult = _resolveParent(
@@ -211,9 +218,16 @@ class ControlHardwareSelector {
     required List<_DemandUnit> demands,
     required List<ControlHardware> controllers,
     required List<ControlHardware> modules,
+    required String forcedControllerId,
   }) {
     PanelHardwareSolution? best;
-    for (final controller in controllers) {
+    final requestedId = forcedControllerId.trim();
+    final candidates = requestedId.isEmpty
+        ? controllers
+        : controllers
+              .where((controller) => controller.id == requestedId)
+              .toList(growable: false);
+    for (final controller in candidates) {
       final candidate = _controllerCandidate(
         panelCode: panelCode,
         controller: controller,
@@ -226,7 +240,10 @@ class ControlHardwareSelector {
         _unresolved(
           panelCode,
           demands,
-          'Kütüphanede aktif kontrolör bulunmuyor.',
+          requestedId.isEmpty
+              ? 'Kütüphanede aktif kontrolör bulunmuyor.'
+              : 'Bu pano için seçilen kontrolör aktif, stokta veya filtre '
+                    'kurallarına uygun değil.',
         );
   }
 

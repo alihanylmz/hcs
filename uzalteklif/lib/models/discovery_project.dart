@@ -232,21 +232,29 @@ class DiscoveryPanelSettings {
     required this.panelCode,
     this.mode = DiscoveryPanelMode.automatic,
     this.parentPanelCode = '',
+    this.controllerHardwareId = '',
+    this.ioModuleHardwareIds = const [],
   });
 
   final String panelCode;
   final DiscoveryPanelMode mode;
   final String parentPanelCode;
+  final String controllerHardwareId;
+  final List<String> ioModuleHardwareIds;
 
   DiscoveryPanelSettings copyWith({
     String? panelCode,
     DiscoveryPanelMode? mode,
     String? parentPanelCode,
+    String? controllerHardwareId,
+    List<String>? ioModuleHardwareIds,
   }) {
     return DiscoveryPanelSettings(
       panelCode: panelCode ?? this.panelCode,
       mode: mode ?? this.mode,
       parentPanelCode: parentPanelCode ?? this.parentPanelCode,
+      controllerHardwareId: controllerHardwareId ?? this.controllerHardwareId,
+      ioModuleHardwareIds: ioModuleHardwareIds ?? this.ioModuleHardwareIds,
     );
   }
 
@@ -254,6 +262,8 @@ class DiscoveryPanelSettings {
     'panel_code': panelCode,
     'mode': mode.storageKey,
     'parent_panel_code': parentPanelCode,
+    'controller_hardware_id': controllerHardwareId,
+    'io_module_hardware_ids': ioModuleHardwareIds,
   };
 
   factory DiscoveryPanelSettings.fromJson(Map<String, dynamic> json) {
@@ -262,6 +272,13 @@ class DiscoveryPanelSettings {
       mode: DiscoveryPanelModeX.fromStorageKey(json['mode'] as String?),
       parentPanelCode:
           (json['parent_panel_code'] as String?)?.trim().toUpperCase() ?? '',
+      controllerHardwareId:
+          (json['controller_hardware_id'] as String?)?.trim() ?? '',
+      ioModuleHardwareIds:
+          (json['io_module_hardware_ids'] as List<dynamic>? ?? const [])
+              .map((value) => value.toString().trim())
+              .where((value) => value.isNotEmpty)
+              .toList(growable: false),
     );
   }
 }

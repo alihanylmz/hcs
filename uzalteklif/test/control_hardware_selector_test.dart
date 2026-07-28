@@ -229,6 +229,8 @@ void main() {
           panelCode: 'DDC-02',
           mode: DiscoveryPanelMode.remoteOnly,
           parentPanelCode: 'DDC-01',
+          controllerHardwareId: 'controller-1',
+          ioModuleHardwareIds: ['module-1', 'module-1'],
         ),
       ],
     );
@@ -244,6 +246,47 @@ void main() {
       DiscoveryPanelMode.remoteOnly,
     );
     expect(restored.settingsForPanel('DDC-02').parentPanelCode, 'DDC-01');
+    expect(
+      restored.settingsForPanel('DDC-02').controllerHardwareId,
+      'controller-1',
+    );
+    expect(restored.settingsForPanel('DDC-02').ioModuleHardwareIds, [
+      'module-1',
+      'module-1',
+    ]);
+  });
+
+  test('panoya elle eşleştirilen kontrolör otomatik adayların önüne geçer', () {
+    final abb = ControlHardwareDefaults.abbFbxi8r8;
+    final honeywell = ControlHardwareDefaults.honeywellUnitary16;
+    final input = project(
+      devices: [
+        device('pump', 'DDC-01', [
+          point('di', DiscoveryPointType.di, 3),
+          point('do', DiscoveryPointType.doOutput, 1),
+        ]),
+      ],
+      panelSettings: [
+        DiscoveryPanelSettings(
+          panelCode: 'DDC-01',
+          mode: DiscoveryPanelMode.controllerRequired,
+          controllerHardwareId: abb.id,
+        ),
+      ],
+    );
+
+    final result = const ControlHardwareSelector().select(
+      project: input,
+      hardware: [honeywell, abb],
+      rules: const ControlHardwareSelectionRules(
+        preferredBrand: 'Honeywell',
+        onlyLinkedProductsInStock: false,
+        reservePercent: 0,
+      ),
+    );
+
+    expect(result.single.controller?.id, abb.id);
+    expect(result.single.isSatisfied, isTrue);
   });
 
   test('stok ve marka kuralları aday kontrolörleri sınırlar', () {

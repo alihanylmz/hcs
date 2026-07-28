@@ -428,64 +428,6 @@ class _HardwareCard extends StatelessWidget {
   }
 }
 
-enum _StockProductGroup {
-  controller,
-  ioModule,
-  hmi,
-  sensor,
-  actuatorValve,
-  accessory,
-  other,
-}
-
-extension _StockProductGroupX on _StockProductGroup {
-  String get label => switch (this) {
-    _StockProductGroup.controller => 'Kontrolörler',
-    _StockProductGroup.ioModule => 'I/O Modülleri',
-    _StockProductGroup.hmi => 'HMI / Operatör Paneli',
-    _StockProductGroup.sensor => 'Sensörler',
-    _StockProductGroup.actuatorValve => 'Aktüatör ve Vanalar',
-    _StockProductGroup.accessory => 'Aksesuarlar',
-    _StockProductGroup.other => 'Diğer',
-  };
-}
-
-_StockProductGroup _stockGroupFor(Product product) {
-  final searchable = [product.category, product.name].join(' ').toLowerCase();
-  if (searchable.contains('accessor')) return _StockProductGroup.accessory;
-  if (searchable.contains('hmi') ||
-      searchable.contains('operator panel') ||
-      searchable.contains('operatör panel')) {
-    return _StockProductGroup.hmi;
-  }
-  if (searchable.contains('dedicated io') ||
-      searchable.contains('i/o mod') ||
-      searchable.contains('io mod') ||
-      searchable.contains('communication module')) {
-    return _StockProductGroup.ioModule;
-  }
-  if (searchable.contains('controller') ||
-      searchable.contains('kontrolör') ||
-      searchable.contains('kontrolor')) {
-    return _StockProductGroup.controller;
-  }
-  if (searchable.contains('sensor') || searchable.contains('sensör')) {
-    return _StockProductGroup.sensor;
-  }
-  if (searchable.contains('actuator') ||
-      searchable.contains('aktüatör') ||
-      searchable.contains('aktuator') ||
-      searchable.contains('valve') ||
-      searchable.contains('vana')) {
-    return _StockProductGroup.actuatorValve;
-  }
-  return _StockProductGroup.other;
-}
-
-String _normalizedStockCategory(String raw) {
-  return productCategoryTurkishLabel(raw);
-}
-
 class _StockProductPickerDialog extends StatefulWidget {
   const _StockProductPickerDialog({
     required this.products,
@@ -504,7 +446,7 @@ class _StockProductPickerDialog extends StatefulWidget {
 
 class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
   String _query = '';
-  late _StockProductGroup _group;
+  late ProductMainCategory _group;
   String _category = '';
 
   @override
@@ -519,9 +461,9 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
     }
     _group = selectedProduct == null
         ? (widget.hardwareType == ControlHardwareType.controller
-              ? _StockProductGroup.controller
-              : _StockProductGroup.ioModule)
-        : _stockGroupFor(selectedProduct);
+              ? ProductMainCategory.controller
+              : ProductMainCategory.ioModule)
+        : productMainCategoryFor(selectedProduct);
   }
 
   List<String> get _categories {
@@ -530,22 +472,22 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
           (product) =>
               product.isActive &&
               product.stockQuantity > 0 &&
-              _stockGroupFor(product) == _group,
+              productMainCategoryFor(product) == _group,
         )
-        .map((product) => _normalizedStockCategory(product.category))
+        .map(productSubcategoryTurkishLabel)
         .toSet()
         .toList();
     result.sort();
     return result;
   }
 
-  int _groupCount(_StockProductGroup group) {
+  int _groupCount(ProductMainCategory group) {
     return widget.products
         .where(
           (product) =>
               product.isActive &&
               product.stockQuantity > 0 &&
-              _stockGroupFor(product) == group,
+              productMainCategoryFor(product) == group,
         )
         .length;
   }
@@ -555,9 +497,9 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
     return widget.products
         .where((product) {
           if (!product.isActive || product.stockQuantity <= 0) return false;
-          if (_stockGroupFor(product) != _group) return false;
+          if (productMainCategoryFor(product) != _group) return false;
           if (_category.isNotEmpty &&
-              _normalizedStockCategory(product.category) != _category) {
+              productSubcategoryTurkishLabel(product) != _category) {
             return false;
           }
           if (query.isEmpty) return true;
@@ -611,7 +553,7 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final group in _StockProductGroup.values)
+                  for (final group in ProductMainCategory.values)
                     ChoiceChip(
                       selected: _group == group,
                       label: Text('${group.label} (${_groupCount(group)})'),
@@ -685,7 +627,7 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
-                              '${_normalizedStockCategory(product.category)} · '
+                              '${productSubcategoryTurkishLabel(product)} · '
                               '${product.brand} ${product.model} · '
                               '${product.formattedStock} · '
                               '${product.formattedSalePrice}',

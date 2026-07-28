@@ -29,7 +29,8 @@ void main() {
 
     expect(find.text('UZAL TEKNIK'), findsOneWidget);
     expect(find.text('Siemens'), findsAtLeastNWidgets(1));
-    expect(find.text('QAE2120.010'), findsAtLeastNWidgets(1));
+    expect(find.text('Kontrolörler'), findsOneWidget);
+    expect(find.text('DDC Kontrolörleri'), findsAtLeastNWidgets(1));
     expect(find.textContaining('urun listeleniyor'), findsOneWidget);
   });
 }

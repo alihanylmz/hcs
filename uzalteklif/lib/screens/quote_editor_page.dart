@@ -4047,7 +4047,7 @@ class _CatalogRow extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   '${product.brand} - ${product.model} - '
-                  '${productCategoryTurkishLabel(product.category)}',
+                  '${productSubcategoryTurkishLabel(product)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -4160,9 +4160,7 @@ class _CompactCatalogItem extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _MiniInfoPill(
-                label: productCategoryTurkishLabel(product.category),
-              ),
+              _MiniInfoPill(label: productSubcategoryTurkishLabel(product)),
               _MiniInfoPill(label: product.formattedStock),
               _MiniInfoPill(label: product.formattedSalePrice),
             ],

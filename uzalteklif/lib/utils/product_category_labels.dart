@@ -61,7 +61,15 @@ ProductMainCategory productMainCategoryFor(Product product) {
       return ProductMainCategory.actuatorValve;
     }
   }
-  final searchable = [product.category, product.name].join(' ').toLowerCase();
+  final category = _normalizeCatalogText(product.category);
+  final searchable = _productSearchableText(product);
+  if (category.contains('controller accessor') ||
+      category.contains('controller service part')) {
+    return ProductMainCategory.accessory;
+  }
+  if (category.contains('remote temperature controller')) {
+    return ProductMainCategory.thermostat;
+  }
   if (searchable.contains('accessor')) return ProductMainCategory.accessory;
   if (searchable.contains('hmi') ||
       searchable.contains('operator panel') ||
@@ -95,8 +103,9 @@ ProductMainCategory productMainCategoryFor(Product product) {
     return ProductMainCategory.ioModule;
   }
   if (searchable.contains('controller') ||
-      searchable.contains('kontrolör') ||
-      searchable.contains('kontrolor')) {
+      searchable.contains('kontrolor') ||
+      searchable.contains('fbxi') ||
+      searchable.contains('unitary 16')) {
     return ProductMainCategory.controller;
   }
   if (searchable.contains('thermostat') || searchable.contains('termostat')) {
@@ -122,6 +131,68 @@ ProductMainCategory productMainCategoryFor(Product product) {
     return ProductMainCategory.hvacDrive;
   }
   return ProductMainCategory.other;
+}
+
+bool productMatchesHardwareCategory(
+  Product product,
+  ProductMainCategory target,
+) {
+  assert(
+    target == ProductMainCategory.controller ||
+        target == ProductMainCategory.ioModule,
+  );
+  final explicit =
+      product.specifications[productCatalogMainCategoryKey]?.trim() ?? '';
+  if (explicit.isNotEmpty) {
+    return productMainCategoryFor(product) == target;
+  }
+
+  final category = _normalizeCatalogText(product.category);
+  final searchable = _productSearchableText(product);
+  if (_isControlHardwareAccessoryOrServicePart(category, searchable)) {
+    return false;
+  }
+
+  if (target == ProductMainCategory.controller) {
+    if (_isNonHardwareControllerRecord(searchable)) return false;
+    final hasPhysicalControllerEvidence =
+        searchable.contains('plant controller') ||
+        searchable.contains('unitary controller') ||
+        searchable.contains('vav controller') ||
+        searchable.contains('zone controller') ||
+        searchable.contains('ddc controller') ||
+        searchable.contains('ddc kontrolor') ||
+        searchable.contains('fbxi') ||
+        searchable.contains('unitary 16') ||
+        searchable.contains('hawk8') ||
+        searchable.contains('n-adv device');
+    if (hasPhysicalControllerEvidence) return true;
+    const controllerCategories = <String>{
+      'ddc controller',
+      'ddc kontrolor',
+      'kontrolorler',
+      'unitary controllers',
+      'vav controllers',
+      'zone controllers',
+    };
+    return controllerCategories.contains(category);
+  }
+
+  if (_isNonHardwareIoRecord(searchable)) return false;
+  if (category == 'dedicated io' ||
+      category == 'i/o modulleri' ||
+      category == 'io modulleri') {
+    return true;
+  }
+  return searchable.contains('i/o module') ||
+      searchable.contains('io module') ||
+      searchable.contains('mixed i/o') ||
+      searchable.contains('mixed io') ||
+      searchable.contains('panel i/o') ||
+      searchable.contains('panel io') ||
+      searchable.contains('remote i/o') ||
+      searchable.contains('remote io') ||
+      RegExp(r'\b\d+\s*(ai|ao|di|do|ui|uio)\b').hasMatch(searchable);
 }
 
 String productSubcategoryTurkishLabel(Product product) {
@@ -226,6 +297,62 @@ String _normalizeCatalogText(String value) {
       .replaceAll('ö', 'o')
       .replaceAll('ç', 'c')
       .replaceAll(RegExp(r'\s+'), ' ');
+}
+
+String _productSearchableText(Product product) {
+  return _normalizeCatalogText(
+    [
+      product.code,
+      product.name,
+      product.category,
+      product.brand,
+      product.model,
+      product.description,
+      product.technicalSummary,
+    ].join(' '),
+  );
+}
+
+bool _isControlHardwareAccessoryOrServicePart(
+  String category,
+  String searchable,
+) {
+  return category.contains('controller accessor') ||
+      category.contains('controller service part') ||
+      searchable.contains('terminal block') ||
+      searchable.contains('terminal cover') ||
+      searchable.contains('rail clip') ||
+      searchable.contains('antenna kit') ||
+      searchable.contains('protective end cover') ||
+      searchable.contains('relay output jumper');
+}
+
+bool _isNonHardwareControllerRecord(String searchable) {
+  final isControllerWithoutLicense =
+      searchable.contains('w/o license') ||
+      searchable.contains('without license');
+  return (!isControllerWithoutLicense &&
+          (searchable.contains('license') || searchable.contains('licence'))) ||
+      searchable.contains(' lisans ') ||
+      searchable.contains(' basic lic ') ||
+      searchable.contains(' baslic ') ||
+      searchable.contains('upgrade') ||
+      searchable.contains('software update') ||
+      searchable.contains(' s/w update ') ||
+      searchable.contains(' sma ') ||
+      searchable.contains('demo license') ||
+      searchable.contains('globpts') ||
+      searchable.contains('pbpts') ||
+      RegExp(r'\badd \d+ dev\b').hasMatch(searchable);
+}
+
+bool _isNonHardwareIoRecord(String searchable) {
+  return searchable.contains('adaptor') ||
+      searchable.contains('adapter') ||
+      searchable.contains('jumper') ||
+      searchable.contains('terminal') ||
+      searchable.contains('accessor') ||
+      searchable.contains('service part');
 }
 
 String productCategoryTurkishLabel(String raw) {

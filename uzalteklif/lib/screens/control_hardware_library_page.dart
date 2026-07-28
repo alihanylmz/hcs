@@ -427,14 +427,77 @@ class _HardwareCard extends StatelessWidget {
   }
 }
 
+enum _StockProductGroup {
+  controller,
+  ioModule,
+  hmi,
+  sensor,
+  actuatorValve,
+  accessory,
+  other,
+}
+
+extension _StockProductGroupX on _StockProductGroup {
+  String get label => switch (this) {
+    _StockProductGroup.controller => 'Kontrolörler',
+    _StockProductGroup.ioModule => 'I/O Modülleri',
+    _StockProductGroup.hmi => 'HMI / Operatör Paneli',
+    _StockProductGroup.sensor => 'Sensörler',
+    _StockProductGroup.actuatorValve => 'Aktüatör ve Vanalar',
+    _StockProductGroup.accessory => 'Aksesuarlar',
+    _StockProductGroup.other => 'Diğer',
+  };
+}
+
+_StockProductGroup _stockGroupFor(Product product) {
+  final searchable = [product.category, product.name].join(' ').toLowerCase();
+  if (searchable.contains('accessor')) return _StockProductGroup.accessory;
+  if (searchable.contains('hmi') ||
+      searchable.contains('operator panel') ||
+      searchable.contains('operatör panel')) {
+    return _StockProductGroup.hmi;
+  }
+  if (searchable.contains('dedicated io') ||
+      searchable.contains('i/o mod') ||
+      searchable.contains('io mod') ||
+      searchable.contains('communication module')) {
+    return _StockProductGroup.ioModule;
+  }
+  if (searchable.contains('controller') ||
+      searchable.contains('kontrolör') ||
+      searchable.contains('kontrolor')) {
+    return _StockProductGroup.controller;
+  }
+  if (searchable.contains('sensor') || searchable.contains('sensör')) {
+    return _StockProductGroup.sensor;
+  }
+  if (searchable.contains('actuator') ||
+      searchable.contains('aktüatör') ||
+      searchable.contains('aktuator') ||
+      searchable.contains('valve') ||
+      searchable.contains('vana')) {
+    return _StockProductGroup.actuatorValve;
+  }
+  return _StockProductGroup.other;
+}
+
+String _normalizedStockCategory(String raw) {
+  final category = raw.trim();
+  final normalized = category.toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  if (normalized == 'hmi' || normalized == 'hmis') return 'HMI';
+  return category.isEmpty ? 'Kategorisiz' : category;
+}
+
 class _StockProductPickerDialog extends StatefulWidget {
   const _StockProductPickerDialog({
     required this.products,
     required this.selectedProductId,
+    required this.hardwareType,
   });
 
   final List<Product> products;
   final String selectedProductId;
+  final ControlHardwareType hardwareType;
 
   @override
   State<_StockProductPickerDialog> createState() =>
@@ -443,12 +506,51 @@ class _StockProductPickerDialog extends StatefulWidget {
 
 class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
   String _query = '';
+  late _StockProductGroup _group;
+  String _category = '';
+
+  @override
+  void initState() {
+    super.initState();
+    Product? selectedProduct;
+    for (final product in widget.products) {
+      if (product.id == widget.selectedProductId) {
+        selectedProduct = product;
+        break;
+      }
+    }
+    _group = selectedProduct == null
+        ? (widget.hardwareType == ControlHardwareType.controller
+              ? _StockProductGroup.controller
+              : _StockProductGroup.ioModule)
+        : _stockGroupFor(selectedProduct);
+  }
+
+  List<String> get _categories {
+    final result = widget.products
+        .where(
+          (product) =>
+              product.isActive &&
+              product.stockQuantity > 0 &&
+              _stockGroupFor(product) == _group,
+        )
+        .map((product) => _normalizedStockCategory(product.category))
+        .toSet()
+        .toList();
+    result.sort();
+    return result;
+  }
 
   List<Product> get _visibleProducts {
     final query = _query.trim().toLowerCase();
     return widget.products
         .where((product) {
           if (!product.isActive || product.stockQuantity <= 0) return false;
+          if (_stockGroupFor(product) != _group) return false;
+          if (_category.isNotEmpty &&
+              _normalizedStockCategory(product.category) != _category) {
+            return false;
+          }
           if (query.isEmpty) return true;
           return [
             product.code,
@@ -491,6 +593,62 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
                 ],
               ),
               const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<_StockProductGroup>(
+                      initialValue: _group,
+                      decoration: const InputDecoration(
+                        labelText: 'Ana ürün grubu',
+                        prefixIcon: Icon(Icons.account_tree_outlined),
+                      ),
+                      items: _StockProductGroup.values
+                          .map(
+                            (group) => DropdownMenuItem(
+                              value: group,
+                              child: Text(group.label),
+                            ),
+                          )
+                          .toList(growable: false),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() {
+                          _group = value;
+                          _category = '';
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      key: ValueKey('stock-category-${_group.name}'),
+                      initialValue: _category,
+                      decoration: const InputDecoration(
+                        labelText: 'Alt kategori',
+                        prefixIcon: Icon(Icons.category_outlined),
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '',
+                          child: Text('Tüm alt kategoriler'),
+                        ),
+                        for (final category in _categories)
+                          DropdownMenuItem(
+                            value: category,
+                            child: Text(
+                              category,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => _category = value ?? ''),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
               TextField(
                 autofocus: true,
                 decoration: const InputDecoration(
@@ -530,6 +688,7 @@ class _StockProductPickerDialogState extends State<_StockProductPickerDialog> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
+                              '${_normalizedStockCategory(product.category)} · '
                               '${product.brand} ${product.model} · '
                               '${product.formattedStock} · '
                               '${product.formattedSalePrice}',
@@ -656,6 +815,7 @@ class _HardwareEditorDialogState extends State<_HardwareEditorDialog> {
       builder: (context) => _StockProductPickerDialog(
         products: widget.products,
         selectedProductId: _productIdController.text.trim(),
+        hardwareType: _type,
       ),
     );
     if (product == null) return;

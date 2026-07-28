@@ -564,15 +564,23 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       ),
     );
     if (result == null) return;
-    final device = result.template.instantiate(
-      id: _buildId('device'),
-      panelCode: result.panelCode,
-      deviceCode: result.deviceCode,
-      idBuilder: _buildId,
-    );
     setState(() {
-      _devices.add(device);
-      _ensurePanelSettings(device.panelCode);
+      for (var index = 0; index < result.quantity; index++) {
+        final device = result.template
+            .instantiate(
+              id: _buildId('device'),
+              panelCode: result.panelCode,
+              deviceCode: _numberedDeviceCode(
+                result.deviceCode,
+                index,
+                result.quantity,
+              ),
+              idBuilder: _buildId,
+            )
+            .copyWith(name: result.deviceName);
+        _devices.add(device);
+      }
+      _ensurePanelSettings(result.panelCode);
       _hardwareSolutions = const [];
     });
   }
@@ -592,13 +600,25 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     if (result == null) return;
     setState(() {
       _devices[index] = source.copyWith(
-        name: result.template.name,
+        name: result.deviceName,
+        templateKey: result.template.key,
         panelCode: result.panelCode,
         deviceCode: result.deviceCode,
       );
       _ensurePanelSettings(result.panelCode);
       _hardwareSolutions = const [];
     });
+  }
+
+  String _numberedDeviceCode(String source, int index, int total) {
+    final code = source.trim();
+    if (total <= 1 || index == 0 || code.isEmpty) return code;
+    final match = RegExp(r'^(.*?)(\d+)$').firstMatch(code);
+    if (match == null) return '$code-${index + 1}';
+    final prefix = match.group(1) ?? '';
+    final rawNumber = match.group(2) ?? '1';
+    final number = (int.tryParse(rawNumber) ?? 1) + index;
+    return '$prefix${number.toString().padLeft(rawNumber.length, '0')}';
   }
 
   Future<void> _deleteDevice(int index) async {
@@ -2188,13 +2208,17 @@ class _DiscoveryProductPickerDialogState
 class _DeviceDialogResult {
   const _DeviceDialogResult({
     required this.template,
+    required this.deviceName,
     required this.panelCode,
     required this.deviceCode,
+    required this.quantity,
   });
 
   final DiscoveryDeviceTemplate template;
+  final String deviceName;
   final String panelCode;
   final String deviceCode;
+  final int quantity;
 }
 
 class _DeviceDialog extends StatefulWidget {
@@ -2214,7 +2238,9 @@ class _DeviceDialog extends StatefulWidget {
 
 class _DeviceDialogState extends State<_DeviceDialog> {
   late DiscoveryDeviceTemplate _template;
+  late final TextEditingController _nameController;
   late final TextEditingController _deviceController;
+  late final TextEditingController _quantityController;
   late String _panelCode;
 
   @override
@@ -2223,7 +2249,7 @@ class _DeviceDialogState extends State<_DeviceDialog> {
     final key = widget.existing?.templateKey;
     _template = DiscoveryTemplates.values.firstWhere(
       (template) => template.key == key,
-      orElse: () => DiscoveryTemplates.pump,
+      orElse: () => DiscoveryTemplates.custom,
     );
     _panelCode = widget.existing?.panelCode.trim().isNotEmpty == true
         ? widget.existing!.panelCode.trim().toUpperCase()
@@ -2231,11 +2257,17 @@ class _DeviceDialogState extends State<_DeviceDialog> {
     _deviceController = TextEditingController(
       text: widget.existing?.deviceCode ?? '',
     );
+    _nameController = TextEditingController(
+      text: widget.existing?.name ?? _template.name,
+    );
+    _quantityController = TextEditingController(text: '1');
   }
 
   @override
   void dispose() {
+    _nameController.dispose();
     _deviceController.dispose();
+    _quantityController.dispose();
     super.dispose();
   }
 
@@ -2244,112 +2276,173 @@ class _DeviceDialogState extends State<_DeviceDialog> {
     final editing = widget.existing != null;
     return AlertDialog(
       title: Text(editing ? 'Cihaz Bilgilerini Düzenle' : 'Keşfe Cihaz Ekle'),
-      content: SizedBox(
-        width: 520,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<DiscoveryDeviceTemplate>(
-              initialValue: _template,
-              decoration: const InputDecoration(labelText: 'Cihaz şablonu'),
-              items: DiscoveryTemplates.values
-                  .map(
-                    (template) => DropdownMenuItem(
-                      value: template,
-                      child: Text(
-                        '${template.name} (${template.points.length} nokta)',
-                      ),
-                    ),
-                  )
-                  .toList(growable: false),
-              onChanged: editing
-                  ? null
-                  : (value) {
-                      if (value != null) setState(() => _template = value);
-                    },
-            ),
-            const SizedBox(height: 12),
-            Autocomplete<String>(
-              initialValue: TextEditingValue(text: _panelCode),
-              optionsBuilder: (textEditingValue) {
-                final query = textEditingValue.text.trim().toLowerCase();
-                if (query.isEmpty) return widget.panelSuggestions;
-                return widget.panelSuggestions.where(
-                  (option) => option.toLowerCase().contains(query),
-                );
-              },
-              onSelected: (value) => _panelCode = value,
-              fieldViewBuilder:
-                  (context, controller, focusNode, onFieldSubmitted) {
-                    return TextField(
-                      controller: controller,
-                      focusNode: focusNode,
-                      textCapitalization: TextCapitalization.characters,
-                      decoration: const InputDecoration(
-                        labelText: 'Pano kodu',
-                        hintText: 'D yazın veya DDC-01 seçin',
-                        prefixIcon: Icon(Icons.developer_board_outlined),
-                        suffixIcon: Icon(Icons.arrow_drop_down_rounded),
-                      ),
-                      onChanged: (value) => _panelCode = value,
-                      onSubmitted: (_) => onFieldSubmitted(),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!editing) ...[
+                const Text(
+                  'Cihaz türünü seçin',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final itemWidth = constraints.maxWidth >= 560
+                        ? (constraints.maxWidth - 10) / 2
+                        : constraints.maxWidth;
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final template in DiscoveryTemplates.values)
+                          SizedBox(
+                            width: itemWidth,
+                            child: _DeviceTemplateChoice(
+                              template: template,
+                              selected: _template.key == template.key,
+                              onTap: () {
+                                setState(() {
+                                  _template = template;
+                                  _nameController.text = template.name;
+                                });
+                              },
+                            ),
+                          ),
+                      ],
                     );
                   },
-              optionsViewBuilder: (context, onSelected, options) {
-                final values = options.toList(growable: false);
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 8,
-                    borderRadius: BorderRadius.circular(16),
-                    clipBehavior: Clip.antiAlias,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: 520,
-                        maxHeight: 220,
-                      ),
-                      child: ListView.separated(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        shrinkWrap: true,
-                        itemCount: values.length,
-                        separatorBuilder: (_, _) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final option = values[index];
-                          return ListTile(
-                            dense: true,
-                            leading: const Icon(Icons.developer_board_rounded),
-                            title: Text(
-                              option,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
+                ),
+                const SizedBox(height: 16),
+              ],
+              TextField(
+                controller: _nameController,
+                decoration: InputDecoration(
+                  labelText: 'Cihaz adı',
+                  hintText: _template.key == 'custom'
+                      ? 'Örn. Boyler, Fan, Eşanjör'
+                      : _template.name,
+                  prefixIcon: const Icon(
+                    Icons.precision_manufacturing_outlined,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Autocomplete<String>(
+                initialValue: TextEditingValue(text: _panelCode),
+                optionsBuilder: (textEditingValue) {
+                  final query = textEditingValue.text.trim().toLowerCase();
+                  if (query.isEmpty) return widget.panelSuggestions;
+                  return widget.panelSuggestions.where(
+                    (option) => option.toLowerCase().contains(query),
+                  );
+                },
+                onSelected: (value) => _panelCode = value,
+                fieldViewBuilder:
+                    (context, controller, focusNode, onFieldSubmitted) {
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: const InputDecoration(
+                          labelText: 'Pano kodu',
+                          hintText: 'D yazın veya DDC-01 seçin',
+                          prefixIcon: Icon(Icons.developer_board_outlined),
+                          suffixIcon: Icon(Icons.arrow_drop_down_rounded),
+                        ),
+                        onChanged: (value) => _panelCode = value,
+                        onSubmitted: (_) => onFieldSubmitted(),
+                      );
+                    },
+                optionsViewBuilder: (context, onSelected, options) {
+                  final values = options.toList(growable: false);
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 8,
+                      borderRadius: BorderRadius.circular(16),
+                      clipBehavior: Clip.antiAlias,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: 620,
+                          maxHeight: 220,
+                        ),
+                        child: ListView.separated(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          shrinkWrap: true,
+                          itemCount: values.length,
+                          separatorBuilder: (_, _) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final option = values[index];
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(
+                                Icons.developer_board_rounded,
                               ),
-                            ),
-                            onTap: () => onSelected(option),
-                          );
-                        },
+                              title: Text(
+                                option,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              onTap: () => onSelected(option),
+                            );
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
+                  );
+                },
+              ),
+              const SizedBox(height: 6),
+              Text(
                 'Mevcut veya sıradaki pano önerilir; özel bir kod da yazabilirsiniz.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _deviceController,
-              decoration: const InputDecoration(
-                labelText: 'Cihaz kodu',
-                hintText: 'KS-1',
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _deviceController,
+                      decoration: const InputDecoration(
+                        labelText: 'İlk cihaz kodu',
+                        hintText: 'P-1, KZ-1, KS-1',
+                      ),
+                    ),
+                  ),
+                  if (!editing) ...[
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 120,
+                      child: TextField(
+                        controller: _quantityController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Adet',
+                          prefixIcon: Icon(Icons.numbers_rounded),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ),
-          ],
+              if (!editing) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _template.points.isEmpty
+                      ? 'Özel cihaz boş eklenir; kontrol noktalarını cihaz '
+                            'kartından siz eklersiniz.'
+                      : '${_template.points.length} standart kontrol noktası '
+                            'her cihaz için otomatik oluşturulur.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ],
+          ),
         ),
       ),
       actions: [
@@ -2359,19 +2452,95 @@ class _DeviceDialogState extends State<_DeviceDialog> {
         ),
         FilledButton(
           onPressed: () {
+            final name = _nameController.text.trim();
+            final quantity = int.tryParse(_quantityController.text.trim()) ?? 0;
+            if (name.isEmpty || quantity < 1 || quantity > 100) return;
             Navigator.pop(
               context,
               _DeviceDialogResult(
                 template: _template,
+                deviceName: name,
                 panelCode: _panelCode.trim().toUpperCase(),
                 deviceCode: _deviceController.text.trim(),
+                quantity: editing ? 1 : quantity,
               ),
             );
           },
-          child: Text(editing ? 'Uygula' : 'Ekle'),
+          child: Text(editing ? 'Uygula' : 'Keşfe Ekle'),
         ),
       ],
     );
+  }
+}
+
+class _DeviceTemplateChoice extends StatelessWidget {
+  const _DeviceTemplateChoice({
+    required this.template,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final DiscoveryDeviceTemplate template;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: selected
+          ? colors.primaryContainer
+          : colors.surfaceContainerHighest.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? colors.primary : colors.outlineVariant,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(_deviceTemplateIcon(template.key), color: colors.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      template.name,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    Text(
+                      template.points.isEmpty
+                          ? 'Noktaları manuel ekle'
+                          : '${template.points.length} otomatik nokta',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              if (selected)
+                Icon(Icons.check_circle_rounded, color: colors.primary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _deviceTemplateIcon(String key) {
+    return switch (key) {
+      'pump' => Icons.water_rounded,
+      'boiler' => Icons.local_fire_department_rounded,
+      'ahu' => Icons.air_rounded,
+      _ => Icons.add_box_outlined,
+    };
   }
 }
 

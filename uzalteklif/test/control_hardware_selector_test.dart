@@ -146,6 +146,62 @@ void main() {
     expect(honeywellCapacity.isSatisfied, isTrue);
   });
 
+  test('eksik pano için uyumlu I/O modülü ve adedi önerilir', () {
+    final controller = ControlHardwareDefaults.honeywellUnitary16.copyWith(
+      maxExpansionModules: 2,
+    );
+    final module = ControlHardware(
+      id: 'unitary-uio-8',
+      type: ControlHardwareType.ioModule,
+      brand: 'Honeywell',
+      model: 'Unitary UIO 8',
+      family: 'Unitary',
+      channelPools: const [
+        HardwareChannelPool(
+          id: 'unitary-uio-pool',
+          name: 'UIO',
+          quantity: 8,
+          supportedPointTypes: {
+            DiscoveryPointType.aiActive,
+            DiscoveryPointType.aiPassive,
+            DiscoveryPointType.ao,
+            DiscoveryPointType.di,
+            DiscoveryPointType.doOutput,
+          },
+        ),
+      ],
+      compatibilityMode: HardwareCompatibilityMode.sameFamily,
+      connectionProtocol: '',
+      compatibleFamilies: const [],
+      maxExpansionModules: 0,
+      isActive: true,
+      updatedAt: DateTime.utc(2026, 7, 29),
+    );
+    final input = project(
+      devices: [
+        device('large-panel', 'DDC-01', [
+          point('di', DiscoveryPointType.di, 20),
+          point('do', DiscoveryPointType.doOutput, 8),
+        ]),
+      ],
+    );
+
+    final recommendation = const ControlHardwareSelector()
+        .recommendPanelSolution(
+          project: input,
+          panelCode: 'DDC-01',
+          controller: controller,
+          availableModules: [module],
+        );
+
+    expect(recommendation.controller?.id, controller.id);
+    expect(recommendation.modules, hasLength(1));
+    expect(recommendation.modules.single.id, module.id);
+    expect(recommendation.totalDemand, 28);
+    expect(recommendation.matchedPoints, 28);
+    expect(recommendation.isSatisfied, isTrue);
+  });
+
   test('ikinci pano uyumlu modülle birinci panoya Remote I/O bağlanır', () {
     final controller = ControlHardwareDefaults.honeywellUnitary16.copyWith(
       maxExpansionModules: 3,

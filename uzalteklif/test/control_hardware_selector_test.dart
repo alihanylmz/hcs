@@ -104,6 +104,48 @@ void main() {
     expect(result.single.matchedPoints, 12);
   });
 
+  test('pano kapasitesi kalan ve eksik fiziksel noktaları hesaplar', () {
+    final input = project(
+      devices: [
+        device('mixed-load', 'DDC-01', [
+          point('di', DiscoveryPointType.di, 15),
+          point('do', DiscoveryPointType.doOutput, 5),
+        ]),
+      ],
+    );
+    const selector = ControlHardwareSelector();
+
+    final abbCapacity = selector.evaluatePanelCapacity(
+      project: input,
+      panelCode: 'DDC-01',
+      equipment: [ControlHardwareDefaults.abbFbxi8r8],
+    );
+    final honeywellCapacity = selector.evaluatePanelCapacity(
+      project: input,
+      panelCode: 'DDC-01',
+      equipment: [ControlHardwareDefaults.honeywellUnitary16],
+    );
+
+    expect(abbCapacity.requiredTotal, 20);
+    expect(abbCapacity.matchedTotal, 16);
+    expect(abbCapacity.unmetTotal, 4);
+    expect(abbCapacity.remainingChannels, 0);
+    expect(abbCapacity.isSatisfied, isFalse);
+    expect(
+      abbCapacity.unmetPoints.values.fold<int>(
+        0,
+        (total, count) => total + count,
+      ),
+      4,
+    );
+
+    expect(honeywellCapacity.requiredTotal, 20);
+    expect(honeywellCapacity.matchedTotal, 20);
+    expect(honeywellCapacity.unmetTotal, 0);
+    expect(honeywellCapacity.remainingChannels, 4);
+    expect(honeywellCapacity.isSatisfied, isTrue);
+  });
+
   test('ikinci pano uyumlu modülle birinci panoya Remote I/O bağlanır', () {
     final controller = ControlHardwareDefaults.honeywellUnitary16.copyWith(
       maxExpansionModules: 3,

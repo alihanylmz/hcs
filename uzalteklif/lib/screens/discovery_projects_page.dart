@@ -811,12 +811,27 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
           equipment: [controller],
         ),
     };
+    final modules = _hardware
+        .where(
+          (item) => item.type == ControlHardwareType.ioModule && item.isActive,
+        )
+        .toList(growable: false);
+    final recommendations = <String, PanelHardwareSolution>{
+      for (final controller in controllers)
+        controller.id: const ControlHardwareSelector().recommendPanelSolution(
+          project: _currentProject,
+          panelCode: panelCode,
+          controller: controller,
+          availableModules: modules,
+        ),
+    };
     final result = await showDialog<_ControllerSelectionResult>(
       context: context,
       builder: (context) => _PanelControllerPickerDialog(
         controllers: controllers,
         products: _products,
         capacities: capacities,
+        recommendations: recommendations,
         selectedControllerId: current.controllerHardwareId,
       ),
     );
@@ -871,6 +886,46 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       panelCode: panelCode,
       equipment: equipment,
     );
+  }
+
+  PanelHardwareSolution? _recommendationForPanel(String panelCode) {
+    final controller = _selectedControllerForPanel(panelCode);
+    if (controller == null) return null;
+    return const ControlHardwareSelector().recommendPanelSolution(
+      project: _currentProject,
+      panelCode: panelCode,
+      controller: controller,
+      availableModules: _hardware
+          .where(
+            (item) =>
+                item.type == ControlHardwareType.ioModule && item.isActive,
+          )
+          .toList(growable: false),
+    );
+  }
+
+  void _applyPanelRecommendation(
+    String panelCode,
+    PanelHardwareSolution recommendation,
+  ) {
+    if (recommendation.modules.isEmpty) return;
+    final current = _settingsForPanel(panelCode);
+    final updated = current.copyWith(
+      ioModuleHardwareIds: recommendation.modules
+          .map((module) => module.id)
+          .toList(growable: false),
+    );
+    setState(() {
+      final index = _panelSettings.indexWhere(
+        (settings) => settings.panelCode == panelCode,
+      );
+      if (index == -1) {
+        _panelSettings.add(updated);
+      } else {
+        _panelSettings[index] = updated;
+      }
+      _hardwareSolutions = const [];
+    });
   }
 
   Future<void> _analyzeHardware() async {
@@ -1335,6 +1390,9 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       (total, indexed) => total + indexed.device.totalPoints,
     );
     final capacity = _capacityForPanel(panelCode);
+    final recommendation = capacity?.isSatisfied == false
+        ? _recommendationForPanel(panelCode)
+        : null;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -1404,7 +1462,16 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
             ),
             if (capacity != null) ...[
               const SizedBox(height: 12),
-              _PanelCapacitySummary(capacity: capacity),
+              _PanelCapacitySummary(
+                capacity: capacity,
+                recommendation: recommendation,
+                onApplyRecommendation:
+                    recommendation != null &&
+                        recommendation.modules.isNotEmpty &&
+                        recommendation.matchedPoints > capacity.matchedTotal
+                    ? () => _applyPanelRecommendation(panelCode, recommendation)
+                    : null,
+              ),
             ],
             const SizedBox(height: 16),
             for (final categoryEntry in categories.entries) ...[
@@ -1499,9 +1566,15 @@ class _IndexedDevice {
 }
 
 class _PanelCapacitySummary extends StatelessWidget {
-  const _PanelCapacitySummary({required this.capacity});
+  const _PanelCapacitySummary({
+    required this.capacity,
+    required this.recommendation,
+    required this.onApplyRecommendation,
+  });
 
   final PanelHardwareCapacity capacity;
+  final PanelHardwareSolution? recommendation;
+  final VoidCallback? onApplyRecommendation;
 
   static const _physicalPointTypes = [
     DiscoveryPointType.aiActive,
@@ -1525,6 +1598,15 @@ class _PanelCapacitySummary extends StatelessWidget {
               'karşılandı · ${capacity.remainingChannels} boş kanal'
         : '${capacity.matchedTotal}/${capacity.requiredTotal} fiziksel nokta '
               'karşılandı · ${capacity.unmetTotal} nokta eksik';
+    final recommendedModules = _moduleCounts(
+      recommendation?.modules ?? const [],
+    );
+    final recommendationText = recommendedModules.isEmpty
+        ? 'Uygun tamamlayıcı I/O modülü bulunamadı. DDC/I/O '
+              'kütüphanesinde uyumlu modül ve genişleme sınırını kontrol edin.'
+        : '${recommendation!.isSatisfied ? "Öneri" : "En iyi mevcut öneri"}: '
+              '${recommendedModules.entries.map((entry) => '${entry.value} × ${entry.key}').join(', ')} ekle'
+              '${recommendation!.isSatisfied ? " → bütün noktalar karşılanır." : " → ${recommendation!.unmetTotal} nokta yine eksik kalır."}';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1533,37 +1615,88 @@ class _PanelCapacitySummary extends StatelessWidget {
         borderRadius: BorderRadius.circular(13),
         border: Border.all(color: statusColor.withValues(alpha: 0.35)),
       ),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 7,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            capacity.isSatisfied
-                ? Icons.check_circle_rounded
-                : Icons.warning_amber_rounded,
-            color: statusColor,
-            size: 20,
-          ),
-          Text(
-            headline,
-            style: TextStyle(color: statusColor, fontWeight: FontWeight.w900),
-          ),
-          Text(detail, style: const TextStyle(fontWeight: FontWeight.w700)),
-          for (final type in _physicalPointTypes)
-            if ((capacity.requiredPoints[type] ?? 0) > 0)
-              Chip(
-                visualDensity: VisualDensity.compact,
-                label: Text(
-                  '${type.label} '
-                  '${capacity.matchedPoints[type] ?? 0}/'
-                  '${capacity.requiredPoints[type]}'
-                  '${(capacity.unmetPoints[type] ?? 0) > 0 ? " · Eksik ${capacity.unmetPoints[type]}" : ""}',
+          Wrap(
+            spacing: 8,
+            runSpacing: 7,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Icon(
+                capacity.isSatisfied
+                    ? Icons.check_circle_rounded
+                    : Icons.warning_amber_rounded,
+                color: statusColor,
+                size: 20,
+              ),
+              Text(
+                headline,
+                style: TextStyle(
+                  color: statusColor,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
+              Text(detail, style: const TextStyle(fontWeight: FontWeight.w700)),
+              for (final type in _physicalPointTypes)
+                if ((capacity.requiredPoints[type] ?? 0) > 0)
+                  Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text(
+                      '${type.label} '
+                      '${capacity.matchedPoints[type] ?? 0}/'
+                      '${capacity.requiredPoints[type]}'
+                      '${(capacity.unmetPoints[type] ?? 0) > 0 ? " · Eksik ${capacity.unmetPoints[type]}" : ""}',
+                    ),
+                  ),
+            ],
+          ),
+          if (!capacity.isSatisfied) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  recommendedModules.isEmpty
+                      ? Icons.info_outline_rounded
+                      : Icons.auto_awesome_rounded,
+                  color: recommendedModules.isEmpty
+                      ? colors.onSurfaceVariant
+                      : colors.primary,
+                  size: 19,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    recommendationText,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                if (onApplyRecommendation != null) ...[
+                  const SizedBox(width: 10),
+                  FilledButton.icon(
+                    onPressed: onApplyRecommendation,
+                    icon: const Icon(Icons.add_task_rounded, size: 18),
+                    label: const Text('Öneriyi Uygula'),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  Map<String, int> _moduleCounts(List<ControlHardware> modules) {
+    final result = <String, int>{};
+    for (final module in modules) {
+      result.update(
+        module.displayName,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    return result;
   }
 }
 
@@ -1688,12 +1821,14 @@ class _PanelControllerPickerDialog extends StatefulWidget {
     required this.controllers,
     required this.products,
     required this.capacities,
+    required this.recommendations,
     required this.selectedControllerId,
   });
 
   final List<ControlHardware> controllers;
   final List<Product> products;
   final Map<String, PanelHardwareCapacity> capacities;
+  final Map<String, PanelHardwareSolution> recommendations;
   final String selectedControllerId;
 
   @override
@@ -1736,14 +1871,19 @@ class _PanelControllerPickerDialogState
       final leftCapacity = widget.capacities[left.id];
       final rightCapacity = widget.capacities[right.id];
       if (leftCapacity != null && rightCapacity != null) {
-        if (leftCapacity.isSatisfied != rightCapacity.isSatisfied) {
-          return leftCapacity.isSatisfied ? -1 : 1;
+        final leftRank = _recommendationRank(left.id, leftCapacity);
+        final rightRank = _recommendationRank(right.id, rightCapacity);
+        if (leftRank != rightRank) {
+          return leftRank.compareTo(rightRank);
         }
-        final fitComparison = leftCapacity.isSatisfied
+        final fitComparison = leftRank == 0
             ? leftCapacity.remainingChannels.compareTo(
                 rightCapacity.remainingChannels,
               )
-            : leftCapacity.unmetTotal.compareTo(rightCapacity.unmetTotal);
+            : (widget.recommendations[left.id]?.unmetTotal ?? 1 << 20)
+                  .compareTo(
+                    widget.recommendations[right.id]?.unmetTotal ?? 1 << 20,
+                  );
         if (fitComparison != 0) return fitComparison;
       }
       return left.displayName.toLowerCase().compareTo(
@@ -1751,6 +1891,41 @@ class _PanelControllerPickerDialogState
       );
     });
     return controllers;
+  }
+
+  int _recommendationRank(String controllerId, PanelHardwareCapacity capacity) {
+    if (capacity.isSatisfied) return 0;
+    if (widget.recommendations[controllerId]?.isSatisfied == true) return 1;
+    return 2;
+  }
+
+  String _capacityRecommendationText(
+    ControlHardware controller,
+    PanelHardwareCapacity? capacity,
+  ) {
+    if (capacity == null) return 'Kapasite hesaplanamadı';
+    if (capacity.isSatisfied) {
+      return 'TEK BAŞINA YETERLİ · ${capacity.remainingChannels} boş kanal';
+    }
+    final recommendation = widget.recommendations[controller.id];
+    final moduleCounts = <String, int>{};
+    for (final module in recommendation?.modules ?? const <ControlHardware>[]) {
+      moduleCounts.update(
+        module.displayName,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    if (moduleCounts.isEmpty) {
+      return 'TEK BAŞINA YETERSİZ · ${capacity.unmetTotal} nokta eksik · '
+          'uygun tamamlayıcı modül yok';
+    }
+    final modules = moduleCounts.entries
+        .map((entry) => '${entry.value}× ${entry.key}')
+        .join(', ');
+    return 'TEK BAŞINA YETERSİZ · ${capacity.unmetTotal} eksik · '
+        'ÖNERİ: $modules'
+        '${recommendation!.isSatisfied ? " ile yeterli" : " ile ${recommendation.unmetTotal} eksik kalır"}';
   }
 
   @override
@@ -1876,11 +2051,7 @@ class _PanelControllerPickerDialogState
                               '${product == null ? "Stok ürünü bağlı değil" : "${product.code} · ${product.formattedStock}"}\n'
                               '${channels.isEmpty ? "Dahili I/O yok" : channels} · '
                               'En fazla ${controller.maxExpansionModules} modül\n'
-                              '${capacity == null
-                                  ? "Kapasite hesaplanamadı"
-                                  : capacity.isSatisfied
-                                  ? "TEK BAŞINA YETERLİ · ${capacity.remainingChannels} boş kanal"
-                                  : "TEK BAŞINA YETERSİZ · ${capacity.unmetTotal} nokta eksik"}',
+                              '${_capacityRecommendationText(controller, capacity)}',
                             ),
                             isThreeLine: true,
                             trailing:

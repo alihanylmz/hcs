@@ -121,6 +121,36 @@ class ControlHardwareSelector {
     );
   }
 
+  PanelHardwareSolution recommendPanelSolution({
+    required DiscoveryProject project,
+    required String panelCode,
+    required ControlHardware controller,
+    required List<ControlHardware> availableModules,
+    int reservePercent = 0,
+  }) {
+    final normalizedPanelCode = panelCode.trim().toUpperCase();
+    final devices = project.devices
+        .where((device) {
+          final code = device.panelCode.trim().isEmpty
+              ? 'PANO BELİRTİLMEDİ'
+              : device.panelCode.trim().toUpperCase();
+          return code == normalizedPanelCode;
+        })
+        .toList(growable: false);
+    final demands = _buildDemands(devices, reservePercent: reservePercent);
+    return _controllerCandidate(
+      panelCode: normalizedPanelCode,
+      controller: controller,
+      demands: demands,
+      modules: availableModules
+          .where(
+            (module) =>
+                module.isActive && module.type == ControlHardwareType.ioModule,
+          )
+          .toList(growable: false),
+    );
+  }
+
   bool isModuleCompatible({
     required ControlHardware module,
     required ControlHardware controller,

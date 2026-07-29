@@ -857,6 +857,48 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     });
   }
 
+  Future<void> _managePanelModules(String panelCode) async {
+    final controller = _selectedControllerForPanel(panelCode);
+    if (controller == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Önce bu pano için kontrolör seçin.')),
+      );
+      return;
+    }
+    final current = _settingsForPanel(panelCode);
+    final result = await showDialog<List<String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _PanelIoModuleDialog(
+        project: _currentProject,
+        panelCode: panelCode,
+        controller: controller,
+        modules: _hardware
+            .where((item) => item.type == ControlHardwareType.ioModule)
+            .toList(growable: false),
+        products: _products,
+        selectedModuleIds: current.ioModuleHardwareIds,
+      ),
+    );
+    if (result == null) return;
+    final updated = current.copyWith(ioModuleHardwareIds: result);
+    setState(() {
+      final index = _panelSettings.indexWhere(
+        (settings) => settings.panelCode == panelCode,
+      );
+      if (index == -1) {
+        _panelSettings.add(updated);
+      } else {
+        _panelSettings[index] = updated;
+      }
+      _hardwareSolutions = const [];
+    });
+  }
+
+  int _moduleCountForPanel(String panelCode) {
+    return _settingsForPanel(panelCode).ioModuleHardwareIds.length;
+  }
+
   ControlHardware? _selectedControllerForPanel(String panelCode) {
     final id = _settingsForPanel(panelCode).controllerHardwareId;
     if (id.isEmpty) return null;
@@ -1432,31 +1474,50 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  '${devices.length} cihaz',
-                  style: Theme.of(context).textTheme.titleMedium,
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 7,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        '${devices.length} cihaz',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      ActionChip(
+                        avatar: const Icon(
+                          Icons.account_tree_outlined,
+                          size: 18,
+                        ),
+                        label: Text(_settingsForPanel(panelCode).mode.label),
+                        onPressed: () => _editPanelSettings(panelCode),
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.memory_rounded, size: 18),
+                        label: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 210),
+                          child: Text(
+                            _selectedControllerForPanel(
+                                  panelCode,
+                                )?.displayName ??
+                                'Kontrolör Seç',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        onPressed: () => _selectPanelController(panelCode),
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.extension_rounded, size: 18),
+                        label: Text(
+                          'I/O Modülleri (${_moduleCountForPanel(panelCode)})',
+                        ),
+                        onPressed: () => _managePanelModules(panelCode),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(width: 10),
-                ActionChip(
-                  avatar: const Icon(Icons.account_tree_outlined, size: 18),
-                  label: Text(_settingsForPanel(panelCode).mode.label),
-                  onPressed: () => _editPanelSettings(panelCode),
-                ),
-                const SizedBox(width: 8),
-                ActionChip(
-                  avatar: const Icon(Icons.memory_rounded, size: 18),
-                  label: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 210),
-                    child: Text(
-                      _selectedControllerForPanel(panelCode)?.displayName ??
-                          'Kontrolör Seç',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  onPressed: () => _selectPanelController(panelCode),
-                ),
-                const Spacer(),
                 _SmallMetric(label: 'Pano toplamı', value: '$panelPointTotal'),
               ],
             ),
@@ -2070,6 +2131,467 @@ class _PanelControllerPickerDialogState
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PanelIoModuleDialog extends StatefulWidget {
+  const _PanelIoModuleDialog({
+    required this.project,
+    required this.panelCode,
+    required this.controller,
+    required this.modules,
+    required this.products,
+    required this.selectedModuleIds,
+  });
+
+  final DiscoveryProject project;
+  final String panelCode;
+  final ControlHardware controller;
+  final List<ControlHardware> modules;
+  final List<Product> products;
+  final List<String> selectedModuleIds;
+
+  @override
+  State<_PanelIoModuleDialog> createState() => _PanelIoModuleDialogState();
+}
+
+class _PanelIoModuleDialogState extends State<_PanelIoModuleDialog> {
+  final _selector = const ControlHardwareSelector();
+  late final List<String> _selectedIds;
+  String _query = '';
+  bool _onlyCompatible = true;
+  bool _onlyInStock = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIds = List<String>.from(widget.selectedModuleIds);
+  }
+
+  Product? _linkedProduct(ControlHardware module) {
+    for (final product in widget.products) {
+      if (product.id == module.productId) return product;
+    }
+    return null;
+  }
+
+  ControlHardware? _moduleById(String id) {
+    for (final module in widget.modules) {
+      if (module.id == id) return module;
+    }
+    return null;
+  }
+
+  List<ControlHardware> get _selectedModules {
+    final result = <ControlHardware>[];
+    for (final id in _selectedIds) {
+      final module = _moduleById(id);
+      if (module != null &&
+          module.isActive &&
+          _selector.isModuleCompatible(
+            module: module,
+            controller: widget.controller,
+          )) {
+        result.add(module);
+      }
+    }
+    return result;
+  }
+
+  Map<String, int> get _selectedCounts {
+    final result = <String, int>{};
+    for (final id in _selectedIds) {
+      result.update(id, (count) => count + 1, ifAbsent: () => 1);
+    }
+    return result;
+  }
+
+  PanelHardwareCapacity get _capacity => _selector.evaluatePanelCapacity(
+    project: widget.project,
+    panelCode: widget.panelCode,
+    equipment: [widget.controller, ..._selectedModules],
+  );
+
+  List<ControlHardware> get _visibleModules {
+    final query = _query.trim().toLowerCase();
+    final modules = widget.modules.where((module) {
+      if (!module.isActive) return false;
+      final compatible = _selector.isModuleCompatible(
+        module: module,
+        controller: widget.controller,
+      );
+      if (_onlyCompatible && !compatible) return false;
+      final product = _linkedProduct(module);
+      if (_onlyInStock &&
+          (product == null ||
+              !product.isActive ||
+              product.stockQuantity <= 0)) {
+        return false;
+      }
+      if (query.isEmpty) return true;
+      return [
+        module.brand,
+        module.model,
+        module.family,
+        module.connectionProtocol,
+        product?.code ?? '',
+        product?.name ?? '',
+      ].join(' ').toLowerCase().contains(query);
+    }).toList();
+    modules.sort((left, right) {
+      final leftCompatible = _selector.isModuleCompatible(
+        module: left,
+        controller: widget.controller,
+      );
+      final rightCompatible = _selector.isModuleCompatible(
+        module: right,
+        controller: widget.controller,
+      );
+      if (leftCompatible != rightCompatible) return leftCompatible ? -1 : 1;
+      return left.displayName.toLowerCase().compareTo(
+        right.displayName.toLowerCase(),
+      );
+    });
+    return modules;
+  }
+
+  void _addModule(ControlHardware module) {
+    final compatible = _selector.isModuleCompatible(
+      module: module,
+      controller: widget.controller,
+    );
+    if (!compatible) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Bu modül seçilen kontrolörle uyumlu değil. Önce DDC/I/O '
+            'kütüphanesindeki aile veya protokol ayarını düzeltin.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (_selectedIds.length >= widget.controller.maxExpansionModules) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Kontrolör en fazla ${widget.controller.maxExpansionModules} '
+            'genişleme modülü destekliyor.',
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() => _selectedIds.add(module.id));
+  }
+
+  void _removeModule(String moduleId) {
+    final index = _selectedIds.lastIndexOf(moduleId);
+    if (index == -1) return;
+    setState(() => _selectedIds.removeAt(index));
+  }
+
+  String _channelSummary(ControlHardware module) {
+    if (module.channelPools.isEmpty) return 'Fiziksel kanal tanımlı değil';
+    return module.channelPools
+        .map((pool) => '${pool.quantity} ${pool.name}')
+        .join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final capacity = _capacity;
+    final visibleModules = _visibleModules;
+    final counts = _selectedCounts;
+    final statusColor = capacity.isSatisfied
+        ? const Color(0xFF2C7A5A)
+        : colors.error;
+
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 980, maxHeight: 820),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 18, 14, 14),
+              child: Row(
+                children: [
+                  const Icon(Icons.extension_rounded),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${widget.panelCode} I/O Modülleri',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        Text(
+                          '${widget.controller.displayName} · '
+                          '${_selectedIds.length}/'
+                          '${widget.controller.maxExpansionModules} modül',
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Kapat',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(
+                    color: statusColor.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Wrap(
+                  spacing: 9,
+                  runSpacing: 7,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Icon(
+                      capacity.isSatisfied
+                          ? Icons.check_circle_rounded
+                          : Icons.warning_amber_rounded,
+                      color: statusColor,
+                    ),
+                    Text(
+                      capacity.isSatisfied
+                          ? 'Kapasite yeterli'
+                          : 'Kapasite yetersiz',
+                      style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      '${capacity.matchedTotal}/${capacity.requiredTotal} '
+                      'nokta karşılandı',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    Chip(
+                      visualDensity: VisualDensity.compact,
+                      label: Text(
+                        capacity.isSatisfied
+                            ? '${capacity.remainingChannels} boş kanal'
+                            : '${capacity.unmetTotal} eksik nokta',
+                      ),
+                    ),
+                    for (final entry in capacity.unmetPoints.entries)
+                      Chip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text('${entry.key.label} eksik ${entry.value}'),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Modül, aile, protokol veya ürün kodu ara',
+                        prefixIcon: Icon(Icons.search_rounded),
+                      ),
+                      onChanged: (value) => setState(() => _query = value),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  FilterChip(
+                    selected: _onlyCompatible,
+                    label: const Text('Yalnız uyumlu'),
+                    onSelected: (value) =>
+                        setState(() => _onlyCompatible = value),
+                  ),
+                  const SizedBox(width: 8),
+                  FilterChip(
+                    selected: _onlyInStock,
+                    label: const Text('Yalnız stokta'),
+                    onSelected: (value) => setState(() => _onlyInStock = value),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Seçilen Modüller',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(width: 8),
+                      Chip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text('${_selectedIds.length}'),
+                      ),
+                      const Spacer(),
+                      if (_selectedIds.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: () => setState(_selectedIds.clear),
+                          icon: const Icon(Icons.delete_sweep_outlined),
+                          label: const Text('Tümünü Kaldır'),
+                        ),
+                    ],
+                  ),
+                  if (counts.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Text('Bu panoya henüz I/O modülü eklenmedi.'),
+                    )
+                  else
+                    for (final entry in counts.entries)
+                      Builder(
+                        builder: (context) {
+                          final module = _moduleById(entry.key);
+                          if (module == null) return const SizedBox.shrink();
+                          return Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.extension_rounded),
+                              title: Text(
+                                module.displayName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              subtitle: Text(
+                                '${_channelSummary(module)} · '
+                                '${!module.isActive
+                                    ? "Pasif"
+                                    : _selector.isModuleCompatible(module: module, controller: widget.controller)
+                                    ? "Uyumlu"
+                                    : "Uyumsuz — kapasiteye dahil edilmez"}',
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Bir adet azalt',
+                                    onPressed: () => _removeModule(module.id),
+                                    icon: const Icon(
+                                      Icons.remove_circle_outline,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${entry.value}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Bir adet artır',
+                                    onPressed: () => _addModule(module),
+                                    icon: const Icon(Icons.add_circle_outline),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                  const Divider(height: 28),
+                  Text(
+                    'Eklenebilir Modüller (${visibleModules.length})',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  if (visibleModules.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text('Filtreye uygun I/O modülü bulunamadı.'),
+                      ),
+                    )
+                  else
+                    for (final module in visibleModules)
+                      Builder(
+                        builder: (context) {
+                          final compatible = _selector.isModuleCompatible(
+                            module: module,
+                            controller: widget.controller,
+                          );
+                          final product = _linkedProduct(module);
+                          return ListTile(
+                            leading: Icon(
+                              compatible
+                                  ? Icons.extension_rounded
+                                  : Icons.link_off_rounded,
+                            ),
+                            title: Text(
+                              module.displayName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '${_channelSummary(module)}\n'
+                              '${product == null ? "Stok ürünü bağlı değil" : "${product.code} · ${product.formattedStock}"} · '
+                              '${compatible ? "Uyumlu" : "Uyumsuz"}',
+                            ),
+                            isThreeLine: true,
+                            trailing: FilledButton.tonalIcon(
+                              onPressed:
+                                  compatible &&
+                                      _selectedIds.length <
+                                          widget.controller.maxExpansionModules
+                                  ? () => _addModule(module)
+                                  : null,
+                              icon: const Icon(Icons.add_rounded, size: 18),
+                              label: const Text('Ekle'),
+                            ),
+                          );
+                        },
+                      ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Vazgeç'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () =>
+                        Navigator.pop(context, List<String>.from(_selectedIds)),
+                    icon: const Icon(Icons.save_rounded),
+                    label: const Text('Modülleri Kaydet'),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

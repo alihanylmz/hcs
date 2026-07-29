@@ -797,16 +797,26 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
 
   Future<void> _selectPanelController(String panelCode) async {
     final current = _settingsForPanel(panelCode);
+    final controllers = _hardware
+        .where(
+          (item) =>
+              item.type == ControlHardwareType.controller && item.isActive,
+        )
+        .toList(growable: false);
+    final capacities = <String, PanelHardwareCapacity>{
+      for (final controller in controllers)
+        controller.id: const ControlHardwareSelector().evaluatePanelCapacity(
+          project: _currentProject,
+          panelCode: panelCode,
+          equipment: [controller],
+        ),
+    };
     final result = await showDialog<_ControllerSelectionResult>(
       context: context,
       builder: (context) => _PanelControllerPickerDialog(
-        controllers: _hardware
-            .where(
-              (item) =>
-                  item.type == ControlHardwareType.controller && item.isActive,
-            )
-            .toList(growable: false),
+        controllers: controllers,
         products: _products,
+        capacities: capacities,
         selectedControllerId: current.controllerHardwareId,
       ),
     );
@@ -841,6 +851,26 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       }
     }
     return null;
+  }
+
+  PanelHardwareCapacity? _capacityForPanel(String panelCode) {
+    final controller = _selectedControllerForPanel(panelCode);
+    if (controller == null) return null;
+    final settings = _settingsForPanel(panelCode);
+    final equipment = <ControlHardware>[controller];
+    for (final moduleId in settings.ioModuleHardwareIds) {
+      for (final item in _hardware) {
+        if (item.id == moduleId && item.type == ControlHardwareType.ioModule) {
+          equipment.add(item);
+          break;
+        }
+      }
+    }
+    return const ControlHardwareSelector().evaluatePanelCapacity(
+      project: _currentProject,
+      panelCode: panelCode,
+      equipment: equipment,
+    );
   }
 
   Future<void> _analyzeHardware() async {
@@ -1304,6 +1334,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       0,
       (total, indexed) => total + indexed.device.totalPoints,
     );
+    final capacity = _capacityForPanel(panelCode);
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -1371,6 +1402,10 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
                 _SmallMetric(label: 'Pano toplamı', value: '$panelPointTotal'),
               ],
             ),
+            if (capacity != null) ...[
+              const SizedBox(height: 12),
+              _PanelCapacitySummary(capacity: capacity),
+            ],
             const SizedBox(height: 16),
             for (final categoryEntry in categories.entries) ...[
               _buildDeviceCategory(categoryEntry.key, categoryEntry.value),
@@ -1461,6 +1496,75 @@ class _IndexedDevice {
 
   final int index;
   final DiscoveryDevice device;
+}
+
+class _PanelCapacitySummary extends StatelessWidget {
+  const _PanelCapacitySummary({required this.capacity});
+
+  final PanelHardwareCapacity capacity;
+
+  static const _physicalPointTypes = [
+    DiscoveryPointType.aiActive,
+    DiscoveryPointType.aiPassive,
+    DiscoveryPointType.ao,
+    DiscoveryPointType.di,
+    DiscoveryPointType.doOutput,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final statusColor = capacity.isSatisfied
+        ? const Color(0xFF2C7A5A)
+        : colors.error;
+    final headline = capacity.isSatisfied
+        ? 'Kapasite yeterli'
+        : 'Kapasite yetersiz';
+    final detail = capacity.isSatisfied
+        ? '${capacity.matchedTotal}/${capacity.requiredTotal} fiziksel nokta '
+              'karşılandı · ${capacity.remainingChannels} boş kanal'
+        : '${capacity.matchedTotal}/${capacity.requiredTotal} fiziksel nokta '
+              'karşılandı · ${capacity.unmetTotal} nokta eksik';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: statusColor.withValues(alpha: 0.35)),
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 7,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Icon(
+            capacity.isSatisfied
+                ? Icons.check_circle_rounded
+                : Icons.warning_amber_rounded,
+            color: statusColor,
+            size: 20,
+          ),
+          Text(
+            headline,
+            style: TextStyle(color: statusColor, fontWeight: FontWeight.w900),
+          ),
+          Text(detail, style: const TextStyle(fontWeight: FontWeight.w700)),
+          for (final type in _physicalPointTypes)
+            if ((capacity.requiredPoints[type] ?? 0) > 0)
+              Chip(
+                visualDensity: VisualDensity.compact,
+                label: Text(
+                  '${type.label} '
+                  '${capacity.matchedPoints[type] ?? 0}/'
+                  '${capacity.requiredPoints[type]}'
+                  '${(capacity.unmetPoints[type] ?? 0) > 0 ? " · Eksik ${capacity.unmetPoints[type]}" : ""}',
+                ),
+              ),
+        ],
+      ),
+    );
+  }
 }
 
 class _HardwareSolutionTile extends StatelessWidget {
@@ -1583,11 +1687,13 @@ class _PanelControllerPickerDialog extends StatefulWidget {
   const _PanelControllerPickerDialog({
     required this.controllers,
     required this.products,
+    required this.capacities,
     required this.selectedControllerId,
   });
 
   final List<ControlHardware> controllers;
   final List<Product> products;
+  final Map<String, PanelHardwareCapacity> capacities;
   final String selectedControllerId;
 
   @override
@@ -1609,25 +1715,42 @@ class _PanelControllerPickerDialogState
 
   List<ControlHardware> get _visibleControllers {
     final query = _query.trim().toLowerCase();
-    return widget.controllers
-        .where((controller) {
-          final product = _linkedProduct(controller);
-          if (_onlyInStock &&
-              (product == null ||
-                  !product.isActive ||
-                  product.stockQuantity <= 0)) {
-            return false;
-          }
-          if (query.isEmpty) return true;
-          return [
-            controller.brand,
-            controller.model,
-            controller.family,
-            product?.code ?? '',
-            product?.name ?? '',
-          ].join(' ').toLowerCase().contains(query);
-        })
-        .toList(growable: false);
+    final controllers = widget.controllers.where((controller) {
+      final product = _linkedProduct(controller);
+      if (_onlyInStock &&
+          (product == null ||
+              !product.isActive ||
+              product.stockQuantity <= 0)) {
+        return false;
+      }
+      if (query.isEmpty) return true;
+      return [
+        controller.brand,
+        controller.model,
+        controller.family,
+        product?.code ?? '',
+        product?.name ?? '',
+      ].join(' ').toLowerCase().contains(query);
+    }).toList();
+    controllers.sort((left, right) {
+      final leftCapacity = widget.capacities[left.id];
+      final rightCapacity = widget.capacities[right.id];
+      if (leftCapacity != null && rightCapacity != null) {
+        if (leftCapacity.isSatisfied != rightCapacity.isSatisfied) {
+          return leftCapacity.isSatisfied ? -1 : 1;
+        }
+        final fitComparison = leftCapacity.isSatisfied
+            ? leftCapacity.remainingChannels.compareTo(
+                rightCapacity.remainingChannels,
+              )
+            : leftCapacity.unmetTotal.compareTo(rightCapacity.unmetTotal);
+        if (fitComparison != 0) return fitComparison;
+      }
+      return left.displayName.toLowerCase().compareTo(
+        right.displayName.toLowerCase(),
+      );
+    });
+    return controllers;
   }
 
   @override
@@ -1691,7 +1814,10 @@ class _PanelControllerPickerDialogState
               ),
               const SizedBox(height: 10),
               Text(
-                '${controllers.length} kontrolör',
+                '${controllers.length} kontrolör · '
+                'Pano ihtiyacı: '
+                '${widget.capacities.values.isEmpty ? 0 : widget.capacities.values.first.requiredTotal} '
+                'fiziksel nokta · Yeterli olanlar üstte',
                 style: const TextStyle(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 8),
@@ -1727,6 +1853,7 @@ class _PanelControllerPickerDialogState
                         itemBuilder: (context, index) {
                           final controller = controllers[index];
                           final product = _linkedProduct(controller);
+                          final capacity = widget.capacities[controller.id];
                           final selected =
                               controller.id == widget.selectedControllerId;
                           final channels = controller.channelPools
@@ -1748,7 +1875,12 @@ class _PanelControllerPickerDialogState
                             subtitle: Text(
                               '${product == null ? "Stok ürünü bağlı değil" : "${product.code} · ${product.formattedStock}"}\n'
                               '${channels.isEmpty ? "Dahili I/O yok" : channels} · '
-                              'En fazla ${controller.maxExpansionModules} modül',
+                              'En fazla ${controller.maxExpansionModules} modül\n'
+                              '${capacity == null
+                                  ? "Kapasite hesaplanamadı"
+                                  : capacity.isSatisfied
+                                  ? "TEK BAŞINA YETERLİ · ${capacity.remainingChannels} boş kanal"
+                                  : "TEK BAŞINA YETERSİZ · ${capacity.unmetTotal} nokta eksik"}',
                             ),
                             isThreeLine: true,
                             trailing:

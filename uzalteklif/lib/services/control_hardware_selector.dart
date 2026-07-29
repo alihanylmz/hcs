@@ -42,6 +42,30 @@ class PanelHardwareSolution {
       unmetPoints.values.fold(0, (total, count) => total + count);
 }
 
+class PanelHardwareCapacity {
+  const PanelHardwareCapacity({
+    required this.requiredPoints,
+    required this.matchedPoints,
+    required this.unmetPoints,
+    required this.totalPhysicalChannels,
+  });
+
+  final Map<DiscoveryPointType, int> requiredPoints;
+  final Map<DiscoveryPointType, int> matchedPoints;
+  final Map<DiscoveryPointType, int> unmetPoints;
+  final int totalPhysicalChannels;
+
+  int get requiredTotal =>
+      requiredPoints.values.fold(0, (total, count) => total + count);
+  int get matchedTotal =>
+      matchedPoints.values.fold(0, (total, count) => total + count);
+  int get unmetTotal =>
+      unmetPoints.values.fold(0, (total, count) => total + count);
+  int get remainingChannels =>
+      (totalPhysicalChannels - matchedTotal).clamp(0, totalPhysicalChannels);
+  bool get isSatisfied => unmetTotal == 0;
+}
+
 class ControlHardwareSelectionRules {
   const ControlHardwareSelectionRules({
     this.preferredBrand = '',
@@ -58,6 +82,44 @@ class ControlHardwareSelectionRules {
 
 class ControlHardwareSelector {
   const ControlHardwareSelector();
+
+  PanelHardwareCapacity evaluatePanelCapacity({
+    required DiscoveryProject project,
+    required String panelCode,
+    required List<ControlHardware> equipment,
+    int reservePercent = 0,
+  }) {
+    final normalizedPanelCode = panelCode.trim().toUpperCase();
+    final devices = project.devices
+        .where((device) {
+          final code = device.panelCode.trim().isEmpty
+              ? 'PANO BELİRTİLMEDİ'
+              : device.panelCode.trim().toUpperCase();
+          return code == normalizedPanelCode;
+        })
+        .toList(growable: false);
+    final demands = _buildDemands(devices, reservePercent: reservePercent);
+    final required = <DiscoveryPointType, int>{};
+    for (final demand in demands) {
+      required.update(demand.type, (count) => count + 1, ifAbsent: () => 1);
+    }
+    final allocation = _allocate(demands, equipment);
+    final matched = <DiscoveryPointType, int>{};
+    for (final entry in required.entries) {
+      final count = entry.value - (allocation.unmetPoints[entry.key] ?? 0);
+      if (count > 0) matched[entry.key] = count;
+    }
+    final totalChannels = equipment.fold(
+      0,
+      (total, item) => total + item.physicalChannelCount,
+    );
+    return PanelHardwareCapacity(
+      requiredPoints: Map.unmodifiable(required),
+      matchedPoints: Map.unmodifiable(matched),
+      unmetPoints: allocation.unmetPoints,
+      totalPhysicalChannels: totalChannels,
+    );
+  }
 
   bool isModuleCompatible({
     required ControlHardware module,

@@ -393,6 +393,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 700;
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -465,18 +466,30 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
             icon: const Icon(Icons.picture_as_pdf_rounded),
           ),
           const SizedBox(width: 6),
-          TextButton.icon(
-            onPressed: _isBusy ? null : _editQuote,
-            icon: const Icon(Icons.edit_rounded, size: 18),
-            label: const Text('Düzenle'),
-          ),
+          if (compact)
+            IconButton(
+              tooltip: 'Düzenle',
+              onPressed: _isBusy ? null : _editQuote,
+              icon: const Icon(Icons.edit_rounded, size: 19),
+            )
+          else
+            TextButton.icon(
+              onPressed: _isBusy ? null : _editQuote,
+              icon: const Icon(Icons.edit_rounded, size: 18),
+              label: const Text('Düzenle'),
+            ),
           const SizedBox(width: 8),
         ],
       ),
       body: WorkspaceBackground(
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            padding: EdgeInsets.fromLTRB(
+              compact ? 8 : 20,
+              compact ? 8 : 16,
+              compact ? 8 : 20,
+              compact ? 10 : 16,
+            ),
             child: Column(
               children: [
                 Expanded(

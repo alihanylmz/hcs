@@ -605,6 +605,23 @@ class _CariTable extends StatelessWidget {
       );
     }
 
+    if (MediaQuery.sizeOf(context).width < 760) {
+      return ListView.separated(
+        padding: const EdgeInsets.fromLTRB(10, 12, 10, 96),
+        itemCount: cariler.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final cari = cariler[index];
+          return _CariMobileCard(
+            cari: cari,
+            onOpen: () => onOpen(cari),
+            onEdit: () => onEdit(cari),
+            onDelete: () => onDelete(cari),
+          );
+        },
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Card(
@@ -652,6 +669,139 @@ class _CariTable extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CariMobileCard extends StatelessWidget {
+  const _CariMobileCard({
+    required this.cari,
+    required this.onOpen,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final CariAccount cari;
+  final VoidCallback onOpen;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final company = cari.companyName.trim().isEmpty
+        ? '(Firma yok)'
+        : cari.companyName.trim();
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                backgroundColor: const Color(0xFFE5F1EC),
+                foregroundColor: const Color(0xFF2C6957),
+                child: Text(
+                  company.isEmpty ? 'C' : company[0].toUpperCase(),
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      company,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF17304C),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    if (cari.contactName.trim().isNotEmpty)
+                      Text(
+                        [
+                          cari.contactName.trim(),
+                          if (cari.contactTitle.trim().isNotEmpty)
+                            cari.contactTitle.trim(),
+                        ].join(' - '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF5B6F7F),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    const SizedBox(height: 7),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 4,
+                      children: [
+                        if (cari.phone.trim().isNotEmpty)
+                          _CariMobileInfo(
+                            icon: Icons.phone_outlined,
+                            text: cari.phone.trim(),
+                          ),
+                        if (cari.email.trim().isNotEmpty)
+                          _CariMobileInfo(
+                            icon: Icons.mail_outline_rounded,
+                            text: cari.email.trim(),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Cari işlemleri',
+                onSelected: (value) {
+                  if (value == 'open') onOpen();
+                  if (value == 'edit') onEdit();
+                  if (value == 'delete') onDelete();
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'open', child: Text('Cari 360')),
+                  PopupMenuItem(value: 'edit', child: Text('Düzenle')),
+                  PopupMenuItem(value: 'delete', child: Text('Sil')),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CariMobileInfo extends StatelessWidget {
+  const _CariMobileInfo({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: const Color(0xFF738391)),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: const TextStyle(
+            color: Color(0xFF5B6F7F),
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -108,6 +108,25 @@ void main() {
     expect(quote.note.length, greaterThan(15000));
     expect(bytes.length, greaterThan(10000));
   });
+
+  test('material request PDF embeds Turkish characters', () async {
+    const service = PdfExportService();
+    final json = _buildSampleQuote().toJson();
+    json['customer_name'] = 'Çağdaş Şimşek';
+    json['customer_company'] = 'Örnek Çözüm Mühendislik';
+    json['title'] = 'Isıtma ve Soğutma İstek Listesi';
+    final items = (json['items'] as List).cast<Map<String, dynamic>>();
+    items.first['description'] =
+        'SNS-QAE-2120 - Üfleme Havası Sıcaklık Sensörü';
+    final quote = Quote.fromJson(json);
+
+    final bytes = await service.buildMaterialRequestPdfBytes(quote);
+
+    expect(bytes.length, greaterThan(5000));
+    final outputFile = File('output/pdf/preview_material_request_tr.pdf');
+    outputFile.parent.createSync(recursive: true);
+    await outputFile.writeAsBytes(bytes, flush: true);
+  });
 }
 
 Quote _buildSampleQuote() {

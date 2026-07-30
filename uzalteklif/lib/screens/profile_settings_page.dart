@@ -16,11 +16,13 @@ class ProfileSettingsPage extends StatefulWidget {
     required this.repository,
     required this.themePreferenceService,
     required this.ownCompanyRepository,
+    this.onSignOut,
   });
 
   final UserProfileRepository repository;
   final ThemePreferenceService themePreferenceService;
   final OwnCompanyRepository ownCompanyRepository;
+  final Future<void> Function()? onSignOut;
 
   @override
   State<ProfileSettingsPage> createState() => _ProfileSettingsPageState();
@@ -165,27 +167,52 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 700;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profil'),
         actions: [
-          if (!_loading)
-            TextButton.icon(
-              onPressed: _openCompanySettings,
-              icon: const Icon(Icons.apartment_rounded),
-              label: const Text('PDF Firma Bilgileri'),
+          if (widget.onSignOut != null && compact)
+            IconButton(
+              tooltip: 'Çıkış',
+              onPressed: widget.onSignOut,
+              icon: const Icon(Icons.logout_rounded),
             ),
           if (!_loading)
-            TextButton(
-              onPressed: _saving ? null : _save,
-              child: _saving
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Kaydet'),
-            ),
+            compact
+                ? IconButton(
+                    tooltip: 'PDF Firma Bilgileri',
+                    onPressed: _openCompanySettings,
+                    icon: const Icon(Icons.apartment_rounded),
+                  )
+                : TextButton.icon(
+                    onPressed: _openCompanySettings,
+                    icon: const Icon(Icons.apartment_rounded),
+                    label: const Text('PDF Firma Bilgileri'),
+                  ),
+          if (!_loading)
+            compact
+                ? IconButton(
+                    tooltip: 'Kaydet',
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save_rounded),
+                  )
+                : TextButton(
+                    onPressed: _saving ? null : _save,
+                    child: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Kaydet'),
+                  ),
         ],
       ),
       body: WorkspaceBackground(
@@ -193,7 +220,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
           child: _loading
               ? const Center(child: CircularProgressIndicator())
               : SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
+                  padding: EdgeInsets.all(compact ? 10 : 20),
                   child: Form(
                     key: _formKey,
                     child: Column(

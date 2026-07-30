@@ -133,13 +133,15 @@ class PdfExportService {
   }
 
   Future<Uint8List> buildMaterialRequestPdfBytes(Quote quote) async {
-    pw.Font? baseFont;
-    try {
-      final data = await rootBundle.load('assets/fonts/NotoSans.ttf');
-      baseFont = pw.Font.ttf(data);
-    } catch (_) {
-      baseFont = null;
+    final fontData = await rootBundle.load('assets/fonts/NotoSans.ttf');
+    final fontBytes = fontData.buffer.asUint8List(
+      fontData.offsetInBytes,
+      fontData.lengthInBytes,
+    );
+    if (fontBytes.isEmpty) {
+      throw StateError('İstek PDF yazı tipi yüklenemedi.');
     }
+    final baseFont = pw.Font.ttf(ByteData.sublistView(fontBytes));
 
     pw.MemoryImage? logo;
     try {
@@ -149,13 +151,11 @@ class PdfExportService {
       logo = null;
     }
 
-    final theme = baseFont == null
-        ? pw.ThemeData()
-        : pw.ThemeData.withFont(base: baseFont, bold: baseFont);
+    final theme = pw.ThemeData.withFont(base: baseFont, bold: baseFont);
     final doc = pw.Document(
-      title: '${quote.code} - Malzeme Istek Listesi',
+      title: '${quote.code} - Malzeme İstek Listesi',
       author: quote.documentProfile.companyName,
-      subject: 'Malzeme Istek Listesi',
+      subject: 'Malzeme İstek Listesi',
       creator: quote.documentProfile.companyName,
       theme: theme,
     );
@@ -643,7 +643,7 @@ class PdfExportService {
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(
-            'MALZEME ISTEK LISTESI',
+            'MALZEME İSTEK LİSTESİ',
             style: pw.TextStyle(
               color: _paper,
               fontSize: 17,
@@ -664,11 +664,11 @@ class PdfExportService {
   pw.Widget _buildMaterialRequestMeta(Quote quote) {
     final supplier = _quoteCompany(quote);
     final entries = <MapEntry<String, String>>[
-      MapEntry('Istek No', quote.code),
+      MapEntry('İstek No', quote.code),
       MapEntry('Tarih', quote.formattedDate),
-      MapEntry('Tedarikci', supplier.isEmpty ? '-' : supplier),
+      MapEntry('Tedarikçi', supplier.isEmpty ? '-' : supplier),
       MapEntry(
-        'Hazirlayan',
+        'Hazırlayan',
         _valueOrDash(quote.documentProfile.preparedByName),
       ),
     ];
@@ -979,7 +979,7 @@ class PdfExportService {
       children: [
         _tableHeaderRow([
           '#',
-          'Urun Kodu',
+          'Ürün Kodu',
           'Aciklama',
           'Birim',
           'Miktar',
@@ -1122,7 +1122,7 @@ class PdfExportService {
       children: [
         _tableHeaderRow(const [
           '#',
-          'Urun Kodu',
+          'Ürün Kodu',
           'Malzeme',
           'Miktar',
           'Birim',
@@ -1144,7 +1144,7 @@ class PdfExportService {
         borderRadius: pw.BorderRadius.circular(4),
       ),
       child: pw.Text(
-        'Bu dokuman malzeme tedarik talebi icindir. Fiyat, iskonto ve toplam bilgisi icermez.',
+        'Bu doküman malzeme tedarik talebi içindir. Fiyat, iskonto ve toplam bilgisi içermez.',
         style: pw.TextStyle(
           color: _ink,
           fontSize: 9,

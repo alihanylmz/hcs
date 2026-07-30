@@ -1,5 +1,7 @@
 import '../models/discovery_project.dart';
 
+part 'discovery_imported_templates.g.dart';
+
 class DiscoveryDeviceTemplate {
   const DiscoveryDeviceTemplate({
     required this.key,
@@ -240,7 +242,13 @@ abstract final class DiscoveryTemplates {
     points: [],
   );
 
-  static const values = [pump, boiler, airHandlingUnit, custom];
+  static const values = [
+    pump,
+    boiler,
+    airHandlingUnit,
+    ...DiscoveryImportedTemplates.values,
+    custom,
+  ];
 
   static DiscoveryDeviceTemplate? findByKey(String key) {
     for (final template in values) {

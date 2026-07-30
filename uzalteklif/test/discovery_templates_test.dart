@@ -107,6 +107,66 @@ void main() {
     expect(DiscoveryTemplates.boiler.name, 'Isıtma Kazanı');
   });
 
+  test('ekli kütüphanedeki 80 cihaz şablonu keşifte kullanılabilir', () {
+    final imported = DiscoveryTemplates.values
+        .where((template) => template.key.startsWith('library-'))
+        .toList(growable: false);
+
+    expect(imported, hasLength(80));
+    expect(imported.every((template) => template.points.isNotEmpty), isTrue);
+    expect(imported.map((template) => template.key).toSet(), hasLength(80));
+    expect(
+      imported
+          .expand((template) => template.points)
+          .any((point) => point.name == 'YEDEK' || point.name == 'SPARE'),
+      isFalse,
+    );
+  });
+
+  test('sensör ve kazan varyasyonları doğru I/O tiplerine dönüşür', () {
+    final sensor = DiscoveryTemplates.values.singleWhere(
+      (template) => template.name == 'DIŞ HAVA SICAKLIK VE NEM SENSÖRÜ',
+    );
+    final boilerWithValve = DiscoveryTemplates.values.singleWhere(
+      (template) =>
+          template.name == 'ISITMA KAZANI + MOTORLU VANA KONTROLÜ',
+    );
+
+    expect(sensor.points, hasLength(2));
+    expect(
+      sensor.points.every(
+        (point) => point.type == DiscoveryPointType.aiActive,
+      ),
+      isTrue,
+    );
+    expect(
+      boilerWithValve.points
+          .where((point) => point.type == DiscoveryPointType.aiPassive),
+      hasLength(2),
+    );
+    expect(
+      boilerWithValve.points
+          .where((point) => point.type == DiscoveryPointType.di),
+      hasLength(3),
+    );
+    expect(
+      boilerWithValve.points
+          .where((point) => point.type == DiscoveryPointType.doOutput),
+      hasLength(3),
+    );
+  });
+
+  test('I/O sütunu boş damper start stop satırları DO kabul edilir', () {
+    final shelterAhu = DiscoveryTemplates.values.singleWhere(
+      (template) => template.name.startsWith('SIĞINAK TAZE HAVA SANTRALİ'),
+    );
+    final damper = shelterAhu.points.singleWhere(
+      (point) => point.name == 'TAZE HAVA DAMPER MOTORU START/STOP',
+    );
+
+    expect(damper.type, DiscoveryPointType.doOutput);
+  });
+
   test('kullanıcı cihaz şablonu noktalarıyla json kaydında korunur', () {
     const template = DiscoveryDeviceTemplate(
       key: 'user-template-1',

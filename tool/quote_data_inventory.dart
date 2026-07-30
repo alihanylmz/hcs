@@ -79,9 +79,14 @@ Future<void> main(List<String> arguments) async {
 
   final sourceUsers = await sourceApi.authUserCount();
   final targetUsers = await targetApi.authUserCount();
+  final activeQuoteUsers = await targetApi.tableCount(
+    'user_app_access',
+    filterQuery: 'app_code=eq.teklif&is_active=eq.true',
+  );
   stdout.writeln('');
   stdout.writeln('Kaynak Auth kullanıcı sayısı : $sourceUsers');
   stdout.writeln('Hedef Auth kullanıcı sayısı  : $targetUsers');
+  stdout.writeln('Aktif Teklif erişimi         : ${activeQuoteUsers ?? 0}');
   stdout.writeln('Kaynak toplam tablo kaydı    : $sourceTotal');
   stdout.writeln(
     'Hedefte hazır Teklif tablosu : '
@@ -169,10 +174,11 @@ class _SupabaseAdminApi {
 
   final _ProjectConfig config;
 
-  Future<int?> tableCount(String table) async {
+  Future<int?> tableCount(String table, {String filterQuery = ''}) async {
+    final filters = filterQuery.isEmpty ? '' : '&$filterQuery';
     final response = await _request(
       'GET',
-      '/rest/v1/$table?select=*&limit=1',
+      '/rest/v1/$table?select=*&limit=1$filters',
       headers: const {'Prefer': 'count=exact', 'Range': '0-0'},
       allowMissing: true,
     );

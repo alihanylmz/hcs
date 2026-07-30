@@ -165,6 +165,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         return ProfileSettingsPage(
           repository: widget.bootstrap.userProfileRepository,
           themePreferenceService: widget.bootstrap.themePreferenceService,
+          ownCompanyRepository: widget.bootstrap.ownCompanyRepository,
         );
       case 5:
         if (_isManager) {
@@ -179,11 +180,13 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         return ProfileSettingsPage(
           repository: widget.bootstrap.userProfileRepository,
           themePreferenceService: widget.bootstrap.themePreferenceService,
+          ownCompanyRepository: widget.bootstrap.ownCompanyRepository,
         );
       default:
         return ProfileSettingsPage(
           repository: widget.bootstrap.userProfileRepository,
           themePreferenceService: widget.bootstrap.themePreferenceService,
+          ownCompanyRepository: widget.bootstrap.ownCompanyRepository,
         );
     }
   }

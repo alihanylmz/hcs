@@ -123,12 +123,12 @@ void main() {
             QuoteInitialProductLine(
               productId: 'sensor-1',
               quantity: 8,
-              sectionName: 'DDC-01',
+              sectionName: 'DDC-01 / Saha Ekipmanları',
             ),
             QuoteInitialProductLine(
               productId: 'sensor-1',
               quantity: 3,
-              sectionName: 'DDC-02',
+              sectionName: 'DDC-02 / Saha Ekipmanları',
             ),
           ],
           initialTitle: 'Kazan Dairesi Otomasyonu',
@@ -148,6 +148,7 @@ void main() {
     expect(find.text('Kazan Dairesi Otomasyonu'), findsOneWidget);
     expect(find.text('DDC-01'), findsWidgets);
     expect(find.text('DDC-02'), findsWidgets);
+    expect(find.text('Saha Ekipmanları'), findsNWidgets(2));
   });
 
   testWidgets('custom line prices open in display currency when revising', (

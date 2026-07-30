@@ -538,8 +538,8 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
 
   List<QuoteInitialProductLine> get _selectedQuoteProductLines {
     final quantities = <String, int>{};
-    String keyFor(String panelCode, String productId) =>
-        '${panelCode.trim().toUpperCase()}::$productId';
+    String keyFor(String panelCode, String subcategory, String productId) =>
+        '${panelCode.trim().toUpperCase()}::$subcategory::$productId';
     String panelForDevice(DiscoveryDevice device) =>
         device.panelCode.trim().isEmpty
         ? 'PANO BELİRTİLMEDİ'
@@ -549,7 +549,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       final panelCode = panelForDevice(device);
       for (final point in device.points) {
         if (point.productId.isEmpty) continue;
-        final key = keyFor(panelCode, point.productId);
+        final key = keyFor(panelCode, 'Saha Ekipmanları', point.productId);
         quantities.update(
           key,
           (value) => value + point.quantity,
@@ -566,14 +566,18 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
           (item) => item.id == settings.controllerHardwareId,
         );
         if (controller.isNotEmpty && controller.first.productId.isNotEmpty) {
-          final key = keyFor(panelCode, controller.first.productId);
+          final key = keyFor(
+            panelCode,
+            'Kontrolörler',
+            controller.first.productId,
+          );
           quantities.update(key, (value) => value + 1, ifAbsent: () => 1);
         }
       }
       for (final moduleId in settings.ioModuleHardwareIds) {
         final module = _hardware.where((item) => item.id == moduleId);
         if (module.isEmpty || module.first.productId.isEmpty) continue;
-        final key = keyFor(panelCode, module.first.productId);
+        final key = keyFor(panelCode, 'I/O Modülleri', module.first.productId);
         quantities.update(key, (value) => value + 1, ifAbsent: () => 1);
       }
     }
@@ -585,24 +589,31 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       if (settings.controllerHardwareId.isEmpty &&
           solution.role == PanelHardwareRole.controller &&
           solution.controller?.productId.isNotEmpty == true) {
-        final key = keyFor(panelCode, solution.controller!.productId);
+        final key = keyFor(
+          panelCode,
+          'Kontrolörler',
+          solution.controller!.productId,
+        );
         quantities.update(key, (value) => value + 1, ifAbsent: () => 1);
       }
       if (settings.ioModuleHardwareIds.isEmpty) {
         for (final module in solution.modules) {
           if (module.productId.isEmpty) continue;
-          final key = keyFor(panelCode, module.productId);
+          final key = keyFor(panelCode, 'I/O Modülleri', module.productId);
           quantities.update(key, (value) => value + 1, ifAbsent: () => 1);
         }
       }
     }
     return [
       for (final entry in quantities.entries)
-        QuoteInitialProductLine(
-          sectionName: entry.key.substring(0, entry.key.indexOf('::')),
-          productId: entry.key.substring(entry.key.indexOf('::') + 2),
-          quantity: entry.value,
-        ),
+        () {
+          final parts = entry.key.split('::');
+          return QuoteInitialProductLine(
+            sectionName: '${parts[0]} / ${parts[1]}',
+            productId: parts[2],
+            quantity: entry.value,
+          );
+        }(),
     ];
   }
 

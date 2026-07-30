@@ -2785,9 +2785,14 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       (sum, draft) => sum + _lineNetTotal(draft),
     );
     final isUncategorized = group.draft == null;
-    final title = isUncategorized
+    final rawTitle = isUncategorized
         ? 'Kategorisiz'
         : (group.draft!.name.isEmpty ? 'Isimsiz' : group.draft!.name);
+    final titleParts = rawTitle.split(' / ');
+    final parentTitle = titleParts.length > 1 ? titleParts.first : '';
+    final title = titleParts.length > 1
+        ? titleParts.sublist(1).join(' / ')
+        : rawTitle;
     final headerBg = isUncategorized
         ? const Color(0xFFF1F4F8)
         : const Color(0xFFE9EEF5);
@@ -2828,6 +2833,16 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          if (parentTitle.isNotEmpty)
+                            Text(
+                              parentTitle,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: slate,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.5,
+                                  ),
+                            ),
                           Text(
                             title,
                             style: Theme.of(context).textTheme.titleSmall

@@ -103,7 +103,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   final _titleController = TextEditingController();
   final _noteController = TextEditingController(
     text:
-        'Teslim suresi ve odeme kosullari teklif onayi sonrasinda netlestirilir.',
+        'Teslim süresi ve ödeme koşulları sipariş teyidi sonrasında netleştirilir.',
   );
   final _validityController = TextEditingController(text: '15 gun');
   final _paymentTermsController = TextEditingController(
@@ -1012,9 +1012,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     }
   }
 
-  /// Teklifi yonetici onayina gonderir: status=pending, submittedAt=now.
-  /// Revize akisinda (mevcut teklifin gecmisi varsa) revizyon sayacini bir
-  /// artirir ve onceki onaylayan/not alanlarini temizler.
+  /// Teklifi satış sürecinde "Gönderime Hazır" aşamasına taşır.
   Future<void> _submitForApproval() async {
     if (_isSubmitting) {
       return;
@@ -1044,8 +1042,8 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         SnackBar(
           content: Text(
             isRevision
-                ? 'Revizyon onaya gonderildi (Rev ${quote.revisionCount})'
-                : 'Teklif onaya gonderildi',
+                ? 'Revizyon tamamlandı (Rev ${quote.revisionCount})'
+                : 'Teklif gönderime hazırlandı',
           ),
         ),
       );
@@ -1056,7 +1054,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Onaya gonderilemedi: $error')));
+        ).showSnackBar(SnackBar(content: Text('Teklif tamamlanamadı: $error')));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -3440,11 +3438,11 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
     final isRevision = widget.quoteToRevise != null;
     final st = widget.quoteToRevise?.status;
-    final canSubmitForApproval =
+    final canCompleteQuote =
         st == null || st == QuoteStatus.draft || st == QuoteStatus.rejected;
     final actionButtons = Column(
       children: [
-        if (canSubmitForApproval) ...[
+        if (canCompleteQuote) ...[
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -3456,9 +3454,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.send_rounded, size: 18),
-              label: Text(
-                isRevision ? 'Revizyonu Onaya Gonder' : 'Onaya Gonder',
-              ),
+              label: Text(isRevision ? 'Revizyonu Tamamla' : 'Teklifi Tamamla'),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFB8843C),
                 foregroundColor: Colors.white,

@@ -48,18 +48,28 @@ class QuotesPage extends StatefulWidget {
 class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
   static const _tabs = [
     _TabDefinition(
-      label: 'Gönderilen',
-      icon: Icons.hourglass_top_rounded,
-      statuses: [QuoteStatus.pending],
-    ),
-    _TabDefinition(
-      label: 'Taslaklar',
+      label: 'Taslak',
       icon: Icons.edit_note_rounded,
       statuses: [QuoteStatus.draft],
     ),
     _TabDefinition(
-      label: 'Reddedilen',
-      icon: Icons.block_rounded,
+      label: 'Gönderime Hazır',
+      icon: Icons.task_alt_rounded,
+      statuses: [QuoteStatus.pending],
+    ),
+    _TabDefinition(
+      label: 'Müşteriye Gönderildi',
+      icon: Icons.send_rounded,
+      statuses: [QuoteStatus.approved],
+    ),
+    _TabDefinition(
+      label: 'Kazanıldı',
+      icon: Icons.emoji_events_rounded,
+      statuses: [QuoteStatus.accepted],
+    ),
+    _TabDefinition(
+      label: 'Kaybedildi',
+      icon: Icons.trending_down_rounded,
       statuses: [QuoteStatus.rejected],
     ),
     _TabDefinition(
@@ -71,7 +81,6 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
 
   final _stampService = const CompanyStampService();
   late final TabController _scopeTabController;
-  late final TabController _statusTabController;
 
   List<Quote> _quotes = const [];
   List<Product> _products = const [];
@@ -87,32 +96,6 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
   bool _showQuoteDate = true;
   bool _showQuoteStatus = true;
   bool _showQuoteAmount = true;
-
-  List<Quote> get _activeQuotes => _filteredQuotes
-      .where(
-        (q) =>
-            q.archivedAt == null &&
-            q.status != QuoteStatus.approved &&
-            q.status != QuoteStatus.accepted,
-      )
-      .toList(growable: false);
-
-  List<Quote> get _archivedQuotes {
-    final list = _filteredQuotes
-        .where(
-          (q) =>
-              q.archivedAt != null ||
-              q.status == QuoteStatus.approved ||
-              q.status == QuoteStatus.accepted,
-        )
-        .toList(growable: false);
-    list.sort((a, b) {
-      final aDate = a.archivedAt ?? a.approvedAt ?? a.createdAt;
-      final bDate = b.archivedAt ?? b.approvedAt ?? b.createdAt;
-      return bDate.compareTo(aDate);
-    });
-    return list;
-  }
 
   List<Quote> get _filteredQuotes {
     final query = _quoteQuery.trim().toLowerCase();
@@ -172,7 +155,6 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _scopeTabController = TabController(length: 2, vsync: this);
-    _statusTabController = TabController(length: _tabs.length, vsync: this);
     _scopeTabController.addListener(() {
       if (!_scopeTabController.indexIsChanging && mounted) {
         setState(() {});
@@ -184,7 +166,6 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
   @override
   void dispose() {
     _scopeTabController.dispose();
-    _statusTabController.dispose();
     super.dispose();
   }
 
@@ -276,8 +257,6 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
     await _reload();
   }
 
-  double get _appBarBottomHeight => _scopeTabController.index == 0 ? 92 : 46;
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -311,34 +290,18 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
           ),
           const SizedBox(width: 8),
         ],
-        bottom: PreferredSize(
-          preferredSize: Size.fromHeight(_appBarBottomHeight),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TabBar(
-                controller: _scopeTabController,
-                tabs: [
-                  Tab(text: 'Aktif (${_activeQuotes.length})'),
-                  Tab(text: 'Gönderilen Teklifler (${_archivedQuotes.length})'),
-                ],
-              ),
-              if (_scopeTabController.index == 0)
-                TabBar(
-                  controller: _statusTabController,
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.start,
-                  tabs: [
-                    for (final tab in _tabs)
-                      Tab(
-                        icon: Icon(tab.icon, size: 18),
-                        text: '${tab.label} (${_countFor(tab)})',
-                        iconMargin: const EdgeInsets.only(bottom: 4),
-                      ),
-                  ],
-                ),
-            ],
-          ),
+        bottom: TabBar(
+          controller: _scopeTabController,
+          tabs: [
+            Tab(
+              icon: const Icon(Icons.table_rows_rounded, size: 18),
+              text: 'Liste (${_filteredQuotes.length})',
+            ),
+            const Tab(
+              icon: Icon(Icons.view_kanban_rounded, size: 18),
+              text: 'Satış Panosu',
+            ),
+          ],
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -360,13 +323,11 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
                       child: TabBarView(
                         controller: _scopeTabController,
                         children: [
-                          TabBarView(
-                            controller: _statusTabController,
-                            children: [
-                              for (final tab in _tabs) _buildList(tab),
-                            ],
+                          _buildQuoteWorkspace(
+                            quotes: _filteredQuotes,
+                            emptyText: 'Henüz teklif bulunmuyor.',
                           ),
-                          _buildArchiveList(),
+                          _buildKanban(),
                         ],
                       ),
                     ),
@@ -401,6 +362,7 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
               width: 150,
               child: DropdownButtonFormField<String>(
                 initialValue: _quoteDateFilter,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   isDense: true,
                   labelText: 'Tarih',
@@ -419,6 +381,7 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
               width: 180,
               child: DropdownButtonFormField<String>(
                 initialValue: _quoteSort,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   isDense: true,
                   labelText: 'Sıralama',
@@ -495,33 +458,214 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
     );
   }
 
-  int _countFor(_TabDefinition tab) {
-    return _activeQuotes.where((q) => tab.statuses.contains(q.status)).length;
+  Future<void> _moveQuoteToStatus(Quote quote, QuoteStatus targetStatus) async {
+    if (quote.status == targetStatus) return;
+    final now = DateTime.now();
+    final isTerminal =
+        targetStatus == QuoteStatus.accepted ||
+        targetStatus == QuoteStatus.rejected ||
+        targetStatus == QuoteStatus.cancelled;
+    final updated = quote.copyWith(
+      status: targetStatus,
+      submittedAt: targetStatus == QuoteStatus.pending
+          ? (quote.submittedAt ?? now)
+          : quote.submittedAt,
+      approvedAt: targetStatus == QuoteStatus.approved ? now : quote.approvedAt,
+      approvedByName: targetStatus == QuoteStatus.approved
+          ? (quote.createdByName.trim().isEmpty
+                ? quote.documentProfile.preparedByName
+                : quote.createdByName)
+          : quote.approvedByName,
+      acceptedTotalTl: targetStatus == QuoteStatus.accepted
+          ? (quote.acceptedTotalTl ?? quote.totalFor('TL'))
+          : quote.acceptedTotalTl,
+      acceptedAmount: targetStatus == QuoteStatus.accepted
+          ? (quote.acceptedAmount ?? quote.totalFor(quote.displayUnit))
+          : quote.acceptedAmount,
+      acceptedCurrencyCode: targetStatus == QuoteStatus.accepted
+          ? quote.displayUnit
+          : quote.acceptedCurrencyCode,
+      acceptedFxRate: targetStatus == QuoteStatus.accepted
+          ? (quote.displayUnit == 'TL'
+                ? 1
+                : quote.rateLookup[quote.displayUnit])
+          : quote.acceptedFxRate,
+      acceptedAt: targetStatus == QuoteStatus.accepted
+          ? (quote.acceptedAt ?? now)
+          : quote.acceptedAt,
+      archivedAt: isTerminal ? now.toUtc() : quote.archivedAt,
+      clearArchivedAt: !isTerminal,
+    );
+
+    try {
+      await widget.quoteRepository.saveQuote(updated);
+      if (!mounted) return;
+      setState(() {
+        final index = _quotes.indexWhere((item) => item.id == quote.id);
+        if (index == -1) return;
+        final quotes = List<Quote>.from(_quotes);
+        quotes[index] = updated;
+        _quotes = quotes;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Teklif ${targetStatus.displayLabel} aşamasına taşındı.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Durum güncellenemedi: $error')));
+    }
   }
 
-  Widget _buildList(_TabDefinition tab) {
-    final items =
-        _activeQuotes
-            .where((q) => tab.statuses.contains(q.status))
-            .toList(growable: false)
-          ..sort((a, b) {
-            final aDate = a.approvedAt ?? a.submittedAt ?? a.createdAt;
-            final bDate = b.approvedAt ?? b.submittedAt ?? b.createdAt;
-            return bDate.compareTo(aDate);
-          });
-
-    return _buildQuoteWorkspace(
-      quotes: items,
-      emptyText: 'Bu aşamada kayıt bulunmuyor.',
+  Widget _buildKanban() {
+    final quotes = _filteredQuotes;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              height: constraints.maxHeight - 28,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var index = 0; index < _tabs.length; index++) ...[
+                    if (index > 0) const SizedBox(width: 12),
+                    _buildKanbanColumn(_tabs[index], quotes),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildArchiveList() {
-    final items = _archivedQuotes;
-    return _buildQuoteWorkspace(
-      quotes: items,
-      emptyText: 'Gönderilen teklif bulunmuyor.',
-      showArchiveDate: true,
+  Widget _buildKanbanColumn(_TabDefinition tab, List<Quote> quotes) {
+    final items = quotes
+        .where((quote) => tab.statuses.contains(quote.status))
+        .toList(growable: false);
+    final targetStatus = tab.statuses.first;
+    final style = _QuoteSummaryCard._statusStyleFor(targetStatus);
+
+    return DragTarget<Quote>(
+      onWillAcceptWithDetails: (details) => details.data.status != targetStatus,
+      onAcceptWithDetails: (details) =>
+          _moveQuoteToStatus(details.data, targetStatus),
+      builder: (context, candidates, rejected) {
+        final highlighted = candidates.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: 294,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: highlighted
+                ? style.bg.withValues(alpha: 0.92)
+                : const Color(0xFFF1F4F8).withValues(alpha: 0.88),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: highlighted ? style.fg : const Color(0xFFD7DEE6),
+              width: highlighted ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: style.bg,
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Icon(tab.icon, size: 17, color: style.fg),
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        tab.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF17304C),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '${items.length}',
+                        style: const TextStyle(
+                          color: Color(0xFF17304C),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: items.isEmpty
+                    ? Center(
+                        child: Text(
+                          highlighted
+                              ? 'Buraya bırakın'
+                              : 'Bu aşamada teklif yok',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Color(0xFF738391),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: items.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (context, itemIndex) {
+                          final quote = items[itemIndex];
+                          final card = _KanbanQuoteCard(
+                            quote: quote,
+                            onTap: () => _openQuote(quote),
+                          );
+                          return Draggable<Quote>(
+                            data: quote,
+                            feedback: Material(
+                              color: Colors.transparent,
+                              child: SizedBox(width: 274, child: card),
+                            ),
+                            childWhenDragging: Opacity(
+                              opacity: 0.35,
+                              child: card,
+                            ),
+                            child: card,
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -664,6 +808,121 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KanbanQuoteCard extends StatelessWidget {
+  const _KanbanQuoteCard({required this.quote, required this.onTap});
+
+  final Quote quote;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = NumberFormat.currency(
+      locale: 'tr_TR',
+      symbol: switch (quote.displayUnit) {
+        'USDTRY' => r'$ ',
+        'EURTRY' => 'EUR ',
+        _ => 'TL ',
+      },
+      decimalDigits: 2,
+    );
+    final customer = quote.customerCompany.trim().isEmpty
+        ? quote.customerName.trim()
+        : quote.customerCompany.trim();
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(13),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(13),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: const Color(0xFFD7DEE6)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      quote.code,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF17304C),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const Icon(
+                    Icons.drag_indicator_rounded,
+                    size: 18,
+                    color: Color(0xFF8A98A5),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 7),
+              Text(
+                customer.isEmpty ? 'Cari seçilmedi' : customer,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF17304C),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                quote.title.trim().isEmpty ? 'Başlıksız teklif' : quote.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF657888),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      DateFormat('dd.MM.yyyy', 'tr_TR').format(quote.createdAt),
+                      style: const TextStyle(
+                        color: Color(0xFF738391),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    formatter.format(quote.totalFor(quote.displayUnit)),
+                    style: const TextStyle(
+                      color: Color(0xFF17304C),
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1026,19 +1285,19 @@ class _QuoteSidePanel extends StatelessWidget {
             const Divider(height: 24),
             _SideMetric(label: 'Taslak', value: '${count(QuoteStatus.draft)}'),
             _SideMetric(
-              label: 'Gönderilen',
+              label: 'Gönderime Hazır',
               value: '${count(QuoteStatus.pending)}',
             ),
             _SideMetric(
-              label: 'Onaylanan',
+              label: 'Müşteriye Gönderildi',
               value: '${count(QuoteStatus.approved)}',
             ),
             _SideMetric(
-              label: 'Anlaşıldı',
+              label: 'Kazanıldı',
               value: '${count(QuoteStatus.accepted)}',
             ),
             _SideMetric(
-              label: 'Reddedilen',
+              label: 'Kaybedildi',
               value: '${count(QuoteStatus.rejected)}',
             ),
             _SideMetric(

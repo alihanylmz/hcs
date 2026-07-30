@@ -102,22 +102,24 @@ class _CarilerPageState extends State<CarilerPage> {
     });
   }
 
-  Future<void> _edit(CariAccount? existing) async {
+  Future<CariAccount?> _edit(CariAccount? existing) async {
     final cari = await showDialog<CariAccount>(
       context: context,
       builder: (ctx) => _CariFormDialog(existing: existing),
     );
-    if (cari == null || !mounted) return;
+    if (cari == null || !mounted) return null;
 
     try {
       await widget.repository.save(cari);
-      if (!mounted) return;
+      if (!mounted) return null;
       await _reload();
+      return cari;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return null;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Cari kaydedilemedi: $error')));
+      return null;
     }
   }
 
@@ -138,6 +140,7 @@ class _CarilerPageState extends State<CarilerPage> {
           ownCompanyRepository: widget.ownCompanyRepository!,
           priceAdjustmentRuleRepository: widget.priceAdjustmentRuleRepository!,
           isManager: widget.isManager,
+          onEdit: _edit,
         ),
       ),
     );

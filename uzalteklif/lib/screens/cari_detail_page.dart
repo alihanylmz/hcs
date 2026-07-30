@@ -33,6 +33,7 @@ class CariDetailPage extends StatefulWidget {
     required this.ownCompanyRepository,
     required this.priceAdjustmentRuleRepository,
     required this.isManager,
+    this.onEdit,
   });
 
   final CariAccount cari;
@@ -44,12 +45,14 @@ class CariDetailPage extends StatefulWidget {
   final OwnCompanyRepository ownCompanyRepository;
   final PriceAdjustmentRuleRepository priceAdjustmentRuleRepository;
   final bool isManager;
+  final Future<CariAccount?> Function(CariAccount current)? onEdit;
 
   @override
   State<CariDetailPage> createState() => _CariDetailPageState();
 }
 
 class _CariDetailPageState extends State<CariDetailPage> {
+  late CariAccount _cari;
   List<Quote> _quotes = const [];
   List<Product> _products = const [];
   List<MarketRate> _rates = const [];
@@ -59,6 +62,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
   @override
   void initState() {
     super.initState();
+    _cari = widget.cari;
     _reload();
   }
 
@@ -68,7 +72,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
     final products = await widget.productRepository.fetchProducts();
     final rates = await widget.marketRateService.fetchRates();
     if (!mounted) return;
-    final id = widget.cari.id;
+    final id = _cari.id;
     final forCari = all.where((q) => q.cariId == id).toList(growable: false)
       ..sort((a, b) {
         final aDate = a.acceptedAt ?? a.approvedAt ?? a.createdAt;
@@ -110,7 +114,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
           quoteRepository: widget.quoteRepository,
           initialRates: _rates,
           availableProducts: _products,
-          initialCariId: widget.cari.id,
+          initialCariId: _cari.id,
           userProfileRepository: widget.userProfileRepository,
           cariRepository: widget.cariRepository,
           ownCompanyRepository: widget.ownCompanyRepository,
@@ -118,6 +122,15 @@ class _CariDetailPageState extends State<CariDetailPage> {
         ),
       ),
     );
+    await _reload();
+  }
+
+  Future<void> _editCari() async {
+    final edit = widget.onEdit;
+    if (edit == null) return;
+    final updated = await edit(_cari);
+    if (!mounted || updated == null) return;
+    setState(() => _cari = updated);
     await _reload();
   }
 
@@ -148,7 +161,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
     }
     try {
       final path = await const AgreedQuotesPdfService().exportForCari(
-        cari: widget.cari,
+        cari: _cari,
         quotes: agreed,
       );
       if (!mounted || path == null) return;
@@ -165,7 +178,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final c = widget.cari;
+    final c = _cari;
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -413,7 +426,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
   }
 
   Widget _buildCari360Header(BuildContext context) {
-    final c = widget.cari;
+    final c = _cari;
     final companyName = c.companyName.trim().isEmpty
         ? 'İsimsiz firma'
         : c.companyName.trim();
@@ -483,6 +496,18 @@ class _CariDetailPageState extends State<CariDetailPage> {
               ),
             ),
             const SizedBox(width: 12),
+            if (widget.onEdit != null) ...[
+              OutlinedButton.icon(
+                onPressed: _editCari,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.58)),
+                ),
+                icon: const Icon(Icons.edit_outlined, size: 17),
+                label: const Text('Cariyi düzenle'),
+              ),
+              const SizedBox(width: 8),
+            ],
             FilledButton.icon(
               onPressed: _openNewQuote,
               style: FilledButton.styleFrom(

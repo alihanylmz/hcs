@@ -17,7 +17,8 @@ const _quoteTables = <String>[
   'user_profiles',
 ];
 
-Future<void> main() async {
+Future<void> main(List<String> arguments) async {
+  final requireEmptyTarget = arguments.contains('--require-empty-target');
   final source = _ProjectConfig.fromEnvironment(
     prefix: 'SOURCE',
     label: 'Teklif kaynak',
@@ -88,6 +89,45 @@ Future<void> main() async {
   );
   stdout.writeln('Hedefte dolu Teklif tablosu  : $populatedTargetTableCount');
   stdout.writeln('');
+  if (requireEmptyTarget &&
+      (existingTargetTableCount > 0 ||
+          populatedTargetTableCount > 0 ||
+          (targetImages ?? 0) > 0)) {
+    throw StateError(
+      'Hedefte Teklif şeması veya verisi zaten bulunuyor. '
+      'Otomatik ilk aktarım durduruldu.',
+    );
+  }
+  if (requireEmptyTarget) {
+    const minimumSourceCounts = <String, int>{
+      'products': 2576,
+      'customer_accounts': 4,
+      'quotes': 53,
+      'quote_line_items': 211,
+      'quote_revisions': 53,
+      'own_companies': 1,
+      'market_rates': 2,
+      'audit_logs': 4581,
+    };
+    final sourceCounts = <String, int?>{};
+    for (final table in minimumSourceCounts.keys) {
+      sourceCounts[table] = await sourceApi.tableCount(table);
+    }
+    final incomplete =
+        minimumSourceCounts.entries
+            .where((entry) => (sourceCounts[entry.key] ?? -1) < entry.value)
+            .map(
+              (entry) =>
+                  '${entry.key}: bulunan=${sourceCounts[entry.key]}, '
+                  'en az=${entry.value}',
+            )
+            .toList();
+    if (incomplete.isNotEmpty) {
+      throw StateError(
+        'Kaynak veri beklenenden eksik: ${incomplete.join('; ')}',
+      );
+    }
+  }
   stdout.writeln('ENVANTER TAMAMLANDI — VERİ YAZILMADI');
 }
 

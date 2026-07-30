@@ -5,15 +5,22 @@ import '../config/discovery_templates.dart';
 import '../models/control_hardware.dart';
 import '../models/discovery_project.dart';
 import '../models/product.dart';
+import '../services/cari_repository.dart';
 import '../services/control_hardware_repository.dart';
 import '../services/control_hardware_selector.dart';
 import '../services/discovery_repository.dart';
+import '../services/market_rate_service.dart';
+import '../services/own_company_repository.dart';
+import '../services/price_adjustment_rule_repository.dart';
 import '../services/product_repository.dart';
+import '../services/quote_repository.dart';
+import '../services/user_profile_repository.dart';
 import '../utils/discovery_product_matcher.dart';
 import '../utils/product_category_labels.dart';
 import '../widgets/workspace_background.dart';
 import 'control_hardware_library_page.dart';
 import 'product_category_management_page.dart';
+import 'quote_editor_page.dart';
 
 class DiscoveryProjectsPage extends StatefulWidget {
   const DiscoveryProjectsPage({
@@ -21,11 +28,23 @@ class DiscoveryProjectsPage extends StatefulWidget {
     required this.repository,
     required this.hardwareRepository,
     required this.productRepository,
+    required this.quoteRepository,
+    required this.marketRateService,
+    required this.userProfileRepository,
+    required this.cariRepository,
+    required this.ownCompanyRepository,
+    required this.priceAdjustmentRuleRepository,
   });
 
   final DiscoveryRepository repository;
   final ControlHardwareRepository hardwareRepository;
   final ProductRepository productRepository;
+  final QuoteRepository quoteRepository;
+  final MarketRateService marketRateService;
+  final UserProfileRepository userProfileRepository;
+  final CariRepository cariRepository;
+  final OwnCompanyRepository ownCompanyRepository;
+  final PriceAdjustmentRuleRepository priceAdjustmentRuleRepository;
 
   @override
   State<DiscoveryProjectsPage> createState() => _DiscoveryProjectsPageState();
@@ -96,6 +115,12 @@ class _DiscoveryProjectsPageState extends State<DiscoveryProjectsPage> {
           repository: widget.repository,
           hardwareRepository: widget.hardwareRepository,
           productRepository: widget.productRepository,
+          quoteRepository: widget.quoteRepository,
+          marketRateService: widget.marketRateService,
+          userProfileRepository: widget.userProfileRepository,
+          cariRepository: widget.cariRepository,
+          ownCompanyRepository: widget.ownCompanyRepository,
+          priceAdjustmentRuleRepository: widget.priceAdjustmentRuleRepository,
         ),
       ),
     );
@@ -402,12 +427,24 @@ class DiscoveryEditorPage extends StatefulWidget {
     required this.repository,
     required this.hardwareRepository,
     required this.productRepository,
+    required this.quoteRepository,
+    required this.marketRateService,
+    required this.userProfileRepository,
+    required this.cariRepository,
+    required this.ownCompanyRepository,
+    required this.priceAdjustmentRuleRepository,
   });
 
   final DiscoveryProject project;
   final DiscoveryRepository repository;
   final ControlHardwareRepository hardwareRepository;
   final ProductRepository productRepository;
+  final QuoteRepository quoteRepository;
+  final MarketRateService marketRateService;
+  final UserProfileRepository userProfileRepository;
+  final CariRepository cariRepository;
+  final OwnCompanyRepository ownCompanyRepository;
+  final PriceAdjustmentRuleRepository priceAdjustmentRuleRepository;
 
   @override
   State<DiscoveryEditorPage> createState() => _DiscoveryEditorPageState();
@@ -487,6 +524,66 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     ..._savedDeviceTemplates,
   ];
 
+  Map<String, int> get _selectedProductQuantities {
+    final quantities = <String, int>{};
+    for (final device in _devices) {
+      for (final point in device.points) {
+        if (point.productId.isEmpty) continue;
+        quantities.update(
+          point.productId,
+          (value) => value + point.quantity,
+          ifAbsent: () => point.quantity,
+        );
+      }
+    }
+    for (final settings in _panelSettings) {
+      if (settings.controllerHardwareId.isNotEmpty) {
+        final controller = _hardware.where(
+          (item) => item.id == settings.controllerHardwareId,
+        );
+        if (controller.isNotEmpty && controller.first.productId.isNotEmpty) {
+          quantities.update(
+            controller.first.productId,
+            (value) => value + 1,
+            ifAbsent: () => 1,
+          );
+        }
+      }
+      for (final moduleId in settings.ioModuleHardwareIds) {
+        final module = _hardware.where((item) => item.id == moduleId);
+        if (module.isEmpty || module.first.productId.isEmpty) continue;
+        quantities.update(
+          module.first.productId,
+          (value) => value + 1,
+          ifAbsent: () => 1,
+        );
+      }
+    }
+    for (final solution in _hardwareSolutions) {
+      final settings = _settingsForPanel(solution.panelCode);
+      if (settings.controllerHardwareId.isEmpty &&
+          solution.role == PanelHardwareRole.controller &&
+          solution.controller?.productId.isNotEmpty == true) {
+        quantities.update(
+          solution.controller!.productId,
+          (value) => value + 1,
+          ifAbsent: () => 1,
+        );
+      }
+      if (settings.ioModuleHardwareIds.isEmpty) {
+        for (final module in solution.modules) {
+          if (module.productId.isEmpty) continue;
+          quantities.update(
+            module.productId,
+            (value) => value + 1,
+            ifAbsent: () => 1,
+          );
+        }
+      }
+    }
+    return quantities;
+  }
+
   Future<void> _loadHardware() async {
     try {
       final results = await Future.wait([
@@ -556,6 +653,65 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Keşif kaydedilemedi: $error')));
+    }
+  }
+
+  Future<void> _createQuote() async {
+    final quantities = _selectedProductQuantities;
+    if (quantities.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Teklife aktarılacak ürün yok. Önce noktalara veya panolara '
+            'stok ürünü bağlayın.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (_projectNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Önce proje adını girin.')));
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      await widget.repository.save(_currentProject);
+      var availableProducts = _products;
+      final hasMissingProduct = quantities.keys.any(
+        (productId) =>
+            !availableProducts.any((product) => product.id == productId),
+      );
+      if (hasMissingProduct) {
+        availableProducts = await widget.productRepository.fetchProducts();
+        if (mounted) setState(() => _products = availableProducts);
+      }
+      final rates = await widget.marketRateService.fetchRates();
+      if (!mounted) return;
+      setState(() => _saving = false);
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => QuoteEditorPage(
+            quoteRepository: widget.quoteRepository,
+            initialRates: rates,
+            availableProducts: availableProducts,
+            initialProductQuantities: quantities,
+            initialTitle: _projectNameController.text.trim(),
+            userProfileRepository: widget.userProfileRepository,
+            cariRepository: widget.cariRepository,
+            ownCompanyRepository: widget.ownCompanyRepository,
+            priceAdjustmentRuleRepository: widget.priceAdjustmentRuleRepository,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Teklif hazırlanamadı: $error')));
     }
   }
 
@@ -1084,10 +1240,27 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
   @override
   Widget build(BuildContext context) {
     final project = _currentProject;
+    final selectedProductQuantities = _selectedProductQuantities;
+    final selectedProductCount = selectedProductQuantities.values.fold<int>(
+      0,
+      (sum, quantity) => sum + quantity,
+    );
     return Scaffold(
       appBar: AppBar(
         title: const Text('Keşif Düzenle'),
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilledButton.tonalIcon(
+              onPressed: _saving ? null : _createQuote,
+              icon: const Icon(Icons.request_quote_rounded),
+              label: Text(
+                selectedProductQuantities.isEmpty
+                    ? 'Teklif Oluştur'
+                    : 'Teklif Oluştur · $selectedProductCount ürün',
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton.icon(
@@ -1254,62 +1427,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
 
   Widget _buildPlacedProductSummary() {
     final productsById = {for (final product in _products) product.id: product};
-    final quantities = <String, int>{};
-    for (final device in _devices) {
-      for (final point in device.points) {
-        if (point.productId.isEmpty) continue;
-        quantities.update(
-          point.productId,
-          (value) => value + point.quantity,
-          ifAbsent: () => point.quantity,
-        );
-      }
-    }
-    for (final settings in _panelSettings) {
-      if (settings.controllerHardwareId.isNotEmpty) {
-        final controller = _hardware.where(
-          (item) => item.id == settings.controllerHardwareId,
-        );
-        if (controller.isNotEmpty && controller.first.productId.isNotEmpty) {
-          quantities.update(
-            controller.first.productId,
-            (value) => value + 1,
-            ifAbsent: () => 1,
-          );
-        }
-      }
-      for (final moduleId in settings.ioModuleHardwareIds) {
-        final module = _hardware.where((item) => item.id == moduleId);
-        if (module.isEmpty || module.first.productId.isEmpty) continue;
-        quantities.update(
-          module.first.productId,
-          (value) => value + 1,
-          ifAbsent: () => 1,
-        );
-      }
-    }
-    for (final solution in _hardwareSolutions) {
-      final settings = _settingsForPanel(solution.panelCode);
-      if (settings.controllerHardwareId.isEmpty &&
-          solution.role == PanelHardwareRole.controller &&
-          solution.controller?.productId.isNotEmpty == true) {
-        quantities.update(
-          solution.controller!.productId,
-          (value) => value + 1,
-          ifAbsent: () => 1,
-        );
-      }
-      if (settings.ioModuleHardwareIds.isEmpty) {
-        for (final module in solution.modules) {
-          if (module.productId.isEmpty) continue;
-          quantities.update(
-            module.productId,
-            (value) => value + 1,
-            ifAbsent: () => 1,
-          );
-        }
-      }
-    }
+    final quantities = _selectedProductQuantities;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),

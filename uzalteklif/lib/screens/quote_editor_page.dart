@@ -2796,6 +2796,93 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     final headerBg = isUncategorized
         ? const Color(0xFFF1F4F8)
         : const Color(0xFFE9EEF5);
+    final categoryIdentity = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isUncategorized ? Icons.label_off_outlined : Icons.folder_rounded,
+          size: 17,
+          color: ink,
+        ),
+        const SizedBox(width: 8),
+        if (parentTitle.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: ink,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Text(
+              parentTitle,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 7),
+            child: Icon(Icons.chevron_right_rounded, size: 17, color: slate),
+          ),
+        ],
+        Flexible(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w900,
+              color: ink,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            '${group.items.length} kalem',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: slate,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    final trailingControls = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildBulkDiscountControl(group, compact: true),
+        const SizedBox(width: 14),
+        Text(
+          _formatTlForDisplayUnit(groupSubtotal),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: ink,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        if (!isUncategorized) ...[
+          const SizedBox(width: 4),
+          IconButton(
+            tooltip: 'Yeniden adlandır',
+            onPressed: () => _renameSection(group.draft!),
+            icon: const Icon(Icons.edit_rounded, size: 16),
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            tooltip: 'Kategoriyi sil',
+            onPressed: () => _deleteSection(group.draft!),
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ],
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -2807,7 +2894,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+            padding: const EdgeInsets.fromLTRB(14, 7, 8, 7),
             decoration: BoxDecoration(
               color: headerBg,
               borderRadius: const BorderRadius.vertical(
@@ -2817,85 +2904,33 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                 bottom: BorderSide(color: Color(0xFFD7DEE6)),
               ),
             ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      isUncategorized
-                          ? Icons.label_off_outlined
-                          : Icons.folder_rounded,
-                      size: 18,
-                      color: ink,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (parentTitle.isNotEmpty)
-                            Text(
-                              parentTitle,
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(
-                                    color: slate,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.5,
-                                  ),
-                            ),
-                          Text(
-                            title,
-                            style: Theme.of(context).textTheme.titleSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                  color: ink,
-                                ),
-                          ),
-                          Text(
-                            '${group.items.length} kalem',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: slate,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      _formatTlForDisplayUnit(groupSubtotal),
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: ink,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    if (!isUncategorized) ...[
-                      const SizedBox(width: 4),
-                      IconButton(
-                        tooltip: 'Yeniden adlandir',
-                        onPressed: () => _renameSection(group.draft!),
-                        icon: const Icon(Icons.edit_rounded, size: 16),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      IconButton(
-                        tooltip: 'Kategoriyi sil',
-                        onPressed: () => _deleteSection(group.draft!),
-                        icon: const Icon(
-                          Icons.delete_outline_rounded,
-                          size: 18,
-                        ),
-                        visualDensity: VisualDensity.compact,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 860) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      categoryIdentity,
+                      const SizedBox(height: 5),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: trailingControls,
                       ),
                     ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: categoryIdentity),
+                    const SizedBox(width: 12),
+                    trailingControls,
                   ],
-                ),
-                const SizedBox(height: 8),
-                _buildBulkDiscountControl(group),
-              ],
+                );
+              },
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+            padding: const EdgeInsets.fromLTRB(10, 7, 10, 10),
             child: Column(
               children: [
                 _QuoteLineSheetHeader(
@@ -2950,13 +2985,17 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     };
   }
 
-  Widget _buildBulkDiscountControl(_SectionGroup group) {
+  Widget _buildBulkDiscountControl(
+    _SectionGroup group, {
+    bool compact = false,
+  }) {
     final enabled = _isBulkDiscountEnabled(group);
     final controller = group.draft == null
         ? _uncategorizedBulkDiscountController
         : group.draft!.bulkDiscountController;
 
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Checkbox(
           value: enabled,
@@ -2973,24 +3012,32 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             });
           },
           visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
-        const SizedBox(width: 2),
-        const Text(
+        const SizedBox(width: 3),
+        Text(
           'Toplu iskonto',
           style: TextStyle(
             fontWeight: FontWeight.w700,
             color: Color(0xFF17304C),
+            fontSize: compact ? 12 : null,
           ),
         ),
-        const SizedBox(width: 10),
+        SizedBox(width: compact ? 7 : 10),
         SizedBox(
-          width: 96,
+          width: compact ? 62 : 96,
+          height: compact ? 34 : null,
           child: TextFormField(
             controller: controller,
             enabled: enabled,
-            decoration: const InputDecoration(
-              labelText: 'Iskonto %',
+            textAlign: TextAlign.center,
+            decoration: InputDecoration(
+              labelText: compact ? null : 'İskonto %',
+              hintText: compact ? '%' : null,
               isDense: true,
+              contentPadding: compact
+                  ? const EdgeInsets.symmetric(horizontal: 7, vertical: 8)
+                  : null,
             ),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             validator: enabled ? _discountValidator : null,

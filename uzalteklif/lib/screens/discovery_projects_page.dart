@@ -1427,10 +1427,13 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
           .putIfAbsent(indexed.device.templateKey, () => <_IndexedDevice>[])
           .add(indexed);
     }
-    final panelPointTotal = devices.fold(
-      0,
-      (total, indexed) => total + indexed.device.totalPoints,
-    );
+    final panelPointCounts = <DiscoveryPointType, int>{
+      for (final type in DiscoveryPointType.values)
+        type: devices.fold(
+          0,
+          (total, indexed) => total + indexed.device.countFor(type),
+        ),
+    };
     final capacity = _capacityForPanel(panelCode);
     final recommendation = capacity?.isSatisfied == false
         ? _recommendationForPanel(panelCode)
@@ -1517,10 +1520,10 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                _SmallMetric(label: 'Pano toplamı', value: '$panelPointTotal'),
               ],
             ),
+            const SizedBox(height: 12),
+            _PanelPointTotals(counts: panelPointCounts, showPanelCode: false),
             if (capacity != null) ...[
               const SizedBox(height: 12),
               _PanelCapacitySummary(
@@ -2904,33 +2907,187 @@ class _PointSummary extends StatelessWidget {
       DiscoveryPointType.bacnetMstp,
       DiscoveryPointType.bacnetIp,
     ];
+    final panelCounts = <String, Map<DiscoveryPointType, int>>{};
+    for (final device in project.devices) {
+      final panelCode = device.panelCode.trim().isEmpty
+          ? 'PANO BELİRTİLMEDİ'
+          : device.panelCode.trim().toUpperCase();
+      final counts = panelCounts.putIfAbsent(
+        panelCode,
+        () => <DiscoveryPointType, int>{
+          for (final type in DiscoveryPointType.values) type: 0,
+        },
+      );
+      for (final type in DiscoveryPointType.values) {
+        counts[type] = (counts[type] ?? 0) + device.countFor(type);
+      }
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
-        child: Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          crossAxisAlignment: WrapCrossAlignment.center,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Nokta Analizi',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Nokta Analizi',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      Text('${project.devices.length} cihaz'),
+                    ],
                   ),
-                  Text('${project.devices.length} cihaz'),
+                ),
+                for (final type in visibleTypes)
+                  _SummaryMetric(
+                    label: type.label,
+                    value: project.countFor(type),
+                  ),
+                _SummaryMetric(label: 'TOPLAM', value: project.totalPoints),
+              ],
+            ),
+            if (panelCounts.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 14),
+              Text(
+                'DDC / Pano Bazlı Toplamlar',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final entry in panelCounts.entries)
+                    _PanelPointTotals(
+                      panelCode: entry.key,
+                      counts: entry.value,
+                    ),
                 ],
               ),
-            ),
-            for (final type in visibleTypes)
-              _SummaryMetric(label: type.label, value: project.countFor(type)),
-            _SummaryMetric(label: 'TOPLAM', value: project.totalPoints),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PanelPointTotals extends StatelessWidget {
+  const _PanelPointTotals({
+    required this.counts,
+    this.panelCode,
+    this.showPanelCode = true,
+  });
+
+  final String? panelCode;
+  final Map<DiscoveryPointType, int> counts;
+  final bool showPanelCode;
+
+  int _count(DiscoveryPointType type) => counts[type] ?? 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final physicalTotal =
+        _count(DiscoveryPointType.aiActive) +
+        _count(DiscoveryPointType.aiPassive) +
+        _count(DiscoveryPointType.ao) +
+        _count(DiscoveryPointType.di) +
+        _count(DiscoveryPointType.doOutput);
+    final total = counts.values.fold<int>(0, (sum, value) => sum + value);
+    final communicationTotal = total - physicalTotal;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer.withValues(alpha: 0.38),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (showPanelCode)
+            Text(
+              panelCode ?? '',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+            ),
+          _PanelPointValue(label: 'TOPLAM', value: total, emphasized: true),
+          _PanelPointValue(label: 'FİZİKSEL', value: physicalTotal),
+          _PanelPointValue(
+            label: DiscoveryPointType.aiActive.label,
+            value: _count(DiscoveryPointType.aiActive),
+          ),
+          _PanelPointValue(
+            label: DiscoveryPointType.aiPassive.label,
+            value: _count(DiscoveryPointType.aiPassive),
+          ),
+          _PanelPointValue(
+            label: DiscoveryPointType.ao.label,
+            value: _count(DiscoveryPointType.ao),
+          ),
+          _PanelPointValue(
+            label: DiscoveryPointType.di.label,
+            value: _count(DiscoveryPointType.di),
+          ),
+          _PanelPointValue(
+            label: DiscoveryPointType.doOutput.label,
+            value: _count(DiscoveryPointType.doOutput),
+          ),
+          if (communicationTotal > 0)
+            _PanelPointValue(label: 'HABERLEŞME', value: communicationTotal),
+        ],
+      ),
+    );
+  }
+}
+
+class _PanelPointValue extends StatelessWidget {
+  const _PanelPointValue({
+    required this.label,
+    required this.value,
+    this.emphasized = false,
+  });
+
+  final String label;
+  final int value;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: emphasized ? colors.primary : colors.surface,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(
+          color: emphasized ? colors.primary : colors.outlineVariant,
+        ),
+      ),
+      child: Text(
+        '$label  $value',
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: emphasized ? colors.onPrimary : colors.onSurface,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );

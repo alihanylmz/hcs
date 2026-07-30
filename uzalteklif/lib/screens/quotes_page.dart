@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../models/cari_account.dart';
 import '../models/market_rate.dart';
 import '../models/product.dart';
 import '../models/quote.dart';
@@ -81,6 +82,7 @@ class _QuotesPageState extends State<QuotesPage> {
 
   final _stampService = const CompanyStampService();
   List<Quote> _quotes = const [];
+  List<CariAccount> _cariler = const [];
   List<Product> _products = const [];
   List<MarketRate> _rates = const [];
   String? _stampPath;
@@ -105,7 +107,7 @@ class _QuotesPageState extends State<QuotesPage> {
         .where((quote) {
           if (cutoff != null && quote.createdAt.isBefore(cutoff)) return false;
           if (_quoteCariFilter.isNotEmpty &&
-              _cariFilterKey(quote) != _quoteCariFilter) {
+              !_quoteMatchesCari(quote, _quoteCariFilter)) {
             return false;
           }
           if (_quoteOwnerFilter.isNotEmpty &&
@@ -125,30 +127,20 @@ class _QuotesPageState extends State<QuotesPage> {
     return list;
   }
 
-  String _cariFilterKey(Quote quote) {
-    final cariId = quote.cariId.trim();
-    if (cariId.isNotEmpty) return 'id:$cariId';
-    final company = quote.customerCompany.trim();
-    if (company.isNotEmpty) return 'company:${company.toLowerCase()}';
-    final contact = quote.customerName.trim();
-    return contact.isEmpty ? 'none' : 'contact:${contact.toLowerCase()}';
+  bool _quoteMatchesCari(Quote quote, String cariId) {
+    if (quote.cariId.trim() == cariId) return true;
+    if (quote.cariId.trim().isNotEmpty) return false;
+    final matches = _cariler.where((cari) => cari.id == cariId);
+    if (matches.isEmpty) return false;
+    final company = matches.first.companyName.trim().toLowerCase();
+    return company.isNotEmpty &&
+        quote.customerCompany.trim().toLowerCase() == company;
   }
 
-  String _cariFilterLabel(Quote quote) {
-    final company = quote.customerCompany.trim();
-    if (company.isNotEmpty) return company;
-    final contact = quote.customerName.trim();
-    return contact.isEmpty ? 'Cari seçilmemiş' : contact;
-  }
-
-  List<MapEntry<String, String>> get _cariFilterOptions {
-    final labels = <String, String>{};
-    for (final quote in _quotes) {
-      labels.putIfAbsent(_cariFilterKey(quote), () => _cariFilterLabel(quote));
-    }
-    final entries = labels.entries.toList(growable: false)
-      ..sort((a, b) => a.value.compareTo(b.value));
-    return entries;
+  List<CariAccount> get _cariFilterOptions {
+    final cariler = List<CariAccount>.from(_cariler)
+      ..sort((a, b) => a.companyName.compareTo(b.companyName));
+    return cariler;
   }
 
   List<String> get _ownerFilterOptions {
@@ -206,13 +198,18 @@ class _QuotesPageState extends State<QuotesPage> {
     final quotes = await widget.quoteRepository.fetchQuotes();
     final products = await widget.productRepository.fetchProducts();
     final rates = await widget.marketRateService.fetchRates();
+    List<CariAccount> cariler = const [];
+    try {
+      cariler = await widget.cariRepository.fetchAll();
+    } catch (_) {}
     if (!mounted) return;
     setState(() {
       _quotes = quotes;
+      _cariler = cariler;
       _products = products;
       _rates = rates;
       if (_quoteCariFilter.isNotEmpty &&
-          !quotes.any((quote) => _cariFilterKey(quote) == _quoteCariFilter)) {
+          !cariler.any((cari) => cari.id == _quoteCariFilter)) {
         _quoteCariFilter = '';
       }
       if (_quoteOwnerFilter.isNotEmpty &&
@@ -397,9 +394,11 @@ class _QuotesPageState extends State<QuotesPage> {
                   const DropdownMenuItem(value: '', child: Text('Tüm cariler')),
                   for (final option in _cariFilterOptions)
                     DropdownMenuItem(
-                      value: option.key,
+                      value: option.id,
                       child: Text(
-                        option.value,
+                        option.companyName.trim().isEmpty
+                            ? option.contactName
+                            : option.companyName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),

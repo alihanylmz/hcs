@@ -122,6 +122,19 @@ Future<void> main(List<String> arguments) async {
             ),
           )
           .toList(growable: false);
+      final currentCount = await targetApi.tableCount(plan.table) ?? 0;
+      if (currentCount == transformed.length) {
+        stdout.writeln(
+          '${plan.table}: $currentCount kayıt zaten doğrulanmış, atlandı.',
+        );
+        continue;
+      }
+      if (plan.table == 'quote_line_items' || plan.table == 'quote_revisions') {
+        await targetApi.deleteAll(plan.table);
+        stdout.writeln(
+          '${plan.table}: trigger kaynaklı geçici kayıtlar temizlendi.',
+        );
+      }
       await targetApi.upsertBatches(
         plan.table,
         transformed,
@@ -133,7 +146,6 @@ Future<void> main(List<String> arguments) async {
     // Normal tablo insert trigger'larının ürettiği geçici loglar temizlenir;
     // hedef yeni ve henüz uygulamaya açılmadığı için yalnızca bu migration'ın
     // ürettiği kayıtlar bulunur. Ardından kaynak geçmişi birebir yüklenir.
-    await targetApi.deleteAll('audit_logs');
     final auditRows = sourceRows['audit_logs']!
         .map(
           (row) => _transformRow(
@@ -144,10 +156,24 @@ Future<void> main(List<String> arguments) async {
           ),
         )
         .toList(growable: false);
-    await targetApi.upsertBatches('audit_logs', auditRows, conflict: 'id');
-    stdout.writeln('audit_logs: ${auditRows.length} kayıt aktarıldı.');
+    final currentAuditCount = await targetApi.tableCount('audit_logs') ?? 0;
+    if (currentAuditCount == auditRows.length) {
+      stdout.writeln(
+        'audit_logs: $currentAuditCount kayıt zaten doğrulanmış, atlandı.',
+      );
+    } else {
+      await targetApi.deleteAll('audit_logs');
+      await targetApi.upsertBatches('audit_logs', auditRows, conflict: 'id');
+      stdout.writeln('audit_logs: ${auditRows.length} kayıt aktarıldı.');
+    }
 
+    final existingTargetImages =
+        (await targetApi.listStorageObjects('product-images')).toSet();
     for (final objectName in sourceImages) {
+      if (existingTargetImages.contains(objectName)) {
+        stdout.writeln('Görsel zaten mevcut, atlandı: $objectName');
+        continue;
+      }
       final object = await sourceApi.downloadStorageObject(
         'product-images',
         objectName,

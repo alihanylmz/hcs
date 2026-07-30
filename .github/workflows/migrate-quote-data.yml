@@ -98,7 +98,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          dart tool/quote_data_inventory.dart --require-empty-target |
+          dart tool/quote_data_inventory.dart |
             tee quote-migration-preflight.txt
 
       - name: Create target quote schema

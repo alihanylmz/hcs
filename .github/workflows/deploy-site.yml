@@ -2,6 +2,11 @@ name: Deploy Site to Plesk
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/deploy-production"
 
 concurrency:
   group: deploy-site
@@ -13,8 +18,6 @@ jobs:
     env:
       IS_TAKIP_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       IS_TAKIP_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      TEKLIF_SUPABASE_URL: ${{ secrets.TEKLIF_SUPABASE_URL }}
-      TEKLIF_SUPABASE_ANON_KEY: ${{ secrets.TEKLIF_SUPABASE_ANON_KEY }}
       PUBLIC_QUOTE_BASE_URL: ${{ vars.PUBLIC_QUOTE_BASE_URL || 'https://uzalteknikservis.com/t' }}
     steps:
       - name: Validate secrets
@@ -23,8 +26,6 @@ jobs:
           missing=()
           [[ -z "$IS_TAKIP_SUPABASE_URL" ]] && missing+=("SUPABASE_URL")
           [[ -z "$IS_TAKIP_SUPABASE_ANON_KEY" ]] && missing+=("SUPABASE_ANON_KEY")
-          [[ -z "$TEKLIF_SUPABASE_URL" ]] && missing+=("TEKLIF_SUPABASE_URL")
-          [[ -z "$TEKLIF_SUPABASE_ANON_KEY" ]] && missing+=("TEKLIF_SUPABASE_ANON_KEY")
           [[ -z "${{ secrets.PLESK_HOST }}" ]] && missing+=("PLESK_HOST")
           [[ -z "${{ secrets.PLESK_USER }}" ]] && missing+=("PLESK_USER")
           [[ -z "${{ secrets.PLESK_PASSWORD }}" ]] && missing+=("PLESK_PASSWORD")
@@ -36,12 +37,8 @@ jobs:
           import os
           from urllib.parse import urlparse
 
-          for label, key in (
-              ("Is Takip", "IS_TAKIP_SUPABASE_URL"),
-              ("Teklif", "TEKLIF_SUPABASE_URL"),
-          ):
-              host = urlparse(os.environ.get(key, "")).netloc or "INVALID_URL"
-              print(f"{label} Supabase host: {host}")
+          host = urlparse(os.environ.get("IS_TAKIP_SUPABASE_URL", "")).netloc
+          print(f"Ortak Supabase host: {host or 'INVALID_URL'}")
           PY
 
       - name: Checkout Is Takip and portal
@@ -77,8 +74,8 @@ jobs:
         run: |
           flutter pub get
           flutter build web --release --base-href /teklif/ \
-            --dart-define=SUPABASE_URL="$TEKLIF_SUPABASE_URL" \
-            --dart-define=SUPABASE_ANON_KEY="$TEKLIF_SUPABASE_ANON_KEY" \
+            --dart-define=SUPABASE_URL="$IS_TAKIP_SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$IS_TAKIP_SUPABASE_ANON_KEY" \
             --dart-define=PUBLIC_QUOTE_BASE_URL="$PUBLIC_QUOTE_BASE_URL"
 
       - name: Prepare Plesk payload

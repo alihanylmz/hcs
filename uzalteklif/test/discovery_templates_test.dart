@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uzalteklif/config/discovery_templates.dart';
 import 'package:uzalteklif/models/discovery_project.dart';
+import 'package:uzalteklif/models/user_quote_profile.dart';
 import 'package:uzalteklif/services/discovery_repository.dart';
 
 void main() {
@@ -128,30 +129,30 @@ void main() {
       (template) => template.name == 'DIŞ HAVA SICAKLIK VE NEM SENSÖRÜ',
     );
     final boilerWithValve = DiscoveryTemplates.values.singleWhere(
-      (template) =>
-          template.name == 'ISITMA KAZANI + MOTORLU VANA KONTROLÜ',
+      (template) => template.name == 'ISITMA KAZANI + MOTORLU VANA KONTROLÜ',
     );
 
     expect(sensor.points, hasLength(2));
     expect(
-      sensor.points.every(
-        (point) => point.type == DiscoveryPointType.aiActive,
-      ),
+      sensor.points.every((point) => point.type == DiscoveryPointType.aiActive),
       isTrue,
     );
     expect(
-      boilerWithValve.points
-          .where((point) => point.type == DiscoveryPointType.aiPassive),
+      boilerWithValve.points.where(
+        (point) => point.type == DiscoveryPointType.aiPassive,
+      ),
       hasLength(2),
     );
     expect(
-      boilerWithValve.points
-          .where((point) => point.type == DiscoveryPointType.di),
+      boilerWithValve.points.where(
+        (point) => point.type == DiscoveryPointType.di,
+      ),
       hasLength(3),
     );
     expect(
-      boilerWithValve.points
-          .where((point) => point.type == DiscoveryPointType.doOutput),
+      boilerWithValve.points.where(
+        (point) => point.type == DiscoveryPointType.doOutput,
+      ),
       hasLength(3),
     );
   });
@@ -218,5 +219,41 @@ void main() {
       ),
       isTrue,
     );
+  });
+
+  test('ortak kullanıcı ayarı kimlik ve rol alanlarını tekrar yazmaz', () {
+    const profile = UserQuoteProfile(
+      userId: 'user-1',
+      role: 'manager',
+      preparedByName: 'Ali Yılmaz',
+      preparedByTitle: 'Satış Müdürü',
+      preparedByPhone: '555',
+      preparedByEmail: 'ali@example.com',
+      companyName: '',
+      companyTagline: '',
+      companyPhone: '',
+      companyEmail: '',
+      companyWebsite: '',
+      companyAddress: '',
+      companyTaxOffice: '',
+      companyTaxNumber: '',
+      companyMersis: '',
+      bankName: '',
+      bankBranch: '',
+      bankAccountName: '',
+      bankIban: '',
+      bankSwift: '',
+      defaultValidityText: '15 gün',
+      defaultPaymentTerms: 'Peşin',
+      defaultDeliveryTerms: 'Termin teyidi ile',
+      defaultVatRate: 20,
+    );
+
+    final row = profile.toUnifiedSettingsRow();
+
+    expect(row['user_id'], 'user-1');
+    expect(row['prepared_by_title'], 'Satış Müdürü');
+    expect(row.containsKey('prepared_by_name'), isFalse);
+    expect(row.containsKey('role'), isFalse);
   });
 }

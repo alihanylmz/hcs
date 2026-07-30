@@ -52,10 +52,12 @@ Future<void> main(List<String> arguments) async {
   final sourceProfiles = await sourceApi.selectAll('user_profiles');
   final targetProfiles = await targetApi.selectAll('profiles');
 
-  // Migration uygulanmadan veri yazılmasını önlemek için hedef şemayı doğrula.
-  await targetApi.selectAll('user_app_access', limit: 1);
-  await targetApi.selectAll('user_quote_settings', limit: 1);
-  await targetApi.selectAll('auth_user_migration_map', limit: 1);
+  if (apply) {
+    // Gerçek yazımdan önce ortak kullanıcı migration'ının uygulandığını doğrula.
+    await targetApi.selectAll('user_app_access', limit: 1);
+    await targetApi.selectAll('user_quote_settings', limit: 1);
+    await targetApi.selectAll('auth_user_migration_map', limit: 1);
+  }
 
   final targetByEmail = <String, Map<String, dynamic>>{
     for (final user in targetUsers)

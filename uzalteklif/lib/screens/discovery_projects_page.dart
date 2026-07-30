@@ -1517,13 +1517,12 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
                         ),
                         onPressed: () => _managePanelModules(panelCode),
                       ),
+                      _InlinePanelPointTotals(counts: panelPointCounts),
                     ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            _PanelPointTotals(counts: panelPointCounts, showPanelCode: false),
             if (capacity != null) ...[
               const SizedBox(height: 12),
               _PanelCapacitySummary(
@@ -3000,16 +2999,10 @@ class _PointSummary extends StatelessWidget {
 }
 
 class _PanelPointTotals extends StatelessWidget {
-  const _PanelPointTotals({
-    required this.counts,
-    this.panelCode,
-    this.showPanelCode = true,
-    this.width,
-  });
+  const _PanelPointTotals({required this.counts, this.panelCode, this.width});
 
   final String? panelCode;
   final Map<DiscoveryPointType, int> counts;
-  final bool showPanelCode;
   final double? width;
 
   int _count(DiscoveryPointType type) => counts[type] ?? 0;
@@ -3067,9 +3060,7 @@ class _PanelPointTotals extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      showPanelCode
-                          ? (panelCode ?? '')
-                          : 'Bu Panonun Nokta İhtiyacı',
+                      panelCode ?? '',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w900,
                       ),
@@ -3154,8 +3145,123 @@ class _PanelPointTotals extends StatelessWidget {
       ),
     );
 
-    if (!showPanelCode) return card;
     return SizedBox(width: width ?? 390, child: card);
+  }
+}
+
+class _InlinePanelPointTotals extends StatelessWidget {
+  const _InlinePanelPointTotals({required this.counts});
+
+  final Map<DiscoveryPointType, int> counts;
+
+  int _count(DiscoveryPointType type) => counts[type] ?? 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final useShortLabels = MediaQuery.sizeOf(context).width < 1100;
+    final analogInput =
+        _count(DiscoveryPointType.aiActive) +
+        _count(DiscoveryPointType.aiPassive);
+    final physicalTotal =
+        analogInput +
+        _count(DiscoveryPointType.ao) +
+        _count(DiscoveryPointType.di) +
+        _count(DiscoveryPointType.doOutput);
+    final total = counts.values.fold<int>(0, (sum, value) => sum + value);
+    final communicationTotal = total - physicalTotal;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(5, 4, 10, 4),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.48),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: colors.primary,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '$total Toplam',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: colors.onPrimary,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(width: 9),
+          _InlinePointValue(
+            label: useShortLabels ? 'AG' : 'Analog G.',
+            value: analogInput,
+          ),
+          _InlineDivider(color: colors.outlineVariant),
+          _InlinePointValue(
+            label: useShortLabels ? 'AÇ' : 'Analog Ç.',
+            value: _count(DiscoveryPointType.ao),
+          ),
+          _InlineDivider(color: colors.outlineVariant),
+          _InlinePointValue(
+            label: useShortLabels ? 'DG' : 'Dijital G.',
+            value: _count(DiscoveryPointType.di),
+          ),
+          _InlineDivider(color: colors.outlineVariant),
+          _InlinePointValue(
+            label: useShortLabels ? 'DÇ' : 'Dijital Ç.',
+            value: _count(DiscoveryPointType.doOutput),
+          ),
+          if (communicationTotal > 0) ...[
+            _InlineDivider(color: colors.outlineVariant),
+            _InlinePointValue(
+              label: useShortLabels ? 'HAB' : 'Haberleşme',
+              value: communicationTotal,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _InlinePointValue extends StatelessWidget {
+  const _InlinePointValue({required this.label, required this.value});
+
+  final String label;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Text.rich(
+        TextSpan(
+          text: '$label ',
+          children: [
+            TextSpan(
+              text: '$value',
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ],
+        ),
+        style: Theme.of(context).textTheme.labelMedium,
+      ),
+    );
+  }
+}
+
+class _InlineDivider extends StatelessWidget {
+  const _InlineDivider({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(width: 1, height: 20, color: color);
   }
 }
 

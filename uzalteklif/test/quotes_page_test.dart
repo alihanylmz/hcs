@@ -40,6 +40,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('Tüm cariler'), findsOneWidget);
+    expect(find.text('Tüm kullanıcılar'), findsOneWidget);
+    expect(find.text('Teklif kodu veya konu ara'), findsOneWidget);
     expect(find.text('Liste (0)'), findsOneWidget);
     expect(find.text('Pano'), findsOneWidget);
 

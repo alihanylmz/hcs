@@ -87,6 +87,8 @@ class _QuotesPageState extends State<QuotesPage> {
   bool _isLoading = true;
   bool _isPickingStamp = false;
   String _quoteQuery = '';
+  String _quoteCariFilter = '';
+  String _quoteOwnerFilter = '';
   String _quoteDateFilter = 'all';
   String _quoteSort = 'date_desc';
   bool _showQuoteCustomer = true;
@@ -102,13 +104,18 @@ class _QuotesPageState extends State<QuotesPage> {
     final list = _quotes
         .where((quote) {
           if (cutoff != null && quote.createdAt.isBefore(cutoff)) return false;
+          if (_quoteCariFilter.isNotEmpty &&
+              _cariFilterKey(quote) != _quoteCariFilter) {
+            return false;
+          }
+          if (_quoteOwnerFilter.isNotEmpty &&
+              quote.createdByName.trim() != _quoteOwnerFilter) {
+            return false;
+          }
           if (query.isEmpty) return true;
           final haystack = [
             quote.code,
             quote.title,
-            quote.customerCompany,
-            quote.customerName,
-            quote.createdByName,
             quote.status.displayLabel,
           ].join(' ').toLowerCase();
           return haystack.contains(query);
@@ -116,6 +123,43 @@ class _QuotesPageState extends State<QuotesPage> {
         .toList(growable: false);
     _sortQuoteList(list);
     return list;
+  }
+
+  String _cariFilterKey(Quote quote) {
+    final cariId = quote.cariId.trim();
+    if (cariId.isNotEmpty) return 'id:$cariId';
+    final company = quote.customerCompany.trim();
+    if (company.isNotEmpty) return 'company:${company.toLowerCase()}';
+    final contact = quote.customerName.trim();
+    return contact.isEmpty ? 'none' : 'contact:${contact.toLowerCase()}';
+  }
+
+  String _cariFilterLabel(Quote quote) {
+    final company = quote.customerCompany.trim();
+    if (company.isNotEmpty) return company;
+    final contact = quote.customerName.trim();
+    return contact.isEmpty ? 'Cari seçilmemiş' : contact;
+  }
+
+  List<MapEntry<String, String>> get _cariFilterOptions {
+    final labels = <String, String>{};
+    for (final quote in _quotes) {
+      labels.putIfAbsent(_cariFilterKey(quote), () => _cariFilterLabel(quote));
+    }
+    final entries = labels.entries.toList(growable: false)
+      ..sort((a, b) => a.value.compareTo(b.value));
+    return entries;
+  }
+
+  List<String> get _ownerFilterOptions {
+    final owners =
+        _quotes
+            .map((quote) => quote.createdByName.trim())
+            .where((name) => name.isNotEmpty)
+            .toSet()
+            .toList(growable: false)
+          ..sort();
+    return owners;
   }
 
   DateTime? _quoteCutoff() {
@@ -167,6 +211,16 @@ class _QuotesPageState extends State<QuotesPage> {
       _quotes = quotes;
       _products = products;
       _rates = rates;
+      if (_quoteCariFilter.isNotEmpty &&
+          !quotes.any((quote) => _cariFilterKey(quote) == _quoteCariFilter)) {
+        _quoteCariFilter = '';
+      }
+      if (_quoteOwnerFilter.isNotEmpty &&
+          !quotes.any(
+            (quote) => quote.createdByName.trim() == _quoteOwnerFilter,
+          )) {
+        _quoteOwnerFilter = '';
+      }
       _isLoading = false;
     });
   }
@@ -318,14 +372,71 @@ class _QuotesPageState extends State<QuotesPage> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             SizedBox(
-              width: 280,
+              width: 240,
               child: TextField(
                 decoration: const InputDecoration(
                   isDense: true,
                   prefixIcon: Icon(Icons.search_rounded),
-                  labelText: 'Teklif, cari, kullanıcı ara',
+                  labelText: 'Teklif kodu veya konu ara',
                 ),
                 onChanged: (value) => setState(() => _quoteQuery = value),
+              ),
+            ),
+            SizedBox(
+              width: 205,
+              child: DropdownButtonFormField<String>(
+                key: ValueKey('cari-$_quoteCariFilter'),
+                initialValue: _quoteCariFilter,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  prefixIcon: Icon(Icons.business_outlined, size: 19),
+                  labelText: 'Cari',
+                ),
+                items: [
+                  const DropdownMenuItem(value: '', child: Text('Tüm cariler')),
+                  for (final option in _cariFilterOptions)
+                    DropdownMenuItem(
+                      value: option.key,
+                      child: Text(
+                        option.value,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (value) =>
+                    setState(() => _quoteCariFilter = value ?? ''),
+              ),
+            ),
+            SizedBox(
+              width: 190,
+              child: DropdownButtonFormField<String>(
+                key: ValueKey('owner-$_quoteOwnerFilter'),
+                initialValue: _quoteOwnerFilter,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  prefixIcon: Icon(Icons.person_outline_rounded, size: 19),
+                  labelText: 'Teklif sorumlusu',
+                ),
+                items: [
+                  const DropdownMenuItem(
+                    value: '',
+                    child: Text('Tüm kullanıcılar'),
+                  ),
+                  for (final owner in _ownerFilterOptions)
+                    DropdownMenuItem(
+                      value: owner,
+                      child: Text(
+                        owner,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (value) =>
+                    setState(() => _quoteOwnerFilter = value ?? ''),
               ),
             ),
             SizedBox(

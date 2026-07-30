@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../screens/admin_panel_page.dart';
 import '../screens/cariler_page.dart';
-import '../screens/company_settings_page.dart';
 import '../screens/discovery_projects_page.dart';
 import '../screens/home_page.dart';
 import '../screens/profile_settings_page.dart';
@@ -46,7 +45,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     if (!mounted) return;
     setState(() {
       _isManager = p?.isManager ?? false;
-      if (!_isManager && _index == 6) _index = 4;
+      if (!_isManager && _index > 4) _index = 4;
     });
   }
 
@@ -59,7 +58,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
             selectedIndex: _index,
             onDestinationSelected: (i) {
               setState(() => _index = i);
-              if (i >= 1) {
+              if (i == 1 || i == 2 || i == 3 || i == 4) {
                 _refreshRole();
               }
             },
@@ -100,11 +99,6 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                 icon: Icon(Icons.person_outline_rounded),
                 selectedIcon: Icon(Icons.person_rounded),
                 label: Text('Profil'),
-              ),
-              const NavigationRailDestination(
-                icon: Icon(Icons.apartment_outlined),
-                selectedIcon: Icon(Icons.apartment_rounded),
-                label: Text('Firma'),
               ),
               if (_isManager)
                 const NavigationRailDestination(
@@ -174,10 +168,6 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           ownCompanyRepository: widget.bootstrap.ownCompanyRepository,
         );
       case 5:
-        return CompanySettingsPage(
-          repository: widget.bootstrap.ownCompanyRepository,
-        );
-      case 6:
         if (_isManager) {
           return AdminPanelPage(
             userProfileRepository: widget.bootstrap.userProfileRepository,

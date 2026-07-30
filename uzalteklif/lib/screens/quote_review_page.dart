@@ -78,7 +78,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 ? _quote.createdByName.trim()
                 : (_quote.documentProfile.preparedByName.trim().isNotEmpty
                       ? _quote.documentProfile.preparedByName.trim()
-                      : 'Onay Yetkilisi'));
+                      : 'Satış Yetkilisi'));
       final updated = _quote.copyWith(
         status: QuoteStatus.approved,
         approvedAt: DateTime.now(),
@@ -91,12 +91,10 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
       setState(() => _quote = updated);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Teklif iç onaydan geçti ve Gönderilen Teklifler listesine taşındı.',
-          ),
+          content: Text('Teklif müşteriye gönderildi olarak işaretlendi.'),
         ),
       );
-    }, 'Onay basarisiz');
+    }, 'Durum güncellenemedi');
   }
 
   Future<void> _markAccepted() async {
@@ -213,10 +211,9 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
 
   Future<void> _reject() async {
     final note = await _askNote(
-      title: 'Red Gerekçesi',
-      hint:
-          'Red gerekçesi kayıtlarda saklanır; hazırlayan ve denetim için okunabilir olmalıdır.',
-      confirmLabel: 'Reddet ve kaydet',
+      title: 'Kaybedilme Gerekçesi',
+      hint: 'Kaybedilme sebebi satış analizi için kayıtlarda saklanacaktır.',
+      confirmLabel: 'Kaybedildi olarak kaydet',
       destructive: true,
     );
     if (note == null) return;
@@ -230,11 +227,11 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
       await widget.quoteRepository.saveQuote(updated);
       if (!mounted) return;
       setState(() => _quote = updated);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Red kararı kaydedildi.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Teklif kaybedildi olarak kaydedildi.')),
+      );
       Navigator.of(context).pop(updated);
-    }, 'Red işlemi başarısız');
+    }, 'Durum kaydedilemedi');
   }
 
   Future<void> _cancelQuote() async {
@@ -525,25 +522,25 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
         Icons.edit_note_rounded,
       ),
       QuoteStatus.pending => (
-        'GONDERILDI',
+        'GÖNDERİME HAZIR',
         const Color(0xFF9D5C1D),
         const Color(0xFFFFF4E0),
         Icons.hourglass_top_rounded,
       ),
       QuoteStatus.approved => (
-        'ONAYLANDI',
+        'MÜŞTERİYE GÖNDERİLDİ',
         const Color(0xFF2C6957),
         const Color(0xFFE5F1EC),
         Icons.verified_rounded,
       ),
       QuoteStatus.accepted => (
-        'ANLAŞILDI',
+        'KAZANILDI',
         const Color(0xFF9D5C1D),
         const Color(0xFFFFF4E0),
         Icons.handshake_rounded,
       ),
       QuoteStatus.rejected => (
-        'REDDEDILDI',
+        'KAYBEDİLDİ',
         const Color(0xFF8A2626),
         const Color(0xFFFBE4E4),
         Icons.block_rounded,
@@ -627,21 +624,17 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
         return 'Hazırlama aşaması; içerik satış yetkisiyle güncellenir.';
       case QuoteStatus.pending:
         return _quote.submittedAt != null
-            ? 'Gönderildi; kurumsal inceleme bekleniyor (${_friendly(_quote.submittedAt!)})'
-            : 'Gönderildi; kurumsal inceleme bekleniyor.';
+            ? 'Teklif tamamlandı ve müşteriye gönderilmeye hazır (${_friendly(_quote.submittedAt!)})'
+            : 'Teklif tamamlandı ve müşteriye gönderilmeye hazır.';
       case QuoteStatus.approved:
-        final name = _quote.approvedByName.isEmpty
-            ? 'Yetkili'
-            : _quote.approvedByName;
         final when = _quote.approvedAt;
-        final base = when != null
-            ? 'Resmi onay: $name — ${_friendly(when)}'
-            : 'Resmi onay: $name';
-        return '$base. Teklif Gönderilen Teklifler listesinde tutulur.';
+        return when != null
+            ? 'Müşteriye gönderim tarihi: ${_friendly(when)}'
+            : 'Teklif müşteriye gönderildi; geri dönüş takip ediliyor.';
       case QuoteStatus.accepted:
-        return 'Müşteri ile ticari mutabakat kaydedildi; anlaşılan tutar PDF mutabakat alanında gösterilir.';
+        return 'Teklif kazanıldı; mutabık kalınan tutar satış kaydına işlendi.';
       case QuoteStatus.rejected:
-        return 'Red kararı verildi; gerekçe aşağıdadır.';
+        return 'Teklif kaybedildi; gerekçe aşağıdadır.';
       case QuoteStatus.cancelled:
         return 'Teklif iptal edildi; gerekçe kayıtlarda saklanır.';
     }
@@ -663,7 +656,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'İşlem ve onay süreci',
+              'Satış süreci',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w900,
                 color: _ink,
@@ -689,20 +682,19 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
             if (_quote.submittedAt != null) ...[
               _workflowConnector(),
               _workflowStep(
-                title: 'Kurumsal onaya sunuldu',
+                title: 'Gönderime hazırlandı',
                 subtitle: _friendly(_quote.submittedAt!),
                 icon: Icons.forward_to_inbox_outlined,
                 color: const Color(0xFF9D5C1D),
               ),
             ],
-            if (_quote.status == QuoteStatus.approved &&
-                _quote.approvedAt != null) ...[
+            if (_quote.approvedAt != null) ...[
               _workflowConnector(),
               _workflowStep(
-                title: 'Onaylandı',
+                title: 'Müşteriye gönderildi',
                 subtitle:
-                    '${_friendly(_quote.approvedAt!)} — ${_quote.approvedByName.trim().isEmpty ? 'Yetkili' : _quote.approvedByName.trim()}',
-                icon: Icons.verified_outlined,
+                    '${_friendly(_quote.approvedAt!)} — ${_quote.approvedByName.trim().isEmpty ? 'Satış yetkilisi' : _quote.approvedByName.trim()}',
+                icon: Icons.send_outlined,
                 color: const Color(0xFF2C6957),
               ),
             ],
@@ -710,10 +702,20 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 _quote.approvedAt != null) ...[
               _workflowConnector(),
               _workflowStep(
-                title: 'Reddedildi',
+                title: 'Kaybedildi',
                 subtitle: _friendly(_quote.approvedAt!),
                 icon: Icons.cancel_outlined,
                 color: const Color(0xFF8A2626),
+              ),
+            ],
+            if (_quote.status == QuoteStatus.accepted &&
+                _quote.acceptedAt != null) ...[
+              _workflowConnector(),
+              _workflowStep(
+                title: 'Kazanıldı',
+                subtitle: _friendly(_quote.acceptedAt!),
+                icon: Icons.emoji_events_outlined,
+                color: const Color(0xFF2C6957),
               ),
             ],
             if (_quote.status == QuoteStatus.cancelled &&
@@ -1070,7 +1072,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Onay Süreci',
+              'Satış Aksiyonları',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w900,
                 color: _ink,
@@ -1078,7 +1080,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Karar kayda işlenir; onayda resmi PDF mührü kullanılır. Red ve revizyonda gerekçe zorunludur.',
+              'Teklifi müşteriye gönderildi, revizyonda veya kaybedildi olarak güncelleyin.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: _slate,
                 fontWeight: FontWeight.w600,
@@ -1092,7 +1094,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                   child: OutlinedButton.icon(
                     onPressed: _isBusy ? null : _reject,
                     icon: const Icon(Icons.block_rounded),
-                    label: const Text('Red (gerekçe)'),
+                    label: const Text('Kaybedildi'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF8A2626),
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1104,7 +1106,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                   child: OutlinedButton.icon(
                     onPressed: _isBusy ? null : _requestRevision,
                     icon: const Icon(Icons.edit_note_rounded),
-                    label: const Text('Revizyona döndür'),
+                    label: const Text('Revizyona al'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF9D5C1D),
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1123,7 +1125,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.verified_rounded),
-                    label: const Text('Onayla ve tamamla'),
+                    label: const Text('Müşteriye gönderildi'),
                     style: FilledButton.styleFrom(
                       backgroundColor: _accent,
                       foregroundColor: Colors.white,
@@ -1241,14 +1243,14 @@ class _AcceptedDealDialogState extends State<_AcceptedDealDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Anlaşılan fiyat (opsiyonel)'),
+      title: const Text('Kazanılan satış tutarı'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Pazarlik sonrasi mutabakat varsa tutar ve para birimi secin. Bos birakirsaniz sadece onaylanir.',
+              'Müşteriyle mutabık kalınan nihai tutarı ve para birimini kaydedin.',
             ),
           ),
           const SizedBox(height: 10),
@@ -1309,7 +1311,10 @@ class _AcceptedDealDialogState extends State<_AcceptedDealDialog> {
           onPressed: () => Navigator.of(context).pop(null),
           child: const Text('Vazgec'),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Kaydet ve onayla')),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Kazanıldı olarak kaydet'),
+        ),
       ],
     );
   }

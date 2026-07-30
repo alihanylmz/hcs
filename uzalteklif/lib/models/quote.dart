@@ -277,10 +277,9 @@ class QuoteDocumentProfile {
   }
 }
 
-/// Teklifin ic onay surecindeki durumu. Seller teklifi `draft` olarak
-/// hazirlar, "Onaya Gonder" ile `pending` yapar; yonetici review ekraninda
-/// `approved` / `rejected` olarak kapatabilir ya da revizyon isteyerek
-/// `draft`'a geri dusurur (revisionCount artar, approvalNote dolar).
+/// Teklifin profesyonel satış sürecindeki aşaması. Depolama anahtarları eski
+/// kayıtlarla uyumluluk için korunur; kullanıcı arayüzü iç onay yerine satış
+/// operasyonu dilini kullanır.
 enum QuoteStatus { draft, pending, approved, accepted, rejected, cancelled }
 
 extension QuoteStatusX on QuoteStatus {
@@ -306,15 +305,15 @@ extension QuoteStatusX on QuoteStatus {
       case QuoteStatus.draft:
         return 'Taslak';
       case QuoteStatus.pending:
-        return 'Onaya Gönderildi';
+        return 'Gönderime Hazır';
       case QuoteStatus.approved:
-        return 'İç Onaylandı';
+        return 'Müşteriye Gönderildi';
       case QuoteStatus.accepted:
-        return 'Anlaşıldı';
+        return 'Kazanıldı';
       case QuoteStatus.rejected:
-        return 'Reddedildi';
+        return 'Kaybedildi';
       case QuoteStatus.cancelled:
-        return 'İptal Edildi';
+        return 'İptal';
     }
   }
 

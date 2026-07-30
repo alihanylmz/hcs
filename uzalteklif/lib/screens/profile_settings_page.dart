@@ -4,8 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/company_profile.dart';
 import '../models/user_quote_profile.dart';
 import '../services/theme_preference_service.dart';
+import '../services/own_company_repository.dart';
 import '../services/user_profile_repository.dart';
 import '../widgets/workspace_background.dart';
+import 'company_settings_page.dart';
 
 /// Kisisel hazirlayan bilgileri. Firma / sablon ayarlari [QuoteTemplatePage]'de.
 class ProfileSettingsPage extends StatefulWidget {
@@ -13,10 +15,12 @@ class ProfileSettingsPage extends StatefulWidget {
     super.key,
     required this.repository,
     required this.themePreferenceService,
+    required this.ownCompanyRepository,
   });
 
   final UserProfileRepository repository;
   final ThemePreferenceService themePreferenceService;
+  final OwnCompanyRepository ownCompanyRepository;
 
   @override
   State<ProfileSettingsPage> createState() => _ProfileSettingsPageState();
@@ -140,6 +144,15 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     }
   }
 
+  Future<void> _openCompanySettings() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (context) =>
+            CompanySettingsPage(repository: widget.ownCompanyRepository),
+      ),
+    );
+  }
+
   Widget _field(String label, TextEditingController c) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -156,6 +169,12 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
       appBar: AppBar(
         title: const Text('Profil'),
         actions: [
+          if (!_loading)
+            TextButton.icon(
+              onPressed: _openCompanySettings,
+              icon: const Icon(Icons.apartment_rounded),
+              label: const Text('PDF Firma Bilgileri'),
+            ),
           if (!_loading)
             TextButton(
               onPressed: _saving ? null : _save,

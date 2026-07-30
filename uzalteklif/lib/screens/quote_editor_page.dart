@@ -31,6 +31,8 @@ class QuoteEditorPage extends StatefulWidget {
     required this.availableProducts,
     this.quoteToRevise,
     this.quoteToCopy,
+    this.initialProductQuantities = const {},
+    this.initialTitle = '',
     UserProfileRepository? userProfileRepository,
     CariRepository? cariRepository,
     OwnCompanyRepository? ownCompanyRepository,
@@ -50,6 +52,8 @@ class QuoteEditorPage extends StatefulWidget {
   final QuoteRepository quoteRepository;
   final List<MarketRate> initialRates;
   final List<Product> availableProducts;
+  final Map<String, int> initialProductQuantities;
+  final String initialTitle;
 
   /// Ayni teklifin revizyonu; kod tabani korunur, Rev numarasi artar.
   final Quote? quoteToRevise;
@@ -149,6 +153,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       if (copySource != null) {
         _resetCopiedQuoteIdentityAndCustomer();
       }
+    } else {
+      _titleController.text = widget.initialTitle.trim();
+      _loadInitialProducts();
     }
 
     if (!_displayUnits.any((u) => u.code == _selectedDisplayUnit)) {
@@ -159,6 +166,37 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _bootstrapEditorContext(),
     );
+  }
+
+  void _loadInitialProducts() {
+    if (widget.initialProductQuantities.isEmpty) return;
+    final productsById = {
+      for (final product in widget.availableProducts) product.id: product,
+    };
+    for (final entry in widget.initialProductQuantities.entries) {
+      if (entry.value <= 0) continue;
+      final product = productsById[entry.key];
+      if (product == null) continue;
+      final defaultUnitPrice = product.priceInTl(_rateLookup);
+      _items.add(
+        _LineDraft(
+          productId: product.id,
+          productCode: product.code.trim(),
+          priceCurrencyCode: _selectedDisplayUnit,
+          description: product.name.trim().isEmpty
+              ? '${product.brand} ${product.model}'.trim()
+              : product.name.trim(),
+          unit: product.unit,
+          quantity: entry.value.toString(),
+          unitPriceTl: _formatUnitPriceForEditableInput(
+            defaultUnitPrice,
+            _selectedDisplayUnit,
+          ),
+          discount: '0',
+          sectionId: '',
+        ),
+      );
+    }
   }
 
   Future<void> _bootstrapEditorContext() async {

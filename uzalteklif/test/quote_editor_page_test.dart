@@ -89,6 +89,54 @@ void main() {
     expect(find.text('Ozel kalem'), findsOneWidget);
   });
 
+  testWidgets('discovery products open as quote lines with total quantities', (
+    WidgetTester tester,
+  ) async {
+    final product = Product(
+      id: 'sensor-1',
+      code: 'SNS-100',
+      name: 'Sıcaklık Sensörü',
+      category: 'Sensörler',
+      brand: 'Honeywell',
+      model: 'T100',
+      unit: 'adet',
+      currencyCode: 'TL',
+      salePrice: 1250,
+      stockQuantity: 20,
+      minimumStock: 2,
+      vatRate: 20,
+      leadTime: '',
+      description: '',
+      technicalSummary: '',
+      isActive: true,
+      updatedAt: DateTime(2026, 7, 30),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: QuoteEditorPage(
+          quoteRepository: QuoteRepository(),
+          initialRates: const [],
+          availableProducts: [product],
+          initialProductQuantities: const {'sensor-1': 8},
+          initialTitle: 'Kazan Dairesi Otomasyonu',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('quote-line-sensor-1')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('quote-line-sensor-1')),
+        matching: find.widgetWithText(TextFormField, '8'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Kazan Dairesi Otomasyonu'), findsOneWidget);
+  });
+
   testWidgets('custom line prices open in display currency when revising', (
     WidgetTester tester,
   ) async {

@@ -41,9 +41,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Liste (0)'), findsOneWidget);
-    expect(find.text('Satış Panosu'), findsOneWidget);
+    expect(find.text('Pano'), findsOneWidget);
 
-    await tester.tap(find.text('Satış Panosu'));
+    await tester.tap(find.text('Pano'));
     await tester.pumpAndSettle();
 
     expect(find.text('Taslak'), findsOneWidget);

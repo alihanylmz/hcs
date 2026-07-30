@@ -181,7 +181,7 @@ class _CarilerPageState extends State<CarilerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cari Kartları'),
+        title: const Text('Cari 360'),
         actions: [
           IconButton(
             tooltip: 'Yenile',
@@ -365,7 +365,7 @@ class _CariSidePanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Cari Özeti',
+              'Cari 360 Özeti',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 color: const Color(0xFF17304C),
                 fontWeight: FontWeight.w900,
@@ -378,7 +378,7 @@ class _CariSidePanel extends StatelessWidget {
             _CariMetric(label: 'Vergi bilgisi', value: '$withTax'),
             const Spacer(),
             Text(
-              'Cari kartı; firma, yetkili, vergi ve adres bilgilerinin tekliflere düzenli aktarılması için ana kayıttır.',
+              'Cari 360; firma bilgileri, iletişim, açık fırsatlar ve teklif geçmişinin tek merkezidir.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: const Color(0xFF5B6F7F),
                 fontWeight: FontWeight.w700,

@@ -14,6 +14,7 @@ import '../services/product_repository.dart';
 import '../services/quote_repository.dart';
 import '../services/user_profile_repository.dart';
 import '../widgets/workspace_background.dart';
+import 'quote_editor_page.dart';
 import 'quote_review_page.dart';
 
 const _kInk = Color(0xFF17304C);
@@ -96,6 +97,24 @@ class _CariDetailPageState extends State<CariDetailPage> {
           ownCompanyRepository: widget.ownCompanyRepository,
           priceAdjustmentRuleRepository: widget.priceAdjustmentRuleRepository,
           isManager: widget.isManager,
+        ),
+      ),
+    );
+    await _reload();
+  }
+
+  Future<void> _openNewQuote() async {
+    await Navigator.of(context).push<Quote>(
+      MaterialPageRoute(
+        builder: (context) => QuoteEditorPage(
+          quoteRepository: widget.quoteRepository,
+          initialRates: _rates,
+          availableProducts: _products,
+          initialCariId: widget.cari.id,
+          userProfileRepository: widget.userProfileRepository,
+          cariRepository: widget.cariRepository,
+          ownCompanyRepository: widget.ownCompanyRepository,
+          priceAdjustmentRuleRepository: widget.priceAdjustmentRuleRepository,
         ),
       ),
     );
@@ -188,6 +207,10 @@ class _CariDetailPageState extends State<CariDetailPage> {
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    _buildCari360Header(context),
+                    const SizedBox(height: 12),
+                    _buildCariMetrics(context),
+                    const SizedBox(height: 12),
                     Card(
                       elevation: 0,
                       shape: RoundedRectangleBorder(
@@ -200,7 +223,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Firma ve iletişim',
+                              'Firma ve iletişim bilgileri',
                               style: Theme.of(context).textTheme.titleSmall
                                   ?.copyWith(
                                     fontWeight: FontWeight.w900,
@@ -248,7 +271,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
                     Row(
                       children: [
                         Text(
-                          'Teklif geçmişi',
+                          'Satış ve teklif geçmişi',
                           style: Theme.of(context).textTheme.titleSmall
                               ?.copyWith(
                                 fontWeight: FontWeight.w900,
@@ -297,7 +320,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
                           },
                         ),
                         ChoiceChip(
-                          label: const Text('Onaylananlar'),
+                          label: const Text('Müşteriye gönderilen'),
                           selected: _filter == _CariQuoteFilter.approved,
                           onSelected: (_) {
                             setState(() => _filter = _CariQuoteFilter.approved);
@@ -389,6 +412,180 @@ class _CariDetailPageState extends State<CariDetailPage> {
     );
   }
 
+  Widget _buildCari360Header(BuildContext context) {
+    final c = widget.cari;
+    final companyName = c.companyName.trim().isEmpty
+        ? 'İsimsiz firma'
+        : c.companyName.trim();
+    final initials = companyName
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .take(2)
+        .map((part) => part[0].toUpperCase())
+        .join();
+
+    return Card(
+      elevation: 0,
+      color: const Color(0xFF17304C),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFF58B69A),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                initials.isEmpty ? 'C' : initials,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    companyName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    [
+                      if (c.contactName.trim().isNotEmpty) c.contactName.trim(),
+                      if (c.phone.trim().isNotEmpty) c.phone.trim(),
+                      'Cari 360',
+                    ].join('  •  '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.76),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton.icon(
+              onPressed: _openNewQuote,
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF58B69A),
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Yeni teklif'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCariMetrics(BuildContext context) {
+    final open = _quotes
+        .where(
+          (quote) =>
+              quote.status == QuoteStatus.draft ||
+              quote.status == QuoteStatus.pending ||
+              quote.status == QuoteStatus.approved,
+        )
+        .toList(growable: false);
+    final sent = _quotes
+        .where((quote) => quote.status == QuoteStatus.approved)
+        .length;
+    final won = _quotes
+        .where((quote) => quote.status == QuoteStatus.accepted)
+        .toList(growable: false);
+    final lost = _quotes
+        .where(
+          (quote) =>
+              quote.status == QuoteStatus.rejected ||
+              quote.status == QuoteStatus.cancelled,
+        )
+        .length;
+    final openTotal = open.fold<double>(
+      0,
+      (sum, quote) => sum + quote.totalFor('TL'),
+    );
+    final wonTotal = won.fold<double>(
+      0,
+      (sum, quote) => sum + (quote.acceptedTotalTl ?? quote.totalFor('TL')),
+    );
+    final money = NumberFormat.compactCurrency(
+      locale: 'tr_TR',
+      symbol: '₺',
+      decimalDigits: 0,
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final itemWidth = constraints.maxWidth >= 900
+            ? (constraints.maxWidth - 40) / 5
+            : constraints.maxWidth >= 560
+            ? (constraints.maxWidth - 10) / 2
+            : constraints.maxWidth;
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _Cari360Metric(
+              width: itemWidth,
+              label: 'Toplam teklif',
+              value: '${_quotes.length}',
+              icon: Icons.description_outlined,
+              color: const Color(0xFF356FA5),
+            ),
+            _Cari360Metric(
+              width: itemWidth,
+              label: 'Açık fırsat',
+              value: '${open.length} · ${money.format(openTotal)}',
+              icon: Icons.track_changes_rounded,
+              color: const Color(0xFF8B5CC7),
+            ),
+            _Cari360Metric(
+              width: itemWidth,
+              label: 'Müşteriye gönderilen',
+              value: '$sent',
+              icon: Icons.send_rounded,
+              color: const Color(0xFF2B82C9),
+            ),
+            _Cari360Metric(
+              width: itemWidth,
+              label: 'Kazanılan',
+              value: '${won.length} · ${money.format(wonTotal)}',
+              icon: Icons.emoji_events_rounded,
+              color: const Color(0xFF29956F),
+            ),
+            _Cari360Metric(
+              width: itemWidth,
+              label: 'Kaybedilen / iptal',
+              value: '$lost',
+              icon: Icons.trending_down_rounded,
+              color: const Color(0xFFC45C54),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _cariRow(BuildContext context, String label, String value) {
     final v = value.trim();
     if (v.isEmpty) return const SizedBox.shrink();
@@ -418,6 +615,81 @@ class _CariDetailPageState extends State<CariDetailPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _Cari360Metric extends StatelessWidget {
+  const _Cari360Metric({
+    required this.width,
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  final double width;
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: Container(
+        height: 76,
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.24)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 19, color: color),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _kSlate,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _kInk,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

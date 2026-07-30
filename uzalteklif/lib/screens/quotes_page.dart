@@ -45,7 +45,7 @@ class QuotesPage extends StatefulWidget {
   State<QuotesPage> createState() => _QuotesPageState();
 }
 
-class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
+class _QuotesPageState extends State<QuotesPage> {
   static const _tabs = [
     _TabDefinition(
       label: 'Taslak',
@@ -80,8 +80,6 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
   ];
 
   final _stampService = const CompanyStampService();
-  late final TabController _scopeTabController;
-
   List<Quote> _quotes = const [];
   List<Product> _products = const [];
   List<MarketRate> _rates = const [];
@@ -96,6 +94,7 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
   bool _showQuoteDate = true;
   bool _showQuoteStatus = true;
   bool _showQuoteAmount = true;
+  _QuoteWorkspaceView _workspaceView = _QuoteWorkspaceView.list;
 
   List<Quote> get _filteredQuotes {
     final query = _quoteQuery.trim().toLowerCase();
@@ -154,19 +153,7 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _scopeTabController = TabController(length: 2, vsync: this);
-    _scopeTabController.addListener(() {
-      if (!_scopeTabController.indexIsChanging && mounted) {
-        setState(() {});
-      }
-    });
     _reload();
-  }
-
-  @override
-  void dispose() {
-    _scopeTabController.dispose();
-    super.dispose();
   }
 
   Future<void> _reload() async {
@@ -290,19 +277,6 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
           ),
           const SizedBox(width: 8),
         ],
-        bottom: TabBar(
-          controller: _scopeTabController,
-          tabs: [
-            Tab(
-              icon: const Icon(Icons.table_rows_rounded, size: 18),
-              text: 'Liste (${_filteredQuotes.length})',
-            ),
-            const Tab(
-              icon: Icon(Icons.view_kanban_rounded, size: 18),
-              text: 'Satış Panosu',
-            ),
-          ],
-        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isLoading ? null : _openNewQuote,
@@ -320,16 +294,12 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
                       child: _buildQuoteControlBar(),
                     ),
                     Expanded(
-                      child: TabBarView(
-                        controller: _scopeTabController,
-                        children: [
-                          _buildQuoteWorkspace(
-                            quotes: _filteredQuotes,
-                            emptyText: 'Henüz teklif bulunmuyor.',
-                          ),
-                          _buildKanban(),
-                        ],
-                      ),
+                      child: _workspaceView == _QuoteWorkspaceView.list
+                          ? _buildQuoteWorkspace(
+                              quotes: _filteredQuotes,
+                              emptyText: 'Henüz teklif bulunmuyor.',
+                            )
+                          : _buildKanban(),
                     ),
                   ],
                 ),
@@ -409,27 +379,48 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
                     setState(() => _quoteSort = value ?? 'date_desc'),
               ),
             ),
-            PopupMenuButton<String>(
-              tooltip: 'Kolonlar',
-              icon: const Icon(Icons.view_column_rounded),
-              itemBuilder: (context) => [
-                _columnMenuItem('customer', 'Cari', _showQuoteCustomer),
-                _columnMenuItem('title', 'Başlık', _showQuoteTitle),
-                _columnMenuItem('date', 'Tarih', _showQuoteDate),
-                _columnMenuItem('status', 'Durum', _showQuoteStatus),
-                _columnMenuItem('amount', 'Tutar', _showQuoteAmount),
+            if (_workspaceView == _QuoteWorkspaceView.list)
+              PopupMenuButton<String>(
+                tooltip: 'Kolonlar',
+                icon: const Icon(Icons.view_column_rounded),
+                itemBuilder: (context) => [
+                  _columnMenuItem('customer', 'Cari', _showQuoteCustomer),
+                  _columnMenuItem('title', 'Başlık', _showQuoteTitle),
+                  _columnMenuItem('date', 'Tarih', _showQuoteDate),
+                  _columnMenuItem('status', 'Durum', _showQuoteStatus),
+                  _columnMenuItem('amount', 'Tutar', _showQuoteAmount),
+                ],
+                onSelected: (value) {
+                  setState(() {
+                    if (value == 'customer') {
+                      _showQuoteCustomer = !_showQuoteCustomer;
+                    }
+                    if (value == 'title') _showQuoteTitle = !_showQuoteTitle;
+                    if (value == 'date') _showQuoteDate = !_showQuoteDate;
+                    if (value == 'status') {
+                      _showQuoteStatus = !_showQuoteStatus;
+                    }
+                    if (value == 'amount') _showQuoteAmount = !_showQuoteAmount;
+                  });
+                },
+              ),
+            SegmentedButton<_QuoteWorkspaceView>(
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(
+                  value: _QuoteWorkspaceView.list,
+                  icon: const Icon(Icons.table_rows_rounded, size: 17),
+                  label: Text('Liste (${_filteredQuotes.length})'),
+                ),
+                const ButtonSegment(
+                  value: _QuoteWorkspaceView.board,
+                  icon: Icon(Icons.view_kanban_outlined, size: 17),
+                  label: Text('Pano'),
+                ),
               ],
-              onSelected: (value) {
-                setState(() {
-                  if (value == 'customer') {
-                    _showQuoteCustomer = !_showQuoteCustomer;
-                  }
-                  if (value == 'title') _showQuoteTitle = !_showQuoteTitle;
-                  if (value == 'date') _showQuoteDate = !_showQuoteDate;
-                  if (value == 'status') _showQuoteStatus = !_showQuoteStatus;
-                  if (value == 'amount') _showQuoteAmount = !_showQuoteAmount;
-                });
-              },
+              selected: {_workspaceView},
+              onSelectionChanged: (selection) =>
+                  setState(() => _workspaceView = selection.first),
             ),
           ],
         ),
@@ -526,18 +517,27 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
     final quotes = _filteredQuotes;
     return LayoutBuilder(
       builder: (context, constraints) {
+        const gap = 8.0;
+        final availableWidth = constraints.maxWidth - 32;
+        final fittedWidth =
+            (availableWidth - gap * (_tabs.length - 1)) / _tabs.length;
+        final columnWidth = fittedWidth >= 220 ? fittedWidth : 248.0;
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SizedBox(
-              height: constraints.maxHeight - 28,
+              height: constraints.maxHeight - 26,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   for (var index = 0; index < _tabs.length; index++) ...[
-                    if (index > 0) const SizedBox(width: 12),
-                    _buildKanbanColumn(_tabs[index], quotes),
+                    if (index > 0) const SizedBox(width: gap),
+                    _buildKanbanColumn(
+                      _tabs[index],
+                      quotes,
+                      width: columnWidth,
+                    ),
                   ],
                 ],
               ),
@@ -548,12 +548,25 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildKanbanColumn(_TabDefinition tab, List<Quote> quotes) {
+  Widget _buildKanbanColumn(
+    _TabDefinition tab,
+    List<Quote> quotes, {
+    required double width,
+  }) {
     final items = quotes
         .where((quote) => tab.statuses.contains(quote.status))
         .toList(growable: false);
     final targetStatus = tab.statuses.first;
     final style = _QuoteSummaryCard._statusStyleFor(targetStatus);
+    final totalTl = items.fold<double>(
+      0,
+      (sum, quote) => sum + quote.totalFor('TL'),
+    );
+    final totalFormatter = NumberFormat.compactCurrency(
+      locale: 'tr_TR',
+      symbol: '₺',
+      decimalDigits: 0,
+    );
 
     return DragTarget<Quote>(
       onWillAcceptWithDetails: (details) => details.data.status != targetStatus,
@@ -563,13 +576,16 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
         final highlighted = candidates.isNotEmpty;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          width: 294,
-          padding: const EdgeInsets.all(10),
+          width: width,
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
           decoration: BoxDecoration(
             color: highlighted
                 ? style.bg.withValues(alpha: 0.92)
-                : const Color(0xFFF1F4F8).withValues(alpha: 0.88),
-            borderRadius: BorderRadius.circular(16),
+                : Color.alphaBlend(
+                    style.bg.withValues(alpha: 0.42),
+                    const Color(0xFFF7F9FB),
+                  ),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: highlighted ? style.fg : const Color(0xFFD7DEE6),
               width: highlighted ? 2 : 1,
@@ -578,44 +594,69 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Container(
+                height: 4,
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                decoration: BoxDecoration(
+                  color: style.fg,
+                  borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(4),
+                  ),
+                ),
+              ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
+                padding: const EdgeInsets.fromLTRB(2, 8, 2, 8),
                 child: Row(
                   children: [
                     Container(
-                      width: 30,
-                      height: 30,
+                      width: 28,
+                      height: 28,
                       decoration: BoxDecoration(
-                        color: style.bg,
-                        borderRadius: BorderRadius.circular(9),
+                        color: Colors.white.withValues(alpha: 0.78),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(tab.icon, size: 17, color: style.fg),
+                      child: Icon(tab.icon, size: 16, color: style.fg),
                     ),
-                    const SizedBox(width: 9),
+                    const SizedBox(width: 7),
                     Expanded(
-                      child: Text(
-                        tab.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF17304C),
-                          fontWeight: FontWeight.w900,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tab.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF17304C),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            totalFormatter.format(totalTl),
+                            style: TextStyle(
+                              color: style.fg,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
+                        horizontal: 7,
+                        vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: style.fg,
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
                         '${items.length}',
                         style: const TextStyle(
-                          color: Color(0xFF17304C),
+                          color: Colors.white,
+                          fontSize: 11,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
@@ -640,18 +681,19 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
                       )
                     : ListView.separated(
                         itemCount: items.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        separatorBuilder: (_, _) => const SizedBox(height: 6),
                         itemBuilder: (context, itemIndex) {
                           final quote = items[itemIndex];
                           final card = _KanbanQuoteCard(
                             quote: quote,
+                            accentColor: style.fg,
                             onTap: () => _openQuote(quote),
                           );
                           return Draggable<Quote>(
                             data: quote,
                             feedback: Material(
                               color: Colors.transparent,
-                              child: SizedBox(width: 274, child: card),
+                              child: SizedBox(width: width - 16, child: card),
                             ),
                             childWhenDragging: Opacity(
                               opacity: 0.35,
@@ -815,9 +857,14 @@ class _QuotesPageState extends State<QuotesPage> with TickerProviderStateMixin {
 }
 
 class _KanbanQuoteCard extends StatelessWidget {
-  const _KanbanQuoteCard({required this.quote, required this.onTap});
+  const _KanbanQuoteCard({
+    required this.quote,
+    required this.accentColor,
+    required this.onTap,
+  });
 
   final Quote quote;
+  final Color accentColor;
   final VoidCallback onTap;
 
   @override
@@ -837,20 +884,25 @@ class _KanbanQuoteCard extends StatelessWidget {
 
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(13),
+      borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(10),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(10, 9, 9, 9),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(13),
-            border: Border.all(color: const Color(0xFFD7DEE6)),
+            borderRadius: BorderRadius.circular(10),
+            border: Border(
+              left: BorderSide(color: accentColor, width: 4),
+              top: const BorderSide(color: Color(0xFFE2E7EC)),
+              right: const BorderSide(color: Color(0xFFE2E7EC)),
+              bottom: const BorderSide(color: Color(0xFFE2E7EC)),
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
+                color: accentColor.withValues(alpha: 0.08),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
@@ -878,20 +930,21 @@ class _KanbanQuoteCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 7),
+              const SizedBox(height: 5),
               Text(
                 customer.isEmpty ? 'Cari seçilmedi' : customer,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Color(0xFF17304C),
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 2),
               Text(
                 quote.title.trim().isEmpty ? 'Başlıksız teklif' : quote.title,
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Color(0xFF657888),
@@ -899,7 +952,7 @@ class _KanbanQuoteCard extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 7),
               Row(
                 children: [
                   Expanded(
@@ -1234,6 +1287,8 @@ class _TableHeader extends StatelessWidget {
   }
 }
 
+enum _QuoteWorkspaceView { list, board }
+
 class _TabDefinition {
   const _TabDefinition({
     required this.label,
@@ -1528,17 +1583,17 @@ class _QuoteSummaryCard extends StatelessWidget {
   static _StatusStyle _statusStyleFor(QuoteStatus status) {
     switch (status) {
       case QuoteStatus.draft:
-        return const _StatusStyle(bg: Color(0xFFF1F4F8), fg: Color(0xFF5B6F7F));
+        return const _StatusStyle(bg: Color(0xFFE9EEF7), fg: Color(0xFF506783));
       case QuoteStatus.pending:
-        return const _StatusStyle(bg: Color(0xFFFFF4E0), fg: Color(0xFF9D5C1D));
+        return const _StatusStyle(bg: Color(0xFFFFEBC7), fg: Color(0xFFB56A12));
       case QuoteStatus.approved:
-        return const _StatusStyle(bg: Color(0xFFE5F1EC), fg: Color(0xFF2C6957));
+        return const _StatusStyle(bg: Color(0xFFDDEEFF), fg: Color(0xFF2878B8));
       case QuoteStatus.accepted:
-        return const _StatusStyle(bg: Color(0xFFFFF4E0), fg: Color(0xFF9D5C1D));
+        return const _StatusStyle(bg: Color(0xFFDDF4E9), fg: Color(0xFF24845F));
       case QuoteStatus.rejected:
-        return const _StatusStyle(bg: Color(0xFFFBE4E4), fg: Color(0xFF8A2626));
+        return const _StatusStyle(bg: Color(0xFFFBE1E3), fg: Color(0xFFC34D59));
       case QuoteStatus.cancelled:
-        return const _StatusStyle(bg: Color(0xFFF3EFEA), fg: Color(0xFF705C49));
+        return const _StatusStyle(bg: Color(0xFFEDE5F3), fg: Color(0xFF76538D));
     }
   }
 }

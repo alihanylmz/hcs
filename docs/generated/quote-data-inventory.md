@@ -1,6 +1,6 @@
 # Teklif Veri Taşıma Envanteri
 
-Son kontrol: `2026-07-30 23:38 UTC`
+Son kontrol: `2026-07-30 23:48 UTC`
 
 ```text
 TEKLİF VERİ TAŞIMA ENVANTERİ
@@ -10,7 +10,7 @@ TABLO                               KAYNAK     HEDEF  DURUM
 products                              2576      2576  ÇAKIŞMA KONTROLÜ GEREKLİ
 customer_accounts                        4         4  ÇAKIŞMA KONTROLÜ GEREKLİ
 quotes                                  53        53  ÇAKIŞMA KONTROLÜ GEREKLİ
-quote_line_items                       211       432  ÇAKIŞMA KONTROLÜ GEREKLİ
+quote_line_items                       211       211  ÇAKIŞMA KONTROLÜ GEREKLİ
 quote_revisions                         53        53  ÇAKIŞMA KONTROLÜ GEREKLİ
 discovery_projects                     YOK         0  KAYNAKTA YOK
 discovery_device_templates             YOK         0  KAYNAKTA YOK
@@ -24,6 +24,7 @@ storage: product-images                  3         3  KONTROL EDİLDİ
 
 Kaynak Auth kullanıcı sayısı : 2
 Hedef Auth kullanıcı sayısı  : 13
+Aktif Teklif erişimi         : 7
 Kaynak toplam tablo kaydı    : 7483
 Hedefte hazır Teklif tablosu : 13/13
 Hedefte dolu Teklif tablosu  : 8

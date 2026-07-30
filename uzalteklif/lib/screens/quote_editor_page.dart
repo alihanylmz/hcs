@@ -141,10 +141,6 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     final copySource = widget.quoteToCopy;
     final source = revisionSource ?? copySource;
     _draftTimestamp = revisionSource?.createdAt ?? DateTime.now();
-    _preparedByNameController.text = 'Alihan Uzal';
-    _preparedByTitleController.text = 'Satis Muhendisi';
-    _preparedByPhoneController.text = CompanyProfile.phone;
-    _preparedByEmailController.text = CompanyProfile.email;
 
     if (source != null) {
       final repairedSource = _repairLikelyDoubleConvertedQuote(source);
@@ -166,21 +162,38 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   }
 
   Future<void> _bootstrapEditorContext() async {
-    final cariler = await widget.cariRepository.fetchAll();
-    final companies = await widget.ownCompanyRepository.fetchAll();
-    final prof = await widget.userProfileRepository.fetchMine();
+    List<CariAccount> cariler = const [];
+    List<OwnCompany> companies = const [];
+    UserQuoteProfile? prof;
+    try {
+      cariler = await widget.cariRepository.fetchAll();
+    } catch (_) {}
+    try {
+      companies = await widget.ownCompanyRepository.fetchAll();
+    } catch (_) {}
+    try {
+      prof = await widget.userProfileRepository.fetchMine();
+    } catch (_) {}
     if (!mounted) return;
     setState(() {
       _cariler = cariler;
       _ownCompanies = companies.isEmpty ? [OwnCompany.fallback()] : companies;
       _selectedOwnCompanyId = _resolveOwnCompanySelection(companies);
       _issuerProfile = prof;
+      _applyCurrentIssuerIdentity(prof);
+      if (prof != null && widget.quoteToRevise == null) {
+        _applyIssuerDocumentDefaults(prof);
+      }
     });
-    if (widget.quoteToRevise == null &&
-        widget.quoteToCopy == null &&
-        prof != null) {
-      _applyIssuerDefaults(prof);
-      if (mounted) setState(() {});
+    if (prof == null && _hasAuthenticatedUser()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Kullanıcı profilindeki hazırlayan bilgileri alınamadı. '
+            'PDF oluşturmadan önce Profil alanını kontrol edin.',
+          ),
+        ),
+      );
     }
     await _restoreReasonableRevisionIfCurrentLooksInflated();
   }
@@ -208,17 +221,73 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     );
   }
 
-  void _applyIssuerDefaults(UserQuoteProfile p) {
+  void _applyCurrentIssuerIdentity(UserQuoteProfile? profile) {
+    _preparedByNameController.clear();
+    _preparedByTitleController.clear();
+    _preparedByPhoneController.clear();
+    _preparedByEmailController.clear();
+
+    if (profile != null) {
+      _preparedByNameController.text = profile.preparedByName.trim();
+      _preparedByTitleController.text = profile.preparedByTitle.trim();
+      final phone = profile.preparedByPhone.trim();
+      final email = profile.preparedByEmail.trim();
+      _preparedByPhoneController.text = phone == CompanyProfile.phone
+          ? ''
+          : phone;
+      _preparedByEmailController.text = email == CompanyProfile.email
+          ? ''
+          : email;
+    }
+
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+      final metadata = user.userMetadata ?? const <String, dynamic>{};
+      String firstMetadataValue(List<String> keys) {
+        for (final key in keys) {
+          final value = metadata[key]?.toString().trim() ?? '';
+          if (value.isNotEmpty) return value;
+        }
+        return '';
+      }
+
+      if (_preparedByNameController.text.trim().isEmpty) {
+        _preparedByNameController.text = firstMetadataValue([
+          'full_name',
+          'name',
+          'display_name',
+        ]);
+      }
+      if (_preparedByPhoneController.text.trim().isEmpty) {
+        final authPhone = user.phone?.trim() ?? '';
+        _preparedByPhoneController.text = authPhone.isNotEmpty
+            ? authPhone
+            : firstMetadataValue(['phone', 'phone_number']);
+      }
+      if (_preparedByEmailController.text.trim().isEmpty) {
+        _preparedByEmailController.text = user.email?.trim() ?? '';
+      }
+    } catch (_) {
+      // Test/yerel ortamda Supabase başlatılmamış olabilir.
+    }
+  }
+
+  bool _hasAuthenticatedUser() {
+    try {
+      return Supabase.instance.client.auth.currentUser != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _applyIssuerDocumentDefaults(UserQuoteProfile p) {
     void use(String raw, TextEditingController c) {
       final v = raw.trim();
       if (v.isEmpty) return;
       c.text = v;
     }
 
-    use(p.preparedByName, _preparedByNameController);
-    use(p.preparedByTitle, _preparedByTitleController);
-    use(p.preparedByPhone, _preparedByPhoneController);
-    use(p.preparedByEmail, _preparedByEmailController);
     use(p.defaultValidityText, _validityController);
     use(p.defaultPaymentTerms, _paymentTermsController);
     use(p.defaultDeliveryTerms, _deliveryTermsController);
@@ -487,7 +556,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     final currentTotal = current.totalFor(current.displayUnit);
     if (currentTotal <= 0) return;
 
-    final client = Supabase.instance.client;
+    late final SupabaseClient client;
+    try {
+      client = Supabase.instance.client;
+    } catch (_) {
+      return;
+    }
     if (client.auth.currentSession == null) return;
 
     try {

@@ -62,7 +62,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
 
     setOr((p) => p.preparedByName, _prepName, '');
     setOr((p) => p.preparedByTitle, _prepTitle, '');
-    setOr((p) => p.preparedByPhone, _prepPhone, CompanyProfile.phone);
+    setOr((p) => p.preparedByPhone, _prepPhone, '');
     setOr(
       (p) => p.preparedByEmail,
       _prepEmail,

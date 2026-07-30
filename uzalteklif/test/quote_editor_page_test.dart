@@ -5,8 +5,10 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:uzalteklif/models/market_rate.dart';
 import 'package:uzalteklif/models/product.dart';
 import 'package:uzalteklif/models/quote.dart';
+import 'package:uzalteklif/models/user_quote_profile.dart';
 import 'package:uzalteklif/screens/quote_editor_page.dart';
 import 'package:uzalteklif/services/quote_repository.dart';
+import 'package:uzalteklif/services/user_profile_repository.dart';
 import 'package:uzalteklif/theme/app_theme.dart';
 
 void main() {
@@ -155,4 +157,107 @@ void main() {
 
     expect(find.widgetWithText(TextFormField, '100.00'), findsOneWidget);
   });
+
+  testWidgets('copied quote uses current user profile in prepared-by fields', (
+    WidgetTester tester,
+  ) async {
+    final source = Quote(
+      id: 'quote-copy-source',
+      code: 'UZ-260730-100000',
+      customerName: 'Eski müşteri',
+      customerCompany: 'Eski firma',
+      title: 'Kopya profil testi',
+      note: '',
+      createdAt: DateTime(2026, 7, 30, 10),
+      displayUnit: 'TL',
+      marketSnapshot: const [],
+      items: const [],
+      documentProfile: const QuoteDocumentProfile(
+        companyName: 'UZAL TEKNİK',
+        companyTagline: '',
+        companyPhone: '',
+        companyEmail: '',
+        companyWebsite: '',
+        companyAddress: '',
+        preparedByName: 'Eski Kullanıcı',
+        preparedByTitle: 'Eski Unvan',
+        preparedByPhone: '+90 500 000 00 00',
+        preparedByEmail: 'eski@example.com',
+        customerContactTitle: '',
+        customerPhone: '',
+        customerEmail: '',
+        validityText: '15 gün',
+        paymentTerms: 'Peşin',
+        deliveryTerms: 'Termin teyidi ile',
+      ),
+    );
+    final profile = _userProfile(
+      name: 'Güncel Kullanıcı',
+      title: 'Satış Mühendisi',
+      phone: '+90 555 111 22 33',
+      email: 'guncel@example.com',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: QuoteEditorPage(
+          quoteRepository: QuoteRepository(),
+          initialRates: const [],
+          availableProducts: const [],
+          quoteToCopy: source,
+          userProfileRepository: _FakeUserProfileRepository(profile),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bilgileri Düzenle'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Güncel Kullanıcı'), findsOneWidget);
+    expect(find.text('+90 555 111 22 33'), findsOneWidget);
+    expect(find.text('+90 500 000 00 00', skipOffstage: false), findsNothing);
+  });
+}
+
+class _FakeUserProfileRepository extends UserProfileRepository {
+  _FakeUserProfileRepository(this.profile);
+
+  final UserQuoteProfile profile;
+
+  @override
+  Future<UserQuoteProfile?> fetchMine() async => profile;
+}
+
+UserQuoteProfile _userProfile({
+  required String name,
+  required String title,
+  required String phone,
+  required String email,
+}) {
+  return UserQuoteProfile(
+    userId: 'current-user',
+    preparedByName: name,
+    preparedByTitle: title,
+    preparedByPhone: phone,
+    preparedByEmail: email,
+    companyName: '',
+    companyTagline: '',
+    companyPhone: '',
+    companyEmail: '',
+    companyWebsite: '',
+    companyAddress: '',
+    companyTaxOffice: '',
+    companyTaxNumber: '',
+    companyMersis: '',
+    bankName: '',
+    bankBranch: '',
+    bankAccountName: '',
+    bankIban: '',
+    bankSwift: '',
+    defaultValidityText: '15 gün',
+    defaultPaymentTerms: 'Peşin',
+    defaultDeliveryTerms: 'Termin teyidi ile',
+    defaultVatRate: 20,
+  );
 }

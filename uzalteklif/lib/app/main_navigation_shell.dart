@@ -51,68 +51,122 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: _index,
-            onDestinationSelected: (i) {
-              setState(() => _index = i);
-              if (i == 1 || i == 2 || i == 3 || i == 4) {
-                _refreshRole();
-              }
-            },
-            labelType: NavigationRailLabelType.all,
-            leading: Column(
-              children: [
-                const SizedBox(height: 8),
-                if (widget.onSignOut != null)
-                  IconButton(
-                    tooltip: 'Cikis',
-                    onPressed: widget.onSignOut,
-                    icon: const Icon(Icons.logout_rounded),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 840;
+        final page = _pageForIndex(_index);
+        if (compact) {
+          return Scaffold(
+            body: page,
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: _index,
+              labelBehavior: constraints.maxWidth < 560
+                  ? NavigationDestinationLabelBehavior.onlyShowSelected
+                  : NavigationDestinationLabelBehavior.alwaysShow,
+              onDestinationSelected: _selectDestination,
+              destinations: [
+                const NavigationDestination(
+                  icon: Icon(Icons.inventory_2_outlined),
+                  selectedIcon: Icon(Icons.inventory_2_rounded),
+                  label: 'Stok',
+                ),
+                const NavigationDestination(
+                  icon: Icon(Icons.request_quote_outlined),
+                  selectedIcon: Icon(Icons.request_quote_rounded),
+                  label: 'Teklifler',
+                ),
+                const NavigationDestination(
+                  icon: Icon(Icons.business_outlined),
+                  selectedIcon: Icon(Icons.business_rounded),
+                  label: 'Cariler',
+                ),
+                const NavigationDestination(
+                  icon: Icon(Icons.account_tree_outlined),
+                  selectedIcon: Icon(Icons.account_tree_rounded),
+                  label: 'Keşif',
+                ),
+                const NavigationDestination(
+                  icon: Icon(Icons.person_outline_rounded),
+                  selectedIcon: Icon(Icons.person_rounded),
+                  label: 'Profil',
+                ),
+                if (_isManager)
+                  const NavigationDestination(
+                    icon: Icon(Icons.admin_panel_settings_outlined),
+                    selectedIcon: Icon(Icons.admin_panel_settings_rounded),
+                    label: 'Yönetim',
                   ),
               ],
             ),
-            destinations: [
-              const NavigationRailDestination(
-                icon: Icon(Icons.inventory_2_outlined),
-                selectedIcon: Icon(Icons.inventory_2_rounded),
-                label: Text('Stok'),
-              ),
-              const NavigationRailDestination(
-                icon: Icon(Icons.request_quote_outlined),
-                selectedIcon: Icon(Icons.request_quote_rounded),
-                label: Text('Teklifler'),
-              ),
-              const NavigationRailDestination(
-                icon: Icon(Icons.business_outlined),
-                selectedIcon: Icon(Icons.business_rounded),
-                label: Text('Cariler'),
-              ),
-              const NavigationRailDestination(
-                icon: Icon(Icons.account_tree_outlined),
-                selectedIcon: Icon(Icons.account_tree_rounded),
-                label: Text('Keşif'),
-              ),
-              const NavigationRailDestination(
-                icon: Icon(Icons.person_outline_rounded),
-                selectedIcon: Icon(Icons.person_rounded),
-                label: Text('Profil'),
-              ),
-              if (_isManager)
-                const NavigationRailDestination(
-                  icon: Icon(Icons.admin_panel_settings_outlined),
-                  selectedIcon: Icon(Icons.admin_panel_settings_rounded),
-                  label: Text('Yönetim'),
+          );
+        }
+
+        return Scaffold(
+          body: Row(
+            children: [
+              NavigationRail(
+                selectedIndex: _index,
+                onDestinationSelected: _selectDestination,
+                labelType: NavigationRailLabelType.all,
+                leading: Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    if (widget.onSignOut != null)
+                      IconButton(
+                        tooltip: 'Çıkış',
+                        onPressed: widget.onSignOut,
+                        icon: const Icon(Icons.logout_rounded),
+                      ),
+                  ],
                 ),
+                destinations: [
+                  const NavigationRailDestination(
+                    icon: Icon(Icons.inventory_2_outlined),
+                    selectedIcon: Icon(Icons.inventory_2_rounded),
+                    label: Text('Stok'),
+                  ),
+                  const NavigationRailDestination(
+                    icon: Icon(Icons.request_quote_outlined),
+                    selectedIcon: Icon(Icons.request_quote_rounded),
+                    label: Text('Teklifler'),
+                  ),
+                  const NavigationRailDestination(
+                    icon: Icon(Icons.business_outlined),
+                    selectedIcon: Icon(Icons.business_rounded),
+                    label: Text('Cariler'),
+                  ),
+                  const NavigationRailDestination(
+                    icon: Icon(Icons.account_tree_outlined),
+                    selectedIcon: Icon(Icons.account_tree_rounded),
+                    label: Text('Keşif'),
+                  ),
+                  const NavigationRailDestination(
+                    icon: Icon(Icons.person_outline_rounded),
+                    selectedIcon: Icon(Icons.person_rounded),
+                    label: Text('Profil'),
+                  ),
+                  if (_isManager)
+                    const NavigationRailDestination(
+                      icon: Icon(Icons.admin_panel_settings_outlined),
+                      selectedIcon: Icon(Icons.admin_panel_settings_rounded),
+                      label: Text('Yönetim'),
+                    ),
+                ],
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(child: page),
             ],
           ),
-          const VerticalDivider(width: 1),
-          Expanded(child: _pageForIndex(_index)),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  void _selectDestination(int index) {
+    setState(() => _index = index);
+    if (index == 1 || index == 2 || index == 3 || index == 4) {
+      _refreshRole();
+    }
   }
 
   Widget _pageForIndex(int i) {
@@ -166,6 +220,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           repository: widget.bootstrap.userProfileRepository,
           themePreferenceService: widget.bootstrap.themePreferenceService,
           ownCompanyRepository: widget.bootstrap.ownCompanyRepository,
+          onSignOut: widget.onSignOut,
         );
       case 5:
         if (_isManager) {
@@ -181,12 +236,14 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           repository: widget.bootstrap.userProfileRepository,
           themePreferenceService: widget.bootstrap.themePreferenceService,
           ownCompanyRepository: widget.bootstrap.ownCompanyRepository,
+          onSignOut: widget.onSignOut,
         );
       default:
         return ProfileSettingsPage(
           repository: widget.bootstrap.userProfileRepository,
           themePreferenceService: widget.bootstrap.themePreferenceService,
           ownCompanyRepository: widget.bootstrap.ownCompanyRepository,
+          onSignOut: widget.onSignOut,
         );
     }
   }

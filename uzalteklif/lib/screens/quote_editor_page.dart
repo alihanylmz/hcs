@@ -1753,14 +1753,21 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 1450;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isWide = screenWidth >= 1450;
+    final compact = screenWidth < 700;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Teklif Olustur')),
       body: WorkspaceBackground(
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+            padding: EdgeInsets.fromLTRB(
+              compact ? 8 : 24,
+              compact ? 8 : 12,
+              compact ? 8 : 24,
+              compact ? 12 : 24,
+            ),
             child: Form(
               key: _formKey,
               child: isWide
@@ -1923,7 +1930,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(
+          MediaQuery.sizeOf(context).width < 700 ? 12 : 24,
+        ),
         child: expandList
             ? SingleChildScrollView(primary: false, child: panelColumn)
             : panelColumn,

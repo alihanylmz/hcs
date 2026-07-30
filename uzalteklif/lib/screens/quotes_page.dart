@@ -297,6 +297,7 @@ class _QuotesPageState extends State<QuotesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 700;
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -310,14 +311,15 @@ class _QuotesPageState extends State<QuotesPage> {
                 letterSpacing: 0.2,
               ),
             ),
-            Text(
-              'Aktif süreçler, kapanan teklifler ve resmi PDF çıktıları',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.white.withValues(alpha: 0.88),
-                fontWeight: FontWeight.w600,
-                height: 1.25,
+            if (!compact)
+              Text(
+                'Aktif süreçler, kapanan teklifler ve resmi PDF çıktıları',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.88),
+                  fontWeight: FontWeight.w600,
+                  height: 1.25,
+                ),
               ),
-            ),
           ],
         ),
         actions: [
@@ -341,7 +343,12 @@ class _QuotesPageState extends State<QuotesPage> {
               : Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      padding: EdgeInsets.fromLTRB(
+                        compact ? 8 : 16,
+                        compact ? 8 : 12,
+                        compact ? 8 : 16,
+                        0,
+                      ),
                       child: _buildQuoteControlBar(),
                     ),
                     Expanded(
@@ -1117,6 +1124,21 @@ class _QuoteTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < 760) {
+      return ListView.separated(
+        padding: const EdgeInsets.fromLTRB(10, 12, 10, 96),
+        itemCount: quotes.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final quote = quotes[index];
+          return _QuoteMobileCard(
+            quote: quote,
+            onOpen: () => onOpen(quote),
+            onCopy: () => onCopy(quote),
+          );
+        },
+      );
+    }
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Card(
@@ -1168,6 +1190,142 @@ class _QuoteTable extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuoteMobileCard extends StatelessWidget {
+  const _QuoteMobileCard({
+    required this.quote,
+    required this.onOpen,
+    required this.onCopy,
+  });
+
+  final Quote quote;
+  final VoidCallback onOpen;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = _QuoteSummaryCard._statusStyleFor(quote.status);
+    final customer = quote.customerCompany.trim().isEmpty
+        ? quote.customerName.trim()
+        : quote.customerCompany.trim();
+    final amount = NumberFormat.currency(
+      locale: 'tr_TR',
+      symbol: switch (quote.displayUnit) {
+        'USDTRY' => r'$ ',
+        'EURTRY' => 'EUR ',
+        _ => 'TL ',
+      },
+      decimalDigits: 2,
+    ).format(quote.totalFor(quote.displayUnit));
+
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      quote.code,
+                      style: const TextStyle(
+                        color: Color(0xFF17304C),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: style.bg,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      quote.status.displayLabel,
+                      style: TextStyle(
+                        color: style.fg,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Teklif işlemleri',
+                    onSelected: (value) {
+                      if (value == 'open') onOpen();
+                      if (value == 'copy') onCopy();
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'open', child: Text('Teklifi aç')),
+                      PopupMenuItem(
+                        value: 'copy',
+                        child: Text('Teklifi kopyala'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Text(
+                customer.isEmpty ? 'Cari bilgisi yok' : customer,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF17304C),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                quote.title.trim().isEmpty ? 'Başlıksız teklif' : quote.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF657888),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 9),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      DateFormat(
+                        'dd.MM.yyyy HH:mm',
+                        'tr_TR',
+                      ).format(quote.createdAt),
+                      style: const TextStyle(
+                        color: Color(0xFF738391),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    amount,
+                    style: const TextStyle(
+                      color: Color(0xFF17304C),
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

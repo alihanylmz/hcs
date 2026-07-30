@@ -53,6 +53,34 @@ void main() {
     expect(find.text('Gönderime Hazır'), findsOneWidget);
     expect(find.text('Müşteriye Gönderildi'), findsOneWidget);
   });
+
+  testWidgets('quotes page fits a narrow screen without overflow', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(480, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: QuotesPage(
+          quoteRepository: _FakeQuoteRepository(),
+          productRepository: _FakeProductRepository(),
+          marketRateService: _FakeMarketRateService(),
+          ownCompanyRepository: const OwnCompanyRepository(),
+          priceAdjustmentRuleRepository: const PriceAdjustmentRuleRepository(),
+          userProfileRepository: UserProfileRepository(),
+          cariRepository: CariRepository(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Teklif Takip'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _FakeQuoteRepository extends QuoteRepository {

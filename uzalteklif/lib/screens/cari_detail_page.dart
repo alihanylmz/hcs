@@ -179,6 +179,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
   @override
   Widget build(BuildContext context) {
     final c = _cari;
+    final compact = MediaQuery.sizeOf(context).width < 700;
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -218,7 +219,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
           child: _loading
               ? const Center(child: CircularProgressIndicator())
               : ListView(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(compact ? 10 : 16),
                   children: [
                     _buildCari360Header(context),
                     const SizedBox(height: 12),
@@ -427,6 +428,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
 
   Widget _buildCari360Header(BuildContext context) {
     final c = _cari;
+    final compact = MediaQuery.sizeOf(context).width < 700;
     final companyName = c.companyName.trim().isEmpty
         ? 'İsimsiz firma'
         : c.companyName.trim();
@@ -497,26 +499,47 @@ class _CariDetailPageState extends State<CariDetailPage> {
             ),
             const SizedBox(width: 12),
             if (widget.onEdit != null) ...[
-              OutlinedButton.icon(
-                onPressed: _editCari,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: BorderSide(color: Colors.white.withValues(alpha: 0.58)),
+              if (compact)
+                IconButton.outlined(
+                  tooltip: 'Cariyi düzenle',
+                  onPressed: _editCari,
+                  color: Colors.white,
+                  icon: const Icon(Icons.edit_outlined, size: 19),
+                )
+              else
+                OutlinedButton.icon(
+                  onPressed: _editCari,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.58),
+                    ),
+                  ),
+                  icon: const Icon(Icons.edit_outlined, size: 17),
+                  label: const Text('Cariyi düzenle'),
                 ),
-                icon: const Icon(Icons.edit_outlined, size: 17),
-                label: const Text('Cariyi düzenle'),
-              ),
               const SizedBox(width: 8),
             ],
-            FilledButton.icon(
-              onPressed: _openNewQuote,
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF58B69A),
-                foregroundColor: Colors.white,
+            if (compact)
+              IconButton.filled(
+                tooltip: 'Yeni teklif',
+                onPressed: _openNewQuote,
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFF58B69A),
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.add_rounded, size: 20),
+              )
+            else
+              FilledButton.icon(
+                onPressed: _openNewQuote,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF58B69A),
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Yeni teklif'),
               ),
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Yeni teklif'),
-            ),
           ],
         ),
       ),

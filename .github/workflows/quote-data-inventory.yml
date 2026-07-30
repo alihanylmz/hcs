@@ -1,6 +1,6 @@
 name: Quote Data Migration Inventory
 
-# Bu akış yalnızca kayıt sayılarını okur; şema veya veri değiştirmez.
+# Bu akış yalnızca kayıt sayılarını okur; şema, kullanıcı veya veri değiştirmez.
 on:
   workflow_dispatch:
   push:

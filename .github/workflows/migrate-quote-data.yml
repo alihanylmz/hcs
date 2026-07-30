@@ -109,6 +109,8 @@ jobs:
               echo
             }
 
+            execute_sql \
+              "supabase/migrations/20260731_quote_legacy_bootstrap.sql"
             execute_sql "uzalteklif/supabase/schema.sql"
             execute_sql \
               "uzalteklif/supabase/migrations/20260728_discovery_device_templates.sql"

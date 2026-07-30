@@ -119,14 +119,25 @@ void main() {
           quoteRepository: QuoteRepository(),
           initialRates: const [],
           availableProducts: [product],
-          initialProductQuantities: const {'sensor-1': 8},
+          initialProductLines: const [
+            QuoteInitialProductLine(
+              productId: 'sensor-1',
+              quantity: 8,
+              sectionName: 'DDC-01',
+            ),
+            QuoteInitialProductLine(
+              productId: 'sensor-1',
+              quantity: 3,
+              sectionName: 'DDC-02',
+            ),
+          ],
           initialTitle: 'Kazan Dairesi Otomasyonu',
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('quote-line-sensor-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('quote-line-sensor-1')), findsNWidgets(2));
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('quote-line-sensor-1')),
@@ -135,6 +146,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Kazan Dairesi Otomasyonu'), findsOneWidget);
+    expect(find.text('DDC-01'), findsWidgets);
+    expect(find.text('DDC-02'), findsWidgets);
   });
 
   testWidgets('custom line prices open in display currency when revising', (

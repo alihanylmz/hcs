@@ -526,62 +526,84 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
 
   Map<String, int> get _selectedProductQuantities {
     final quantities = <String, int>{};
+    for (final line in _selectedQuoteProductLines) {
+      quantities.update(
+        line.productId,
+        (value) => value + line.quantity,
+        ifAbsent: () => line.quantity,
+      );
+    }
+    return quantities;
+  }
+
+  List<QuoteInitialProductLine> get _selectedQuoteProductLines {
+    final quantities = <String, int>{};
+    String keyFor(String panelCode, String productId) =>
+        '${panelCode.trim().toUpperCase()}::$productId';
+    String panelForDevice(DiscoveryDevice device) =>
+        device.panelCode.trim().isEmpty
+        ? 'PANO BELİRTİLMEDİ'
+        : device.panelCode.trim().toUpperCase();
+
     for (final device in _devices) {
+      final panelCode = panelForDevice(device);
       for (final point in device.points) {
         if (point.productId.isEmpty) continue;
+        final key = keyFor(panelCode, point.productId);
         quantities.update(
-          point.productId,
+          key,
           (value) => value + point.quantity,
           ifAbsent: () => point.quantity,
         );
       }
     }
     for (final settings in _panelSettings) {
+      final panelCode = settings.panelCode.trim().isEmpty
+          ? 'PANO BELİRTİLMEDİ'
+          : settings.panelCode.trim().toUpperCase();
       if (settings.controllerHardwareId.isNotEmpty) {
         final controller = _hardware.where(
           (item) => item.id == settings.controllerHardwareId,
         );
         if (controller.isNotEmpty && controller.first.productId.isNotEmpty) {
-          quantities.update(
-            controller.first.productId,
-            (value) => value + 1,
-            ifAbsent: () => 1,
-          );
+          final key = keyFor(panelCode, controller.first.productId);
+          quantities.update(key, (value) => value + 1, ifAbsent: () => 1);
         }
       }
       for (final moduleId in settings.ioModuleHardwareIds) {
         final module = _hardware.where((item) => item.id == moduleId);
         if (module.isEmpty || module.first.productId.isEmpty) continue;
-        quantities.update(
-          module.first.productId,
-          (value) => value + 1,
-          ifAbsent: () => 1,
-        );
+        final key = keyFor(panelCode, module.first.productId);
+        quantities.update(key, (value) => value + 1, ifAbsent: () => 1);
       }
     }
     for (final solution in _hardwareSolutions) {
       final settings = _settingsForPanel(solution.panelCode);
+      final panelCode = solution.panelCode.trim().isEmpty
+          ? 'PANO BELİRTİLMEDİ'
+          : solution.panelCode.trim().toUpperCase();
       if (settings.controllerHardwareId.isEmpty &&
           solution.role == PanelHardwareRole.controller &&
           solution.controller?.productId.isNotEmpty == true) {
-        quantities.update(
-          solution.controller!.productId,
-          (value) => value + 1,
-          ifAbsent: () => 1,
-        );
+        final key = keyFor(panelCode, solution.controller!.productId);
+        quantities.update(key, (value) => value + 1, ifAbsent: () => 1);
       }
       if (settings.ioModuleHardwareIds.isEmpty) {
         for (final module in solution.modules) {
           if (module.productId.isEmpty) continue;
-          quantities.update(
-            module.productId,
-            (value) => value + 1,
-            ifAbsent: () => 1,
-          );
+          final key = keyFor(panelCode, module.productId);
+          quantities.update(key, (value) => value + 1, ifAbsent: () => 1);
         }
       }
     }
-    return quantities;
+    return [
+      for (final entry in quantities.entries)
+        QuoteInitialProductLine(
+          sectionName: entry.key.substring(0, entry.key.indexOf('::')),
+          productId: entry.key.substring(entry.key.indexOf('::') + 2),
+          quantity: entry.value,
+        ),
+    ];
   }
 
   Future<void> _loadHardware() async {
@@ -658,6 +680,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
 
   Future<void> _createQuote() async {
     final quantities = _selectedProductQuantities;
+    final productLines = _selectedQuoteProductLines;
     if (quantities.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -697,7 +720,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
             quoteRepository: widget.quoteRepository,
             initialRates: rates,
             availableProducts: availableProducts,
-            initialProductQuantities: quantities,
+            initialProductLines: productLines,
             initialTitle: _projectNameController.text.trim(),
             userProfileRepository: widget.userProfileRepository,
             cariRepository: widget.cariRepository,

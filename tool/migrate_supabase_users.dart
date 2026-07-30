@@ -51,6 +51,39 @@ Future<void> main(List<String> arguments) async {
   final targetUsers = await targetApi.listAuthUsers();
   final sourceProfiles = await sourceApi.selectAll('user_profiles');
   final targetProfiles = await targetApi.selectAll('profiles');
+  final expectedSourceUserCount = int.tryParse(
+    Platform.environment['EXPECTED_SOURCE_USER_COUNT']?.trim() ?? '',
+  );
+
+  if (expectedSourceUserCount != null &&
+      sourceUsers.length != expectedSourceUserCount) {
+    throw StateError(
+      'Kaynakta ${sourceUsers.length} Auth kullanıcısı bulundu; '
+      '$expectedSourceUserCount kullanıcı bekleniyordu. İşlem durduruldu.',
+    );
+  }
+
+  final invalidSourceUsers =
+      sourceUsers.where((user) {
+        final id = user['id'] as String? ?? '';
+        return id.isEmpty || _emailOf(user).isEmpty;
+      }).toList();
+  if (apply && invalidSourceUsers.isNotEmpty) {
+    throw StateError(
+      '${invalidSourceUsers.length} kaynak kullanıcının kimliği veya '
+      'e-postası eksik. İşlem durduruldu.',
+    );
+  }
+
+  final sourceEmails =
+      sourceUsers.map(_emailOf).where((email) {
+        return email.isNotEmpty;
+      }).toList();
+  if (apply && sourceEmails.toSet().length != sourceEmails.length) {
+    throw StateError(
+      'Kaynak Auth kullanıcılarında yinelenen e-posta var. İşlem durduruldu.',
+    );
+  }
 
   if (apply) {
     // Gerçek yazımdan önce ortak kullanıcı migration'ının uygulandığını doğrula.
@@ -68,6 +101,19 @@ Future<void> main(List<String> arguments) async {
       if ((profile['user_id'] as String? ?? '').isNotEmpty)
         profile['user_id'] as String: profile,
   };
+  if (apply) {
+    final missingProfileCount =
+        sourceUsers.where((user) {
+          final id = user['id'] as String? ?? '';
+          return id.isNotEmpty && !sourceProfileById.containsKey(id);
+        }).length;
+    if (missingProfileCount > 0) {
+      throw StateError(
+        '$missingProfileCount kaynak kullanıcı için Teklif profili bulunamadı. '
+        'İşlem durduruldu.',
+      );
+    }
+  }
   final targetProfileIds =
       targetProfiles
           .map((profile) => profile['id'] as String? ?? '')

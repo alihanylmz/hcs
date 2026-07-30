@@ -46,19 +46,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Record checkout
+        shell: bash
+        run: echo "checkout_ok" > quote-step-state.txt
+
       - name: Setup Dart
         uses: dart-lang/setup-dart@v1
+
+      - name: Record Dart setup
+        shell: bash
+        run: echo "dart_setup_ok" >> quote-step-state.txt
 
       - name: Resolve existing project keys without logging them
         shell: bash
         run: |
           set -euo pipefail
+          echo "key_resolution_started" >> quote-step-state.txt
           source_ref="$(python -c 'import os; from urllib.parse import urlparse; print(urlparse(os.environ["SOURCE_SUPABASE_URL"]).hostname.split(".")[0])')"
           target_ref="$(python -c 'import os; from urllib.parse import urlparse; print(urlparse(os.environ["TARGET_SUPABASE_URL"]).hostname.split(".")[0])')"
 
           resolve_key() {
             local project_ref="$1"
             curl --fail --silent --show-error \
+              --retry 3 --retry-all-errors --retry-delay 2 \
               -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
               -H "Accept: application/json" \
               "https://api.supabase.com/v1/projects/$project_ref/api-keys?reveal=true" |
@@ -82,6 +92,7 @@ jobs:
           echo "SOURCE_SERVICE_ROLE_KEY=$source_key" >> "$GITHUB_ENV"
           echo "TARGET_SERVICE_ROLE_KEY=$target_key" >> "$GITHUB_ENV"
           echo "TARGET_PROJECT_REF=$target_ref" >> "$GITHUB_ENV"
+          echo "key_resolution_ok" >> quote-step-state.txt
 
       - name: Final read-only safety check
         shell: bash
@@ -153,6 +164,7 @@ jobs:
             echo
             echo '```text'
             for report in \
+              quote-step-state.txt \
               quote-migration-preflight.txt \
               quote-schema-result.txt \
               quote-post-schema-dry-run.txt \

@@ -2961,22 +2961,35 @@ class _PointSummary extends StatelessWidget {
               const Divider(height: 1),
               const SizedBox(height: 14),
               Text(
-                'DDC / Pano Bazlı Toplamlar',
+                'Panolara Göre Nokta İhtiyacı',
                 style: Theme.of(
                   context,
                 ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
               ),
+              const SizedBox(height: 3),
+              Text(
+                'Her panoya bağlanacak toplam saha noktalarını ayrı ayrı görün.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               const SizedBox(height: 10),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  for (final entry in panelCounts.entries)
-                    _PanelPointTotals(
-                      panelCode: entry.key,
-                      counts: entry.value,
-                    ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cardWidth = constraints.maxWidth >= 800
+                      ? (constraints.maxWidth - 10) / 2
+                      : constraints.maxWidth;
+                  return Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (final entry in panelCounts.entries)
+                        _PanelPointTotals(
+                          panelCode: entry.key,
+                          counts: entry.value,
+                          width: cardWidth,
+                        ),
+                    ],
+                  );
+                },
               ),
             ],
           ],
@@ -2991,104 +3004,208 @@ class _PanelPointTotals extends StatelessWidget {
     required this.counts,
     this.panelCode,
     this.showPanelCode = true,
+    this.width,
   });
 
   final String? panelCode;
   final Map<DiscoveryPointType, int> counts;
   final bool showPanelCode;
+  final double? width;
 
   int _count(DiscoveryPointType type) => counts[type] ?? 0;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final physicalTotal =
+    final analogInput =
         _count(DiscoveryPointType.aiActive) +
-        _count(DiscoveryPointType.aiPassive) +
+        _count(DiscoveryPointType.aiPassive);
+    final physicalTotal =
+        analogInput +
         _count(DiscoveryPointType.ao) +
         _count(DiscoveryPointType.di) +
         _count(DiscoveryPointType.doOutput);
     final total = counts.values.fold<int>(0, (sum, value) => sum + value);
     final communicationTotal = total - physicalTotal;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+    final card = Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: colors.primaryContainer.withValues(alpha: 0.38),
-        borderRadius: BorderRadius.circular(14),
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: colors.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: colors.shadow.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (showPanelCode)
-            Text(
-              panelCode ?? '',
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
-            ),
-          _PanelPointValue(label: 'TOPLAM', value: total, emphasized: true),
-          _PanelPointValue(label: 'FİZİKSEL', value: physicalTotal),
-          _PanelPointValue(
-            label: DiscoveryPointType.aiActive.label,
-            value: _count(DiscoveryPointType.aiActive),
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                  Icons.developer_board_rounded,
+                  color: colors.onPrimaryContainer,
+                  size: 21,
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      showPanelCode
+                          ? (panelCode ?? '')
+                          : 'Bu Panonun Nokta İhtiyacı',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      '$physicalTotal kablolu saha noktası',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 13,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: colors.primary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      '$total',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: colors.onPrimary,
+                        fontWeight: FontWeight.w900,
+                        height: 1,
+                      ),
+                    ),
+                    Text(
+                      'TOPLAM NOKTA',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: colors.onPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          _PanelPointValue(
-            label: DiscoveryPointType.aiPassive.label,
-            value: _count(DiscoveryPointType.aiPassive),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 11),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _SalesPointMetric(
+                icon: Icons.sensors_rounded,
+                label: 'Analog Giriş',
+                value: analogInput,
+                detail:
+                    '${_count(DiscoveryPointType.aiActive)} aktif, '
+                    '${_count(DiscoveryPointType.aiPassive)} pasif',
+              ),
+              _SalesPointMetric(
+                icon: Icons.tune_rounded,
+                label: 'Analog Çıkış',
+                value: _count(DiscoveryPointType.ao),
+              ),
+              _SalesPointMetric(
+                icon: Icons.input_rounded,
+                label: 'Dijital Giriş',
+                value: _count(DiscoveryPointType.di),
+              ),
+              _SalesPointMetric(
+                icon: Icons.power_settings_new_rounded,
+                label: 'Dijital Çıkış',
+                value: _count(DiscoveryPointType.doOutput),
+              ),
+              if (communicationTotal > 0)
+                _SalesPointMetric(
+                  icon: Icons.hub_outlined,
+                  label: 'Haberleşme',
+                  value: communicationTotal,
+                ),
+            ],
           ),
-          _PanelPointValue(
-            label: DiscoveryPointType.ao.label,
-            value: _count(DiscoveryPointType.ao),
-          ),
-          _PanelPointValue(
-            label: DiscoveryPointType.di.label,
-            value: _count(DiscoveryPointType.di),
-          ),
-          _PanelPointValue(
-            label: DiscoveryPointType.doOutput.label,
-            value: _count(DiscoveryPointType.doOutput),
-          ),
-          if (communicationTotal > 0)
-            _PanelPointValue(label: 'HABERLEŞME', value: communicationTotal),
         ],
       ),
     );
+
+    if (!showPanelCode) return card;
+    return SizedBox(width: width ?? 390, child: card);
   }
 }
 
-class _PanelPointValue extends StatelessWidget {
-  const _PanelPointValue({
+class _SalesPointMetric extends StatelessWidget {
+  const _SalesPointMetric({
+    required this.icon,
     required this.label,
     required this.value,
-    this.emphasized = false,
+    this.detail,
   });
 
+  final IconData icon;
   final String label;
   final int value;
-  final bool emphasized;
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      constraints: const BoxConstraints(minWidth: 145),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: emphasized ? colors.primary : colors.surface,
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(
-          color: emphasized ? colors.primary : colors.outlineVariant,
-        ),
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Text(
-        '$label  $value',
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: emphasized ? colors.onPrimary : colors.onSurface,
-          fontWeight: FontWeight.w800,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: colors.primary),
+          const SizedBox(width: 7),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$label  $value',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              if (detail != null)
+                Text(
+                  detail!,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

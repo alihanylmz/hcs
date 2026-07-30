@@ -25,6 +25,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
   List<UserProfile> _allUsers = [];
   List<UserProfile> _filteredUsers = [];
   List<Partner> _partners = [];
+  Set<String> _teklifUserIds = {};
+  final Set<String> _updatingAppAccessUserIds = {};
 
   bool _hasAccess = false;
   bool _isLoading = true;
@@ -115,12 +117,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
       final users = await _userService.getAllUsers();
       final partners = await _partnerService.getAllPartners();
+      final teklifUserIds = await _userService.getActiveAppUserIds('teklif');
 
       if (!mounted) return;
       setState(() {
         _hasAccess = true;
         _allUsers = users;
         _partners = partners;
+        _teklifUserIds = teklifUserIds;
         _isLoading = false;
       });
       _applyFilters();
@@ -133,6 +137,54 @@ class _UserManagementPageState extends State<UserManagementPage> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  Future<void> _toggleTeklifAccess(UserProfile user, bool enabled) async {
+    if (_updatingAppAccessUserIds.contains(user.id)) return;
+
+    setState(() {
+      _updatingAppAccessUserIds.add(user.id);
+    });
+
+    try {
+      await _userService.setAppAccess(
+        user: user,
+        appCode: 'teklif',
+        isActive: enabled,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (enabled) {
+          _teklifUserIds.add(user.id);
+        } else {
+          _teklifUserIds.remove(user.id);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            enabled
+                ? '${user.displayName} artık Teklif uygulamasına erişebilir.'
+                : '${user.displayName} için Teklif erişimi kapatıldı.',
+          ),
+          backgroundColor: enabled ? Colors.green : Colors.orange,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Teklif erişimi güncellenemedi: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _updatingAppAccessUserIds.remove(user.id);
+        });
+      }
     }
   }
 
@@ -351,7 +403,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
         children: [
           const CustomHeader(
             title: 'Kullanıcı Yönetimi',
-            subtitle: 'Personel ve partner yetkileri',
+            subtitle: 'Personel, partner ve uygulama yetkileri',
             showBackArrow: true,
           ),
           _buildToolbar(surfaceColor, isDark),
@@ -653,6 +705,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }) {
     final roleColor = _getRoleColor(user.role);
     final partnerName = _findPartnerName(user.partnerId);
+    final hasTeklifAccess = _teklifUserIds.contains(user.id);
+    final isUpdatingAccess = _updatingAppAccessUserIds.contains(user.id);
 
     return Card(
       margin: EdgeInsets.zero,
@@ -741,6 +795,74 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         ],
                       ),
                     ],
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.only(left: 9, right: 3),
+                        decoration: BoxDecoration(
+                          color:
+                              hasTeklifAccess
+                                  ? Colors.green.withOpacity(0.10)
+                                  : Colors.grey.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color:
+                                hasTeklifAccess
+                                    ? Colors.green.withOpacity(0.32)
+                                    : Colors.grey.withOpacity(0.24),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.request_quote_outlined,
+                              size: 15,
+                              color:
+                                  hasTeklifAccess
+                                      ? Colors.green.shade700
+                                      : Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              hasTeklifAccess
+                                  ? 'Teklif erişimi açık'
+                                  : 'Teklif erişimi kapalı',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color:
+                                    hasTeklifAccess
+                                        ? Colors.green.shade700
+                                        : Colors.grey.shade600,
+                              ),
+                            ),
+                            if (isUpdatingAccess)
+                              const Padding(
+                                padding: EdgeInsets.all(9),
+                                child: SizedBox(
+                                  width: 15,
+                                  height: 15,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                            else
+                              Transform.scale(
+                                scale: 0.72,
+                                child: Switch.adaptive(
+                                  value: hasTeklifAccess,
+                                  onChanged:
+                                      (value) =>
+                                          _toggleTeklifAccess(user, value),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
                     if (highlightPending) ...[
                       const SizedBox(height: 8),
                       Text(

@@ -127,6 +127,64 @@ class UserService {
     }
   }
 
+  Future<Set<String>> getActiveAppUserIds(String appCode) async {
+    try {
+      final List<dynamic> rows = await _client
+          .from('user_app_access')
+          .select('user_id')
+          .eq('app_code', appCode)
+          .eq('is_active', true);
+
+      return rows
+          .map((row) => (row as Map<String, dynamic>)['user_id']?.toString())
+          .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toSet();
+    } catch (error, stackTrace) {
+      _logger.error(
+        'get_active_app_users_failed',
+        data: {'appCode': appCode},
+        error: error,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> setAppAccess({
+    required UserProfile user,
+    required String appCode,
+    required bool isActive,
+  }) async {
+    try {
+      await _client.from('user_app_access').upsert({
+        'user_id': user.id,
+        'app_code': appCode,
+        'app_role': _appRoleFor(user.role),
+        'is_active': isActive,
+      }, onConflict: 'user_id,app_code');
+    } catch (error, stackTrace) {
+      _logger.error(
+        'set_app_access_failed',
+        data: {'userId': user.id, 'appCode': appCode, 'isActive': isActive},
+        error: error,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  String _appRoleFor(String profileRole) {
+    switch (profileRole) {
+      case UserRole.admin:
+        return 'admin';
+      case UserRole.manager:
+        return 'manager';
+      default:
+        return 'sales';
+    }
+  }
+
   String _describeError(Object error) {
     final rawMessage = error.toString();
     if (rawMessage.contains('Failed to fetch') &&

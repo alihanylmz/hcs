@@ -46,6 +46,7 @@ class QuoteEditorPage extends StatefulWidget {
     this.initialProductQuantities = const {},
     this.initialProductLines = const [],
     this.initialTitle = '',
+    this.initialCariId = '',
     UserProfileRepository? userProfileRepository,
     CariRepository? cariRepository,
     OwnCompanyRepository? ownCompanyRepository,
@@ -68,6 +69,7 @@ class QuoteEditorPage extends StatefulWidget {
   final Map<String, int> initialProductQuantities;
   final List<QuoteInitialProductLine> initialProductLines;
   final String initialTitle;
+  final String initialCariId;
 
   /// Ayni teklifin revizyonu; kod tabani korunur, Rev numarasi artar.
   final Quote? quoteToRevise;
@@ -247,6 +249,17 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     if (!mounted) return;
     setState(() {
       _cariler = cariler;
+      if (widget.quoteToRevise == null &&
+          widget.quoteToCopy == null &&
+          widget.initialCariId.trim().isNotEmpty) {
+        final matches = cariler.where(
+          (cari) => cari.id == widget.initialCariId.trim(),
+        );
+        if (matches.isNotEmpty) {
+          _selectedCariId = matches.first.id;
+          _applyCariToForm(matches.first);
+        }
+      }
       _ownCompanies = companies.isEmpty ? [OwnCompany.fallback()] : companies;
       _selectedOwnCompanyId = _resolveOwnCompanySelection(companies);
       _issuerProfile = prof;

@@ -10,7 +10,7 @@ on:
       - ".github/workflows/quote-data-inventory.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   inventory:
@@ -79,4 +79,31 @@ jobs:
 
       - name: Read-only inventory
         shell: bash
-        run: dart tool/quote_data_inventory.dart
+        run: |
+          set -euo pipefail
+          dart tool/quote_data_inventory.dart | tee quote-data-inventory.txt
+
+      - name: Save sanitized inventory report
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs/generated
+          {
+            echo '# Teklif Veri Taşıma Envanteri'
+            echo
+            echo 'Son kontrol: `'"$(date -u +'%Y-%m-%d %H:%M UTC')"'`'
+            echo
+            echo '```text'
+            cat quote-data-inventory.txt
+            echo '```'
+          } > docs/generated/quote-data-inventory.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/generated/quote-data-inventory.md
+          if git diff --cached --quiet; then
+            echo "Envanter raporunda değişiklik yok."
+          else
+            git commit -m "Update quote migration inventory [skip ci]"
+            git push
+          fi

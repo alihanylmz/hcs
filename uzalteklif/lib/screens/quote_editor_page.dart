@@ -23,6 +23,18 @@ import '../utils/product_category_labels.dart';
 import '../widgets/workspace_background.dart';
 import 'cariler_page.dart';
 
+class QuoteInitialProductLine {
+  const QuoteInitialProductLine({
+    required this.productId,
+    required this.quantity,
+    this.sectionName = '',
+  });
+
+  final String productId;
+  final int quantity;
+  final String sectionName;
+}
+
 class QuoteEditorPage extends StatefulWidget {
   QuoteEditorPage({
     super.key,
@@ -32,6 +44,7 @@ class QuoteEditorPage extends StatefulWidget {
     this.quoteToRevise,
     this.quoteToCopy,
     this.initialProductQuantities = const {},
+    this.initialProductLines = const [],
     this.initialTitle = '',
     UserProfileRepository? userProfileRepository,
     CariRepository? cariRepository,
@@ -53,6 +66,7 @@ class QuoteEditorPage extends StatefulWidget {
   final List<MarketRate> initialRates;
   final List<Product> availableProducts;
   final Map<String, int> initialProductQuantities;
+  final List<QuoteInitialProductLine> initialProductLines;
   final String initialTitle;
 
   /// Ayni teklifin revizyonu; kod tabani korunur, Rev numarasi artar.
@@ -169,14 +183,32 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   }
 
   void _loadInitialProducts() {
-    if (widget.initialProductQuantities.isEmpty) return;
+    final seeds = widget.initialProductLines.isNotEmpty
+        ? widget.initialProductLines
+        : [
+            for (final entry in widget.initialProductQuantities.entries)
+              QuoteInitialProductLine(
+                productId: entry.key,
+                quantity: entry.value,
+              ),
+          ];
+    if (seeds.isEmpty) return;
     final productsById = {
       for (final product in widget.availableProducts) product.id: product,
     };
-    for (final entry in widget.initialProductQuantities.entries) {
-      if (entry.value <= 0) continue;
-      final product = productsById[entry.key];
+    final sectionIds = <String, String>{};
+    for (final seed in seeds) {
+      if (seed.quantity <= 0) continue;
+      final product = productsById[seed.productId];
       if (product == null) continue;
+      final sectionName = seed.sectionName.trim();
+      final sectionId = sectionName.isEmpty
+          ? ''
+          : sectionIds.putIfAbsent(sectionName, () {
+              final id = 'discovery-section-${sectionIds.length + 1}';
+              _sections.add(_SectionDraft(id: id, name: sectionName));
+              return id;
+            });
       final defaultUnitPrice = product.priceInTl(_rateLookup);
       _items.add(
         _LineDraft(
@@ -187,13 +219,13 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
               ? '${product.brand} ${product.model}'.trim()
               : product.name.trim(),
           unit: product.unit,
-          quantity: entry.value.toString(),
+          quantity: seed.quantity.toString(),
           unitPriceTl: _formatUnitPriceForEditableInput(
             defaultUnitPrice,
             _selectedDisplayUnit,
           ),
           discount: '0',
-          sectionId: '',
+          sectionId: sectionId,
         ),
       );
     }
@@ -4531,18 +4563,18 @@ class _QuoteLineEditorRow extends StatelessWidget {
 
         return Container(
           key: ValueKey('quote-line-$rowKey'),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
           decoration: BoxDecoration(
             color: rowNumber.isEven
-                ? const Color(0xFFFAFBFC)
+                ? const Color(0xFFF7F9FB)
                 : Colors.white.withValues(alpha: 0.96),
-            border: Border.all(color: const Color(0xFFD7DEE6)),
+            border: const Border(bottom: BorderSide(color: Color(0xFFE1E6EC))),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               SizedBox(
-                width: 38,
+                width: 32,
                 child: Text(
                   rowNumber.toString(),
                   textAlign: TextAlign.center,
@@ -4554,12 +4586,12 @@ class _QuoteLineEditorRow extends StatelessWidget {
               ),
               const _SheetDivider(),
               SizedBox(
-                width: 160,
+                width: 150,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
                     draft.productCode.isEmpty ? '—' : draft.productCode,
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: const Color(0xFF17304C),
@@ -4576,42 +4608,29 @@ class _QuoteLineEditorRow extends StatelessWidget {
                     TextFormField(
                       controller: draft.descriptionController,
                       decoration: const InputDecoration(
-                        hintText: 'Ozel urun / hizmet adi',
+                        hintText: 'Ürün veya hizmet açıklaması',
                         isDense: true,
+                        filled: false,
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(
                           horizontal: 8,
-                          vertical: 10,
+                          vertical: 8,
                         ),
                       ),
                       validator: requiredTextValidator,
                       onChanged: (_) => onChanged(),
                     ),
-                    if (product != null)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-                        child: Text(
-                          productMeta,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: const Color(0xFF5B6F7F),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 11,
-                              ),
-                        ),
-                      ),
                   ],
                 ),
               ),
               const _SheetDivider(),
               SizedBox(
-                width: 88,
+                width: 72,
                 child: TextFormField(
                   controller: draft.unitController,
                   decoration: const InputDecoration(
                     isDense: true,
+                    filled: false,
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(
                       horizontal: 8,
@@ -4624,12 +4643,13 @@ class _QuoteLineEditorRow extends StatelessWidget {
               ),
               const _SheetDivider(),
               SizedBox(
-                width: 96,
+                width: 78,
                 child: TextFormField(
                   controller: draft.quantityController,
                   textAlign: TextAlign.end,
                   decoration: const InputDecoration(
                     isDense: true,
+                    filled: false,
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(
                       horizontal: 8,
@@ -4645,12 +4665,13 @@ class _QuoteLineEditorRow extends StatelessWidget {
               ),
               const _SheetDivider(),
               SizedBox(
-                width: 128,
+                width: 112,
                 child: TextFormField(
                   controller: draft.unitPriceController,
                   textAlign: TextAlign.end,
                   decoration: const InputDecoration(
                     isDense: true,
+                    filled: false,
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(
                       horizontal: 8,
@@ -4666,7 +4687,7 @@ class _QuoteLineEditorRow extends StatelessWidget {
               ),
               const _SheetDivider(),
               SizedBox(
-                width: 104,
+                width: 80,
                 child: TextFormField(
                   controller: draft.discountController,
                   enabled: !discountLocked,
@@ -4674,6 +4695,7 @@ class _QuoteLineEditorRow extends StatelessWidget {
                   decoration: InputDecoration(
                     hintText: discountLocked ? 'Toplu' : null,
                     isDense: true,
+                    filled: false,
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -4689,7 +4711,7 @@ class _QuoteLineEditorRow extends StatelessWidget {
               ),
               const _SheetDivider(),
               SizedBox(
-                width: 132,
+                width: 116,
                 child: Text(
                   lineTotalText,
                   textAlign: TextAlign.end,
@@ -4748,9 +4770,9 @@ class _QuoteLineSheetHeader extends StatelessWidget {
           ),
           child: Row(
             children: [
-              cell('#', 38, align: TextAlign.center),
+              cell('#', 32, align: TextAlign.center),
               const _SheetDivider(),
-              cell('Ürün kodu', 160),
+              cell('Ürün kodu', 150),
               const _SheetDivider(),
               Expanded(
                 child: Padding(
@@ -4759,19 +4781,19 @@ class _QuoteLineSheetHeader extends StatelessWidget {
                 ),
               ),
               const _SheetDivider(),
-              cell('Birim', 88),
+              cell('Birim', 72),
               const _SheetDivider(),
-              cell('Miktar', 96, align: TextAlign.right),
+              cell('Miktar', 78, align: TextAlign.right),
               const _SheetDivider(),
               cell(
                 'Birim fiyat ($priceCurrencyLabel)',
-                128,
+                112,
                 align: TextAlign.right,
               ),
               const _SheetDivider(),
-              cell('Isk. %', 104, align: TextAlign.right),
+              cell('İsk. %', 80, align: TextAlign.right),
               const _SheetDivider(),
-              cell('Satır toplamı', 132, align: TextAlign.right),
+              cell('Satır toplamı', 116, align: TextAlign.right),
               const _SheetDivider(),
               const SizedBox(width: 96),
             ],

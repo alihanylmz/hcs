@@ -2,6 +2,8 @@
 -- Teklif uygulamasına özel profil alanları ve uygulama erişimi ayrı tutulur.
 -- Bu migration yalnızca hedef/ortak İş Takip Supabase projesine uygulanmalıdır.
 
+begin;
+
 create table if not exists public.user_app_access (
   user_id uuid not null references public.profiles (id) on delete cascade,
   app_code text not null,
@@ -136,8 +138,8 @@ insert into public.user_app_access (
 select
   p.id,
   'is_takip',
-  coalesce(nullif(p.role, ''), 'pending'),
-  p.role <> 'pending'
+  coalesce(nullif(p.role::text, ''), 'pending'),
+  coalesce(p.role::text, 'pending') <> 'pending'
 from public.profiles p
 on conflict (user_id, app_code) do nothing;
 
@@ -152,10 +154,10 @@ insert into public.user_app_access (
 select
   p.id,
   'teklif',
-  case when p.role = 'admin' then 'admin' else 'manager' end,
+  case when p.role::text = 'admin' then 'admin' else 'manager' end,
   true
 from public.profiles p
-where p.role in ('admin', 'manager')
+where p.role::text in ('admin', 'manager')
 on conflict (user_id, app_code) do nothing;
 
 create or replace function public.seed_new_profile_app_access()
@@ -174,8 +176,8 @@ begin
   values (
     new.id,
     'is_takip',
-    coalesce(nullif(new.role, ''), 'pending'),
-    coalesce(new.role, 'pending') <> 'pending'
+    coalesce(nullif(new.role::text, ''), 'pending'),
+    coalesce(new.role::text, 'pending') <> 'pending'
   )
   on conflict (user_id, app_code) do nothing;
   return new;
@@ -190,6 +192,20 @@ for each row execute function public.seed_new_profile_app_access();
 alter table public.user_app_access enable row level security;
 alter table public.user_quote_settings enable row level security;
 alter table public.auth_user_migration_map enable row level security;
+
+-- RLS politikalarının çalışabilmesi için gereken tablo izinleri açıkça verilir.
+-- `auth_user_migration_map` hiçbir istemci rolüne açılmaz.
+grant select, insert, update, delete
+on public.user_app_access
+to authenticated;
+
+grant select, insert, update
+on public.user_quote_settings
+to authenticated;
+
+revoke all
+on public.user_app_access, public.user_quote_settings
+from anon;
 
 drop policy if exists user_app_access_select_scope
 on public.user_app_access;
@@ -286,3 +302,12 @@ grant select on public.quote_user_profiles to authenticated;
 
 -- Bu tablo istemci uygulamalarına açılmaz; yalnızca service_role erişir.
 revoke all on public.auth_user_migration_map from anon, authenticated;
+
+comment on table public.user_app_access is
+  'Bir kullanıcının İş Takip ve Teklif uygulamalarına erişim yetkileri.';
+comment on table public.user_quote_settings is
+  'Teklif uygulamasına özel kullanıcı ve firma çıktı ayarları.';
+comment on table public.auth_user_migration_map is
+  'Kaynak Teklif Auth kullanıcısı ile ortak Auth kullanıcısı arasındaki taşıma kaydı.';
+
+commit;

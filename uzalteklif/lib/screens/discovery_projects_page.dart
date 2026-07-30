@@ -519,10 +519,19 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
     return codes;
   }
 
-  List<DiscoveryDeviceTemplate> get _availableDeviceTemplates => [
-    ...DiscoveryTemplates.values,
-    ..._savedDeviceTemplates,
-  ];
+  List<DiscoveryDeviceTemplate> get _availableDeviceTemplates {
+    final templates = <DiscoveryDeviceTemplate>[
+      ...DiscoveryTemplates.values,
+      ..._savedDeviceTemplates,
+    ];
+    templates.sort((left, right) {
+      if (left.key == DiscoveryTemplates.custom.key) return 1;
+      if (right.key == DiscoveryTemplates.custom.key) return -1;
+      final category = left.categoryName.compareTo(right.categoryName);
+      return category != 0 ? category : left.name.compareTo(right.name);
+    });
+    return templates;
+  }
 
   Map<String, int> get _selectedProductQuantities {
     final quantities = <String, int>{};
@@ -4283,6 +4292,7 @@ class _DeviceDialog extends StatefulWidget {
 class _DeviceDialogState extends State<_DeviceDialog> {
   late List<DiscoveryDeviceTemplate> _templates;
   late DiscoveryDeviceTemplate _template;
+  late final TextEditingController _templateController;
   late final TextEditingController _nameController;
   late final TextEditingController _deviceController;
   late String _panelCode;
@@ -4295,6 +4305,9 @@ class _DeviceDialogState extends State<_DeviceDialog> {
     _template = _templates.firstWhere(
       (template) => template.key == key,
       orElse: () => DiscoveryTemplates.pump,
+    );
+    _templateController = TextEditingController(
+      text: _templateDisplayName(_template),
     );
     _panelCode = widget.existing?.panelCode.trim().isNotEmpty == true
         ? widget.existing!.panelCode.trim().toUpperCase()
@@ -4318,12 +4331,19 @@ class _DeviceDialogState extends State<_DeviceDialog> {
     setState(() {
       _templates = [..._templates, template];
       _template = template;
+      _templateController.text = _templateDisplayName(template);
       _nameController.text = template.name;
     });
   }
 
+  String _templateDisplayName(DiscoveryDeviceTemplate template) {
+    return '${template.categoryName} · ${template.name} '
+        '(${template.points.length} nokta)';
+  }
+
   @override
   void dispose() {
+    _templateController.dispose();
     _nameController.dispose();
     _deviceController.dispose();
     super.dispose();
@@ -4339,20 +4359,30 @@ class _DeviceDialogState extends State<_DeviceDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            DropdownButtonFormField<DiscoveryDeviceTemplate>(
-              initialValue: _template,
-              decoration: const InputDecoration(labelText: 'Cihaz şablonu'),
-              items: _templates
+            DropdownMenu<DiscoveryDeviceTemplate>(
+              controller: _templateController,
+              initialSelection: _template,
+              enabled: !editing,
+              enableFilter: true,
+              enableSearch: true,
+              requestFocusOnTap: true,
+              menuHeight: 360,
+              expandedInsets: EdgeInsets.zero,
+              label: const Text('Cihaz şablonu'),
+              hintText: 'Cihaz veya kategori ara',
+              leadingIcon: const Icon(Icons.search_rounded),
+              dropdownMenuEntries: _templates
                   .map(
-                    (template) => DropdownMenuItem(
+                    (template) => DropdownMenuEntry(
                       value: template,
-                      child: Text(
-                        '${template.name} (${template.points.length} nokta)',
+                      label: _templateDisplayName(template),
+                      leadingIcon: const Icon(
+                        Icons.precision_manufacturing_outlined,
                       ),
                     ),
                   )
                   .toList(growable: false),
-              onChanged: editing
+              onSelected: editing
                   ? null
                   : (value) {
                       if (value == null) return;

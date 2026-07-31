@@ -1,5 +1,5 @@
 /// Oturum acik kullanicinin teklif PDF'inde kullanilan firma + hazirlayan
-/// bilgileri (Supabase `user_profiles`).
+/// bilgileri (ortak Supabase `quote_user_profiles` görünümü).
 class UserQuoteProfile {
   const UserQuoteProfile({
     required this.userId,

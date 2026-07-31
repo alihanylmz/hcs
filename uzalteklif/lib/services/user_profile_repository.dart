@@ -10,36 +10,17 @@ class UserProfileRepository {
   bool get isRemoteReady =>
       _client != null && _client.auth.currentSession != null;
 
-  bool _isMissingUnifiedSchema(Object error) {
-    if (error is PostgrestException) {
-      return error.code == 'PGRST205' ||
-          error.code == '42P01' ||
-          error.message.contains('quote_user_profiles') ||
-          error.message.contains('user_quote_settings') ||
-          error.message.contains('user_app_access');
-    }
-    return false;
-  }
-
   Future<bool> canAccessQuoteApp() async {
     if (!isRemoteReady) return true;
     final uid = _client!.auth.currentUser?.id;
     if (uid == null) return false;
-    try {
-      final row = await _client
-          .from('user_app_access')
-          .select('is_active')
-          .eq('user_id', uid)
-          .eq('app_code', 'teklif')
-          .maybeSingle();
-      return row?['is_active'] == true;
-    } catch (error) {
-      if (_isMissingUnifiedSchema(error)) {
-        // Eski Teklif Supabase'iyle geçiş süresince geriye uyumluluk.
-        return true;
-      }
-      rethrow;
-    }
+    final row = await _client
+        .from('user_app_access')
+        .select('is_active')
+        .eq('user_id', uid)
+        .eq('app_code', 'teklif')
+        .maybeSingle();
+    return row?['is_active'] == true;
   }
 
   Future<UserQuoteProfile?> fetchMine() async {
@@ -55,37 +36,21 @@ class UserProfileRepository {
           .maybeSingle();
       if (row == null) return null;
       return UserQuoteProfile.fromRow(Map<String, dynamic>.from(row));
-    } catch (error) {
-      if (!_isMissingUnifiedSchema(error)) return null;
-      try {
-        final row = await client
-            .from('user_profiles')
-            .select()
-            .eq('user_id', uid)
-            .maybeSingle();
-        if (row == null) return null;
-        return UserQuoteProfile.fromRow(Map<String, dynamic>.from(row));
-      } catch (_) {
-        return null;
-      }
+    } catch (_) {
+      return null;
     }
   }
 
   Future<void> upsert(UserQuoteProfile profile) async {
     if (!isRemoteReady) return;
     final client = _client!;
-    try {
-      await client
-          .from('user_quote_settings')
-          .upsert(profile.toUnifiedSettingsRow());
-      await client
-          .from('profiles')
-          .update({'full_name': profile.preparedByName})
-          .eq('id', profile.userId);
-    } catch (error) {
-      if (!_isMissingUnifiedSchema(error)) rethrow;
-      await client.from('user_profiles').upsert(profile.toRow());
-    }
+    await client
+        .from('user_quote_settings')
+        .upsert(profile.toUnifiedSettingsRow());
+    await client
+        .from('profiles')
+        .update({'full_name': profile.preparedByName})
+        .eq('id', profile.userId);
   }
 
   Future<List<UserQuoteProfile>> fetchAll() async {
@@ -99,20 +64,8 @@ class UserProfileRepository {
           .cast<Map<String, dynamic>>()
           .map(UserQuoteProfile.fromRow)
           .toList(growable: false);
-    } catch (error) {
-      if (!_isMissingUnifiedSchema(error)) return const [];
-      try {
-        final rows = await _client!
-            .from('user_profiles')
-            .select()
-            .order('prepared_by_name', ascending: true);
-        return rows
-            .cast<Map<String, dynamic>>()
-            .map(UserQuoteProfile.fromRow)
-            .toList(growable: false);
-      } catch (_) {
-        return const [];
-      }
+    } catch (_) {
+      return const [];
     }
   }
 
@@ -122,18 +75,10 @@ class UserProfileRepository {
   }) async {
     if (!isRemoteReady || userId.isEmpty) return;
     final normalized = UserQuoteProfile.normalizeRole(role);
-    try {
-      await _client!
-          .from('user_app_access')
-          .update({'app_role': normalized})
-          .eq('user_id', userId)
-          .eq('app_code', 'teklif');
-    } catch (error) {
-      if (!_isMissingUnifiedSchema(error)) rethrow;
-      await _client!
-          .from('user_profiles')
-          .update({'role': normalized})
-          .eq('user_id', userId);
-    }
+    await _client!
+        .from('user_app_access')
+        .update({'app_role': normalized})
+        .eq('user_id', userId)
+        .eq('app_code', 'teklif');
   }
 }

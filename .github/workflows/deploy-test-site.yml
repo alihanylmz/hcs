@@ -16,8 +16,8 @@ jobs:
   deploy-test:
     runs-on: ubuntu-latest
     env:
-      IS_TAKIP_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL || secrets.SUPABASE_URL }}
-      IS_TAKIP_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+      SHARED_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SHARED_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       PUBLIC_QUOTE_BASE_URL: ${{ vars.STAGING_PUBLIC_QUOTE_BASE_URL || vars.PUBLIC_QUOTE_BASE_URL || 'https://uzalteknikservis.info/t' }}
       PLESK_TARGET_DIR: ${{ secrets.PLESK_TEST_FTP_TARGET_DIR || '/test.uzalteknikservis.com/' }}
     steps:
@@ -25,8 +25,8 @@ jobs:
         shell: bash
         run: |
           missing=()
-          [[ -z "$IS_TAKIP_SUPABASE_URL" ]] && missing+=("SUPABASE_URL or STAGING_SUPABASE_URL")
-          [[ -z "$IS_TAKIP_SUPABASE_ANON_KEY" ]] && missing+=("SUPABASE_ANON_KEY or STAGING_SUPABASE_ANON_KEY")
+          [[ -z "$SHARED_SUPABASE_URL" ]] && missing+=("SUPABASE_URL")
+          [[ -z "$SHARED_SUPABASE_ANON_KEY" ]] && missing+=("SUPABASE_ANON_KEY")
           [[ -z "${{ secrets.PLESK_HOST }}" ]] && missing+=("PLESK_HOST")
           [[ -z "${{ secrets.PLESK_USER }}" ]] && missing+=("PLESK_USER")
           [[ -z "${{ secrets.PLESK_PASSWORD }}" ]] && missing+=("PLESK_PASSWORD")
@@ -49,8 +49,8 @@ jobs:
         run: |
           flutter pub get
           flutter build web --release --base-href /is-takip/ \
-            --dart-define=SUPABASE_URL="$IS_TAKIP_SUPABASE_URL" \
-            --dart-define=SUPABASE_ANON_KEY="$IS_TAKIP_SUPABASE_ANON_KEY"
+            --dart-define=SUPABASE_URL="$SHARED_SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SHARED_SUPABASE_ANON_KEY"
 
       - name: Setup Flutter beta for Teklif
         uses: subosito/flutter-action@v2
@@ -63,8 +63,8 @@ jobs:
         run: |
           flutter pub get
           flutter build web --release --base-href /teklif/ \
-            --dart-define=SUPABASE_URL="$IS_TAKIP_SUPABASE_URL" \
-            --dart-define=SUPABASE_ANON_KEY="$IS_TAKIP_SUPABASE_ANON_KEY" \
+            --dart-define=SUPABASE_URL="$SHARED_SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SHARED_SUPABASE_ANON_KEY" \
             --dart-define=PUBLIC_QUOTE_BASE_URL="$PUBLIC_QUOTE_BASE_URL"
 
       - name: Prepare test payload

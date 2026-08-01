@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:typed_data';
+import 'package:image/image.dart' as img;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -1812,16 +1812,6 @@ class TicketPdfService {
   static Future<List<Map<String, dynamic>>> _enrichNotesWithImages(
     List<Map<String, dynamic>> notes,
   ) async {
-    if (kIsWeb) {
-      return notes
-          .map((raw) {
-            final note = Map<String, dynamic>.from(raw);
-            note['pdf_images'] = <pw.ImageProvider>[];
-            return note;
-          })
-          .toList(growable: false);
-    }
-
     final List<Map<String, dynamic>> enriched = [];
     for (final raw in notes) {
       final note = Map<String, dynamic>.from(raw);
@@ -1837,9 +1827,9 @@ class TicketPdfService {
         try {
           final uri = Uri.tryParse(url);
           if (uri == null) continue;
-          final resp = await http.get(uri);
+          final resp = await http.get(uri).timeout(const Duration(seconds: 20));
           if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
-            images.add(pw.MemoryImage(resp.bodyBytes));
+            images.add(pw.MemoryImage(_preparePhotoForPdf(resp.bodyBytes)));
           }
         } catch (_) {}
       }
@@ -1847,6 +1837,31 @@ class TicketPdfService {
       enriched.add(note);
     }
     return enriched;
+  }
+
+  /// Telefonlardan gelen yüksek çözünürlüklü fotoğrafları PDF'e eklemeden
+  /// önce küçültür. Böylece çok fotoğraflı servis raporları tarayıcının
+  /// belleğini tüketmeden hazırlanabilir.
+  static Uint8List _preparePhotoForPdf(Uint8List source) {
+    try {
+      final decoded = img.decodeImage(source);
+      if (decoded == null) return source;
+
+      final oriented = img.bakeOrientation(decoded);
+      const maxEdge = 1400;
+      final resized =
+          oriented.width >= oriented.height
+              ? (oriented.width > maxEdge
+                  ? img.copyResize(oriented, width: maxEdge)
+                  : oriented)
+              : (oriented.height > maxEdge
+                  ? img.copyResize(oriented, height: maxEdge)
+                  : oriented);
+
+      return Uint8List.fromList(img.encodeJpg(resized, quality: 76));
+    } catch (_) {
+      return source;
+    }
   }
 
   static Future<pw.Document> _generateStandardTicketPdf(
@@ -2451,47 +2466,52 @@ class TicketPdfService {
     );
     if (!imagesExist) return [];
 
-    return [
+    final widgets = <pw.Widget>[
       pw.NewPage(),
       PdfHelper.buildSectionHeader('EK.1 - SERVİS FOTOĞRAF EKLERİ', font),
-      ...notes.where((n) => (n['pdf_images'] as List?)?.isNotEmpty ?? false).map((
-        note,
-      ) {
-        final List<pw.ImageProvider> images = List<pw.ImageProvider>.from(
-          note['pdf_images'],
-        );
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Text(
-              '${note['profiles']?['full_name'] ?? 'Teknisyen'} - ${PdfHelper.formatDate(note['created_at'])}',
-              style: pw.TextStyle(
-                font: font,
-                fontSize: 9,
-                fontWeight: pw.FontWeight.bold,
-                color: primary,
-              ),
-            ),
-            pw.SizedBox(height: 4),
-            pw.Wrap(
-              spacing: 5,
-              runSpacing: 5,
-              children:
-                  images
-                      .map(
-                        (img) => pw.Container(
-                          width: 110,
-                          height: 110,
-                          child: pw.Image(img, fit: pw.BoxFit.cover),
-                        ),
-                      )
-                      .toList(),
-            ),
-            pw.SizedBox(height: 12),
-          ],
-        );
-      }),
     ];
+
+    for (final note in notes.where(
+      (item) => (item['pdf_images'] as List?)?.isNotEmpty ?? false,
+    )) {
+      final images = List<pw.ImageProvider>.from(note['pdf_images']);
+      widgets.add(
+        pw.Text(
+          '${note['profiles']?['full_name'] ?? 'Teknisyen'} - ${PdfHelper.formatDate(note['created_at'])}',
+          style: pw.TextStyle(
+            font: font,
+            fontSize: 9,
+            fontWeight: pw.FontWeight.bold,
+            color: primary,
+          ),
+        ),
+      );
+      widgets.add(pw.SizedBox(height: 4));
+
+      // Ayrı satırlar MultiPage'in uzun fotoğraf listelerini sayfalara
+      // bölebilmesini sağlar.
+      for (var index = 0; index < images.length; index += 3) {
+        final rowImages = images.skip(index).take(3);
+        widgets.add(
+          pw.Row(
+            children: [
+              for (final image in rowImages) ...[
+                pw.Container(
+                  width: 110,
+                  height: 110,
+                  child: pw.Image(image, fit: pw.BoxFit.cover),
+                ),
+                pw.SizedBox(width: 5),
+              ],
+            ],
+          ),
+        );
+        widgets.add(pw.SizedBox(height: 5));
+      }
+      widgets.add(pw.SizedBox(height: 7));
+    }
+
+    return widgets;
   }
 
   static pw.Widget _buildFooter(

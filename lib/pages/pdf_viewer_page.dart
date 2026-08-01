@@ -1,11 +1,9 @@
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 
 import '../theme/app_colors.dart';
-import '../utils/pdf_file_saver/pdf_file_saver.dart';
 
 class PdfViewerPage extends StatefulWidget {
   final String title;
@@ -26,7 +24,6 @@ class PdfViewerPage extends StatefulWidget {
 class _PdfViewerPageState extends State<PdfViewerPage> {
   Uint8List? _cachedPdfBytes;
   bool _isLoading = true;
-  bool _downloadStarted = false;
   String? _errorMessage;
 
   @override
@@ -40,7 +37,6 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
-        _downloadStarted = false;
       });
 
       final bytes = await widget.pdfGenerator();
@@ -57,19 +53,14 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
         );
       }
 
-      if (mounted && kIsWeb) {
-        await PdfFileSaver.save(bytes: bytes, filename: widget.pdfFileName);
-      }
-
       if (mounted) {
         setState(() {
           _cachedPdfBytes = bytes;
           _isLoading = false;
-          _downloadStarted = kIsWeb;
         });
       }
     } catch (e, stackTrace) {
-      print('PdfViewerPage: PDF yukleme hatasi: $e');
+      print('PdfViewerPage: PDF yükleme hatası: $e');
       print('PdfViewerPage: Stack trace: $stackTrace');
       if (mounted) {
         setState(() {
@@ -131,7 +122,7 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
             CircularProgressIndicator(color: AppColors.corporateNavy),
             SizedBox(height: 16),
             Text(
-              'Belge hazirlanıyor...',
+              'Belge Hazırlanıyor...',
               style: TextStyle(
                 fontSize: 16,
                 color: AppColors.textLight,
@@ -151,7 +142,7 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
             Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
             const SizedBox(height: 16),
             const Text(
-              'Belge goruntulenemedi',
+              'Belge Görüntülenemedi',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -188,7 +179,7 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                 ElevatedButton.icon(
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.arrow_back),
-                  label: const Text('Geri don'),
+                  label: const Text('Geri Dön'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.corporateNavy,
                     foregroundColor: Colors.white,
@@ -208,19 +199,15 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
     if (_cachedPdfBytes == null) {
       return const Center(
         child: Text(
-          'PDF yuklenemedi',
+          'PDF yüklenemedi',
           style: TextStyle(fontSize: 16, color: AppColors.textLight),
         ),
       );
     }
 
-    if (kIsWeb) {
-      return _buildWebDownloadView();
-    }
-
     return PdfPreview(
       build: (format) {
-        print('PdfPreview: build cagrildi, format: $format');
+        print('PdfPreview: build çağrıldı, format: $format');
         final bytesCopy = Uint8List.fromList(_cachedPdfBytes!);
         return Future.value(bytesCopy);
       },
@@ -237,7 +224,7 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
             CircularProgressIndicator(color: AppColors.corporateNavy),
             SizedBox(height: 16),
             Text(
-              'Belge hazirlanıyor...',
+              'Belge Hazırlanıyor...',
               style: TextStyle(
                 fontSize: 16,
                 color: AppColors.textLight,
@@ -255,7 +242,7 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                 Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
                 const SizedBox(height: 16),
                 const Text(
-                  'Belge goruntulenemedi',
+                  'Belge Görüntülenemedi',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -278,7 +265,7 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                 ElevatedButton.icon(
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.arrow_back),
-                  label: const Text('Geri don'),
+                  label: const Text('Geri Dön'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.corporateNavy,
                     foregroundColor: Colors.white,
@@ -292,59 +279,6 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
             ),
           ),
       scrollViewDecoration: const BoxDecoration(color: Color(0xFFF1F5F9)),
-    );
-  }
-
-  Widget _buildWebDownloadView() {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              _downloadStarted ? Icons.download_done : Icons.picture_as_pdf,
-              size: 64,
-              color: AppColors.corporateNavy,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _downloadStarted ? 'PDF indirildi' : 'PDF indiriliyor...',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.corporateNavy,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              widget.pdfFileName,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: AppColors.textLight),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: _loadPdf,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Tekrar indir'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.corporateNavy,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 22,
-                  vertical: 12,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.arrow_back),
-              label: const Text('Geri don'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

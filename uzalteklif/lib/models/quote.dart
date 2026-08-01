@@ -611,7 +611,7 @@ class Quote {
   double effectiveNetUnitPriceTl(QuoteLineItem item) =>
       item.netUnitPriceTl * upliftFactor;
 
-  /// Uplift sonrası efektif birim fiyat (iskontosuz, PDF'te "birim fiyat" sütunu için).
+  /// Uplift sonrası efektif iskontosuz birim fiyat (iç hesaplama için).
   double effectiveUnitPriceTl(QuoteLineItem item) =>
       item.unitPriceTl * upliftFactor;
 

@@ -951,7 +951,6 @@ class PdfExportService {
         item.documentDescription,
         item.unit,
         _formatQuantity(item.quantity),
-        price.fmtAmount(quote.effectiveUnitPriceTl(item)),
         price.fmtAmount(quote.effectiveNetUnitPriceTl(item)),
         price.fmtAmount(quote.effectiveLineTotalTl(item)),
       ]);
@@ -969,12 +968,11 @@ class PdfExportService {
       columnWidths: const {
         0: pw.FixedColumnWidth(22),
         1: pw.FixedColumnWidth(72),
-        2: pw.FlexColumnWidth(3.3),
-        3: pw.FixedColumnWidth(34),
-        4: pw.FixedColumnWidth(40),
-        5: pw.FlexColumnWidth(1.35),
-        6: pw.FlexColumnWidth(1.35),
-        7: pw.FlexColumnWidth(1.45),
+        2: pw.FlexColumnWidth(4),
+        3: pw.FixedColumnWidth(36),
+        4: pw.FixedColumnWidth(42),
+        5: pw.FlexColumnWidth(1.5),
+        6: pw.FlexColumnWidth(1.6),
       },
       children: [
         _tableHeaderRow([
@@ -984,11 +982,10 @@ class PdfExportService {
           'Birim',
           'Miktar',
           'Birim Fiyat\n(${price.displaySymbol})',
-          'Net Birim\n(${price.displaySymbol})',
           'Toplam\n(${price.displaySymbol})',
         ], repeat: true),
         for (var i = 0; i < rows.length; i++)
-          _tableDataRow(rows[i], isZebra: i.isOdd, totalColumnIndex: 7),
+          _tableDataRow(rows[i], isZebra: i.isOdd, totalColumnIndex: 6),
       ],
     );
   }

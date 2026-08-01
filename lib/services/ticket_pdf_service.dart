@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -1811,6 +1812,16 @@ class TicketPdfService {
   static Future<List<Map<String, dynamic>>> _enrichNotesWithImages(
     List<Map<String, dynamic>> notes,
   ) async {
+    if (kIsWeb) {
+      return notes
+          .map((raw) {
+            final note = Map<String, dynamic>.from(raw);
+            note['pdf_images'] = <pw.ImageProvider>[];
+            return note;
+          })
+          .toList(growable: false);
+    }
+
     final List<Map<String, dynamic>> enriched = [];
     for (final raw in notes) {
       final note = Map<String, dynamic>.from(raw);

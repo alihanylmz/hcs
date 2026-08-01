@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -1076,6 +1077,37 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
 
     final partnerName =
         uniquePartners.length == 1 ? uniquePartners.first : null;
+
+    if (kIsWeb) {
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('PDF hazırlanıyor...')),
+        );
+        final bytes = await PdfExportService.generateTicketListPdfBytesFromList(
+          tickets: tickets,
+          reportTitle: 'Biten Isler Listesi',
+          partnerName: partnerName,
+          generatedBy: _userName,
+        );
+        await PdfExportService.savePdf(
+          bytes,
+          'Biten_Isler_${DateTime.now().toIso8601String().substring(0, 10)}.pdf',
+        );
+        if (!context.mounted) return;
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          const SnackBar(content: Text('PDF indirme başlatıldı.')),
+        );
+      } catch (error) {
+        if (!context.mounted) return;
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          SnackBar(content: Text('PDF üretilemedi: $error')),
+        );
+      }
+      return;
+    }
 
     await Navigator.of(context).push(
       MaterialPageRoute(

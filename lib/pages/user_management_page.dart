@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../features/admin/application/admin_access_controller.dart';
 import '../models/partner.dart';
+import '../models/user_app_access.dart';
 import '../models/user_profile.dart';
 import '../services/partner_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/access_denied_view.dart';
 import '../widgets/custom_header.dart';
+import '../widgets/user_access_editor_dialog.dart';
 
 class UserManagementPage extends StatefulWidget {
   const UserManagementPage({super.key});
@@ -25,8 +27,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
   List<UserProfile> _allUsers = [];
   List<UserProfile> _filteredUsers = [];
   List<Partner> _partners = [];
-  Set<String> _teklifUserIds = {};
-  final Set<String> _updatingAppAccessUserIds = {};
+  Map<String, Map<String, UserAppAccess>> _appAccessByUser = {};
+  UserProfile? _currentProfile;
+  final Set<String> _savingUserIds = {};
 
   bool _hasAccess = false;
   bool _isLoading = true;
@@ -117,14 +120,15 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
       final users = await _userService.getAllUsers();
       final partners = await _partnerService.getAllPartners();
-      final teklifUserIds = await _userService.getActiveAppUserIds('teklif');
+      final appAccessByUser = await _userService.getAllUserAppAccess();
 
       if (!mounted) return;
       setState(() {
         _hasAccess = true;
+        _currentProfile = accessState.profile;
         _allUsers = users;
         _partners = partners;
-        _teklifUserIds = teklifUserIds;
+        _appAccessByUser = appAccessByUser;
         _isLoading = false;
       });
       _applyFilters();
@@ -140,235 +144,72 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
   }
 
-  Future<void> _toggleTeklifAccess(UserProfile user, bool enabled) async {
-    if (_updatingAppAccessUserIds.contains(user.id)) return;
+  Future<void> _openAccessEditor(UserProfile user) async {
+    if (_savingUserIds.contains(user.id)) return;
 
-    setState(() {
-      _updatingAppAccessUserIds.add(user.id);
-    });
-
-    try {
-      await _userService.setAppAccess(
-        user: user,
-        appCode: 'teklif',
-        isActive: enabled,
-      );
-      if (!mounted) return;
-      setState(() {
-        if (enabled) {
-          _teklifUserIds.add(user.id);
-        } else {
-          _teklifUserIds.remove(user.id);
-        }
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            enabled
-                ? '${user.displayName} artık Teklif uygulamasına erişebilir.'
-                : '${user.displayName} için Teklif erişimi kapatıldı.',
-          ),
-          backgroundColor: enabled ? Colors.green : Colors.orange,
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Teklif erişimi güncellenemedi: $error'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _updatingAppAccessUserIds.remove(user.id);
-        });
-      }
-    }
-  }
-
-  Future<Partner?> _showPartnerSelectDialog() async {
-    if (_partners.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Önce partner firma eklemelisiniz.')),
-      );
-      return null;
-    }
-
-    return showDialog<Partner>(
+    final accesses = _appAccessByUser[user.id] ?? const {};
+    final workAccess = accesses['is_takip'];
+    final quoteAccess = accesses['teklif'];
+    final knownWorkRoles =
+        UserAccessCatalog.isTakipRoles.map((role) => role.code).toSet();
+    final proposedWorkRole = workAccess?.appRole ?? user.role;
+    final workRole =
+        knownWorkRoles.contains(proposedWorkRole)
+            ? proposedWorkRole
+            : UserRole.user;
+    final knownQuoteRoles =
+        UserAccessCatalog.teklifRoles.map((role) => role.code).toSet();
+    final proposedQuoteRole = quoteAccess?.appRole ?? 'sales';
+    final quoteRole =
+        knownQuoteRoles.contains(proposedQuoteRole)
+            ? proposedQuoteRole
+            : 'sales';
+    final draft = await showDialog<UserAccessDraft>(
       context: context,
+      barrierDismissible: false,
       builder:
-          (context) => SimpleDialog(
-            title: const Text('Partner firmayı seçin'),
-            children:
-                _partners
-                    .map(
-                      (partner) => SimpleDialogOption(
-                        onPressed: () => Navigator.pop(context, partner),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.business_outlined,
-                              color: Colors.purple,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(child: Text(partner.name)),
-                          ],
-                        ),
-                      ),
-                    )
-                    .toList(),
-          ),
-    );
-  }
-
-  Future<void> _changeRole(UserProfile user) async {
-    final selectedRole = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder:
-          (context) => SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(
-                    'Yetki seviyesi seçin',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                  ),
-                ),
-                const Divider(height: 1),
-                _buildRoleOption(
-                  context,
-                  UserRole.admin,
-                  'Sistem yöneticisi',
-                  Icons.admin_panel_settings_outlined,
-                  Colors.red,
-                ),
-                _buildRoleOption(
-                  context,
-                  UserRole.manager,
-                  'Yönetici',
-                  Icons.manage_accounts_outlined,
-                  Colors.orange,
-                ),
-                _buildRoleOption(
-                  context,
-                  UserRole.supervisor,
-                  'Süpervizör',
-                  Icons.supervisor_account_outlined,
-                  Colors.teal,
-                ),
-                _buildRoleOption(
-                  context,
-                  UserRole.engineer,
-                  'Mühendis',
-                  Icons.design_services_outlined,
-                  Colors.indigo,
-                ),
-                _buildRoleOption(
-                  context,
-                  UserRole.technician,
-                  'Teknisyen',
-                  Icons.engineering_outlined,
-                  Colors.blue,
-                ),
-                _buildRoleOption(
-                  context,
-                  UserRole.user,
-                  'Kullanıcı',
-                  Icons.person_outline_rounded,
-                  Colors.blueGrey,
-                ),
-                _buildRoleOption(
-                  context,
-                  UserRole.partnerUser,
-                  'Partner kullanıcısı',
-                  Icons.business_outlined,
-                  Colors.purple,
-                ),
-                _buildRoleOption(
-                  context,
-                  UserRole.pending,
-                  'Onay bekliyor',
-                  Icons.hourglass_empty_rounded,
-                  Colors.grey,
-                ),
-                const SizedBox(height: 16),
-              ],
+          (context) => UserAccessEditorDialog(
+            user: user,
+            partners: _partners,
+            isCurrentUser: _currentProfile?.id == user.id,
+            readOnly:
+                _currentProfile?.role != UserRole.admin &&
+                (user.role == UserRole.admin ||
+                    quoteAccess?.appRole == 'admin'),
+            initialDraft: UserAccessDraft(
+              isTakipActive:
+                  workAccess?.isActive ?? user.role != UserRole.pending,
+              isTakipRole: workRole,
+              teklifActive: quoteAccess?.isActive ?? false,
+              teklifRole: quoteRole,
+              partnerId: user.partnerId,
             ),
           ),
     );
+    if (draft == null || !mounted) return;
 
-    if (selectedRole == null) {
-      return;
-    }
-
-    int? selectedPartnerId;
-    if (selectedRole == UserRole.partnerUser) {
-      final partner = await _showPartnerSelectDialog();
-      if (partner == null) return;
-      selectedPartnerId = partner.id;
-    }
-
-    setState(() => _isLoading = true);
+    setState(() => _savingUserIds.add(user.id));
     try {
-      if (selectedRole == UserRole.pending) {
-        await _userService.updateUserRole(
-          user.id,
-          selectedRole,
-          partnerId: selectedPartnerId,
-        );
-      } else {
-        await _userService.approveUserAccount(
-          user.id,
-          selectedRole,
-          partnerId: selectedPartnerId,
-        );
-      }
-
+      await _userService.saveUserAccessConfiguration(user: user, draft: draft);
       await _loadData();
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            selectedRole == UserRole.pending
-                ? 'Kullanıcı tekrar onay bekleyen duruma alındı.'
-                : 'Kullanıcı onaylandı ve rolü güncellendi.',
-          ),
-          backgroundColor: Colors.green,
+          content: Text('${user.displayName} için yetkiler güncellendi.'),
+          backgroundColor: Colors.green.shade700,
         ),
       );
     } catch (error) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $error'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Yetkiler güncellenemedi: $error'),
+          backgroundColor: Colors.red.shade700,
+        ),
       );
+    } finally {
+      if (mounted) setState(() => _savingUserIds.remove(user.id));
     }
-  }
-
-  ListTile _buildRoleOption(
-    BuildContext context,
-    String roleKey,
-    String label,
-    IconData icon,
-    Color color,
-  ) {
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: color.withOpacity(0.12),
-        child: Icon(icon, color: color, size: 20),
-      ),
-      title: Text(label),
-      onTap: () => Navigator.pop(context, roleKey),
-    );
   }
 
   @override
@@ -455,6 +296,15 @@ class _UserManagementPageState extends State<UserManagementPage> {
   Widget _buildToolbar(Color surfaceColor, bool isDark) {
     final pendingCount =
         _allUsers.where((user) => user.role == UserRole.pending).length;
+    final workAccessCount =
+        _allUsers.where((user) {
+          final access = _appAccessByUser[user.id]?['is_takip'];
+          return access?.isActive ?? user.role != UserRole.pending;
+        }).length;
+    final quoteAccessCount =
+        _allUsers.where((user) {
+          return _appAccessByUser[user.id]?['teklif']?.isActive ?? false;
+        }).length;
 
     return Container(
       color: surfaceColor,
@@ -478,11 +328,12 @@ class _UserManagementPageState extends State<UserManagementPage> {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final roleFilter = Expanded(
                 child: DropdownButtonFormField<String>(
-                  value:
+                  key: ValueKey('role-filter-$_selectedRoleFilter'),
+                  initialValue:
                       _selectedRoleFilter.isEmpty ? null : _selectedRoleFilter,
                   decoration: const InputDecoration(labelText: 'Rol filtresi'),
                   items: [
@@ -528,11 +379,11 @@ class _UserManagementPageState extends State<UserManagementPage> {
                     _applyFilters();
                   },
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
+              );
+              final sortFilter = Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _sortOption,
+                  key: ValueKey('sort-$_sortOption'),
+                  initialValue: _sortOption,
                   decoration: const InputDecoration(labelText: 'Sıralama'),
                   items: const [
                     DropdownMenuItem(value: 'name', child: Text('İsme göre')),
@@ -549,36 +400,63 @@ class _UserManagementPageState extends State<UserManagementPage> {
                     _applyFilters();
                   },
                 ),
-              ),
-            ],
+              );
+              if (constraints.maxWidth < 620) {
+                return Column(
+                  children: [
+                    Row(children: [roleFilter]),
+                    const SizedBox(height: 10),
+                    Row(children: [sortFilter]),
+                  ],
+                );
+              }
+              return Row(
+                children: [roleFilter, const SizedBox(width: 12), sortFilter],
+              );
+            },
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              _buildInfoChip(
-                label: 'Toplam',
-                value: _allUsers.length.toString(),
-                color: AppColors.corporateNavy,
-              ),
-              const SizedBox(width: 8),
-              _buildInfoChip(
-                label: 'Onay bekleyen',
-                value: pendingCount.toString(),
-                color: Colors.amber.shade700,
-              ),
-              const Spacer(),
-              if (_searchQuery.isNotEmpty || _selectedRoleFilter.isNotEmpty)
-                TextButton.icon(
-                  onPressed: () {
-                    _searchController.clear();
-                    _selectedRoleFilter = '';
-                    _sortOption = 'name';
-                    _applyFilters();
-                  },
-                  icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
-                  label: const Text('Temizle'),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _buildInfoChip(
+                  label: 'Toplam',
+                  value: _allUsers.length.toString(),
+                  color: AppColors.corporateNavy,
                 ),
-            ],
+                _buildInfoChip(
+                  label: 'İş Takip',
+                  value: workAccessCount.toString(),
+                  color: Colors.blue.shade700,
+                ),
+                _buildInfoChip(
+                  label: 'Teklif',
+                  value: quoteAccessCount.toString(),
+                  color: Colors.green.shade700,
+                ),
+                if (pendingCount > 0)
+                  _buildInfoChip(
+                    label: 'Onay bekleyen',
+                    value: pendingCount.toString(),
+                    color: Colors.amber.shade700,
+                  ),
+                if (_searchQuery.isNotEmpty || _selectedRoleFilter.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: () {
+                      _searchController.clear();
+                      _selectedRoleFilter = '';
+                      _sortOption = 'name';
+                      _applyFilters();
+                    },
+                    icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
+                    label: const Text('Temizle'),
+                  ),
+              ],
+            ),
           ),
           if (isDark) const SizedBox(height: 4),
         ],
@@ -594,9 +472,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.24)),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -705,8 +583,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }) {
     final roleColor = _getRoleColor(user.role);
     final partnerName = _findPartnerName(user.partnerId);
-    final hasTeklifAccess = _teklifUserIds.contains(user.id);
-    final isUpdatingAccess = _updatingAppAccessUserIds.contains(user.id);
+    final accesses = _appAccessByUser[user.id] ?? const {};
+    final workAccess = accesses['is_takip'];
+    final quoteAccess = accesses['teklif'];
+    final workActive = workAccess?.isActive ?? user.role != UserRole.pending;
+    final quoteActive = quoteAccess?.isActive ?? false;
+    final workRole = workAccess?.appRole ?? user.role;
+    final quoteRole = quoteAccess?.appRole ?? 'sales';
+    final isSaving = _savingUserIds.contains(user.id);
 
     return Card(
       margin: EdgeInsets.zero,
@@ -716,12 +600,12 @@ class _UserManagementPageState extends State<UserManagementPage> {
         side: BorderSide(
           color:
               highlightPending
-                  ? Colors.amber.withOpacity(0.45)
+                  ? Colors.amber.withValues(alpha: 0.45)
                   : Colors.grey.shade300,
         ),
       ),
       child: InkWell(
-        onTap: () => _changeRole(user),
+        onTap: () => _openAccessEditor(user),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(14),
@@ -729,7 +613,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: roleColor.withOpacity(0.12),
+                backgroundColor: roleColor.withValues(alpha: 0.12),
                 child: Text(
                   user.displayName.isNotEmpty
                       ? user.displayName.substring(0, 1).toUpperCase()
@@ -795,73 +679,38 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         ],
                       ),
                     ],
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        padding: const EdgeInsets.only(left: 9, right: 3),
-                        decoration: BoxDecoration(
-                          color:
-                              hasTeklifAccess
-                                  ? Colors.green.withOpacity(0.10)
-                                  : Colors.grey.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color:
-                                hasTeklifAccess
-                                    ? Colors.green.withOpacity(0.32)
-                                    : Colors.grey.withOpacity(0.24),
-                          ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 7,
+                      runSpacing: 7,
+                      children: [
+                        _buildAppAccessBadge(
+                          label: 'İş Takip',
+                          roleLabel:
+                              workActive
+                                  ? UserAccessCatalog.roleFor(
+                                    'is_takip',
+                                    workRole,
+                                  ).label
+                                  : 'Kapalı',
+                          active: workActive,
+                          icon: Icons.assignment_turned_in_outlined,
+                          color: AppColors.corporateNavy,
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.request_quote_outlined,
-                              size: 15,
-                              color:
-                                  hasTeklifAccess
-                                      ? Colors.green.shade700
-                                      : Colors.grey.shade600,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              hasTeklifAccess
-                                  ? 'Teklif erişimi açık'
-                                  : 'Teklif erişimi kapalı',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color:
-                                    hasTeklifAccess
-                                        ? Colors.green.shade700
-                                        : Colors.grey.shade600,
-                              ),
-                            ),
-                            if (isUpdatingAccess)
-                              const Padding(
-                                padding: EdgeInsets.all(9),
-                                child: SizedBox(
-                                  width: 15,
-                                  height: 15,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              )
-                            else
-                              Transform.scale(
-                                scale: 0.72,
-                                child: Switch.adaptive(
-                                  value: hasTeklifAccess,
-                                  onChanged:
-                                      (value) =>
-                                          _toggleTeklifAccess(user, value),
-                                ),
-                              ),
-                          ],
+                        _buildAppAccessBadge(
+                          label: 'Teklif',
+                          roleLabel:
+                              quoteActive
+                                  ? UserAccessCatalog.roleFor(
+                                    'teklif',
+                                    quoteRole,
+                                  ).label
+                                  : 'Kapalı',
+                          active: quoteActive,
+                          icon: Icons.request_quote_outlined,
+                          color: Colors.green.shade700,
                         ),
-                      ),
+                      ],
                     ),
                     if (highlightPending) ...[
                       const SizedBox(height: 8),
@@ -878,10 +727,50 @@ class _UserManagementPageState extends State<UserManagementPage> {
                 ),
               ),
               const SizedBox(width: 10),
-              Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
+              if (isSaving)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                Icon(Icons.tune_rounded, color: Colors.grey.shade500, size: 21),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildAppAccessBadge({
+    required String label,
+    required String roleLabel,
+    required bool active,
+    required IconData icon,
+    required Color color,
+  }) {
+    final effectiveColor = active ? color : Colors.grey.shade600;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+      decoration: BoxDecoration(
+        color: effectiveColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: effectiveColor.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: effectiveColor),
+          const SizedBox(width: 6),
+          Text(
+            '$label · $roleLabel',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: effectiveColor,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -890,9 +779,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withOpacity(0.28)),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
       ),
       child: Text(
         _getRoleLabel(role),

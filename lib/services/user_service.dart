@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/logging/app_logger.dart';
+import '../models/user_app_access.dart';
 import '../models/user_profile.dart';
 import 'permission_service.dart';
 
@@ -28,7 +29,7 @@ class UserService {
         return null;
       }
 
-      return UserProfile.fromJson(data as Map<String, dynamic>);
+      return UserProfile.fromJson(data);
     } catch (error, stackTrace) {
       _logger.error(
         'get_current_user_profile_failed',
@@ -148,6 +149,168 @@ class UserService {
         stackTrace: stackTrace,
       );
       rethrow;
+    }
+  }
+
+  Future<Map<String, Map<String, UserAppAccess>>> getAllUserAppAccess() async {
+    try {
+      final List<dynamic> rows = await _client
+          .from('user_app_access')
+          .select(
+            'user_id, app_code, app_role, is_active, granted_at, updated_at',
+          );
+      final result = <String, Map<String, UserAppAccess>>{};
+      for (final raw in rows) {
+        final access = UserAppAccess.fromJson(
+          Map<String, dynamic>.from(raw as Map),
+        );
+        if (access.userId.isEmpty || access.appCode.isEmpty) continue;
+        result.putIfAbsent(access.userId, () => {})[access.appCode] = access;
+      }
+      return result;
+    } catch (error, stackTrace) {
+      _logger.error(
+        'get_all_user_app_access_failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> saveUserAccessConfiguration({
+    required UserProfile user,
+    required UserAccessDraft draft,
+  }) async {
+    _validateAccessDraft(draft);
+    final actorId = _client.auth.currentUser?.id;
+    if (actorId == null) {
+      throw Exception('Oturum bulunamadı.');
+    }
+    final actorProfile = await getCurrentUserProfile();
+    if (actorProfile == null || !actorProfile.isManager) {
+      throw Exception('Bu işlem için kullanıcı yönetimi yetkiniz yok.');
+    }
+    final targetQuoteAccess =
+        await _client
+            .from('user_app_access')
+            .select('app_role')
+            .eq('user_id', user.id)
+            .eq('app_code', 'teklif')
+            .maybeSingle();
+    if (!actorProfile.isAdmin &&
+        (user.isAdmin ||
+            draft.isTakipRole == UserRole.admin ||
+            targetQuoteAccess?['app_role'] == 'admin' ||
+            draft.teklifRole == 'admin')) {
+      throw Exception(
+        'Yönetici, sistem yöneticisi hesabını değiştiremez veya atayamaz.',
+      );
+    }
+    if (actorId == user.id &&
+        (!draft.isTakipActive ||
+            !const {
+              UserRole.admin,
+              UserRole.manager,
+            }.contains(draft.isTakipRole))) {
+      throw Exception(
+        'Kendi İş Takip erişiminizi kapatamaz veya yönetici rolünüzü düşüremezsiniz.',
+      );
+    }
+    if (user.isAdmin &&
+        (!draft.isTakipActive || draft.isTakipRole != UserRole.admin)) {
+      final activeAdmins = await _client
+          .from('user_app_access')
+          .select('user_id')
+          .eq('app_code', 'is_takip')
+          .eq('app_role', 'admin')
+          .eq('is_active', true);
+      if (activeAdmins.length <= 1) {
+        throw Exception(
+          'Sistemde en az bir aktif sistem yöneticisi kalmalıdır.',
+        );
+      }
+    }
+
+    try {
+      await _client.rpc(
+        'manage_user_access',
+        params: {
+          'p_user_id': user.id,
+          'p_is_takip_active': draft.isTakipActive,
+          'p_is_takip_role': draft.isTakipRole,
+          'p_teklif_active': draft.teklifActive,
+          'p_teklif_role': draft.teklifRole,
+          'p_partner_id': draft.partnerId,
+        },
+      );
+      return;
+    } on PostgrestException catch (error) {
+      final functionMissing =
+          error.code == 'PGRST202' ||
+          error.message.contains('manage_user_access');
+      if (!functionMissing) rethrow;
+      _logger.warning(
+        'manage_user_access_rpc_missing_fallback',
+        data: {'userId': user.id},
+      );
+    }
+
+    // Yeni RPC migrationı uygulanana kadar mevcut ortak tablo yapısıyla
+    // geriye uyumlu çalışır.
+    if (draft.isTakipActive) {
+      await approveUserAccount(
+        user.id,
+        draft.isTakipRole,
+        partnerId: draft.partnerId,
+      );
+    } else {
+      await updateUserRole(user.id, UserRole.pending);
+    }
+    await _client.from('user_app_access').upsert({
+      'user_id': user.id,
+      'app_code': 'is_takip',
+      'app_role': draft.isTakipRole,
+      'is_active': draft.isTakipActive,
+      'granted_by': actorId,
+    }, onConflict: 'user_id,app_code');
+    await _client.from('user_app_access').upsert({
+      'user_id': user.id,
+      'app_code': 'teklif',
+      'app_role': draft.teklifRole,
+      'is_active': draft.teklifActive,
+      'granted_by': actorId,
+    }, onConflict: 'user_id,app_code');
+  }
+
+  void _validateAccessDraft(UserAccessDraft draft) {
+    const isTakipRoles = {
+      UserRole.admin,
+      UserRole.manager,
+      UserRole.supervisor,
+      UserRole.engineer,
+      UserRole.technician,
+      UserRole.user,
+      UserRole.partnerUser,
+    };
+    const teklifRoles = {
+      'admin',
+      'manager',
+      'sales',
+      'finance',
+      'operations',
+      'viewer',
+    };
+    if (!isTakipRoles.contains(draft.isTakipRole)) {
+      throw Exception('Geçersiz İş Takip rolü.');
+    }
+    if (!teklifRoles.contains(draft.teklifRole)) {
+      throw Exception('Geçersiz Teklif rolü.');
+    }
+    if (draft.isTakipActive &&
+        draft.isTakipRole == UserRole.partnerUser &&
+        draft.partnerId == null) {
+      throw Exception('Partner kullanıcı için firma seçilmelidir.');
     }
   }
 

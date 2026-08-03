@@ -12,6 +12,7 @@ void main() {
     role: UserRole.user,
   );
   const draft = UserAccessDraft(
+    businessRole: 'sales_representative',
     isTakipActive: true,
     isTakipRole: UserRole.user,
     teklifActive: true,
@@ -46,8 +47,14 @@ void main() {
 
     expect(find.text('İş Takip'), findsOneWidget);
     expect(find.text('Teklif'), findsOneWidget);
+    expect(find.text('Satış Personeli'), findsOneWidget);
     expect(find.text('Yetkileri Kaydet'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    final layoutError = tester.takeException();
+    expect(
+      layoutError,
+      isNull,
+      reason: layoutError is FlutterError ? layoutError.toStringDeep() : null,
+    );
   });
 
   testWidgets('genis ekranda iki uygulama yetkisini gosterir', (tester) async {

@@ -284,6 +284,8 @@ class UserService {
   }
 
   void _validateAccessDraft(UserAccessDraft draft) {
+    final businessRoles =
+        UserAccessCatalog.businessRoles.map((role) => role.code).toSet();
     const isTakipRoles = {
       UserRole.admin,
       UserRole.manager,
@@ -301,6 +303,9 @@ class UserService {
       'operations',
       'viewer',
     };
+    if (!businessRoles.contains(draft.businessRole)) {
+      throw Exception('Geçersiz kurumsal rol.');
+    }
     if (!isTakipRoles.contains(draft.isTakipRole)) {
       throw Exception('Geçersiz İş Takip rolü.');
     }

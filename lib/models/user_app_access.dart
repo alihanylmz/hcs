@@ -29,6 +29,7 @@ class UserAppAccess {
 
 class UserAccessDraft {
   const UserAccessDraft({
+    required this.businessRole,
     required this.isTakipActive,
     required this.isTakipRole,
     required this.teklifActive,
@@ -36,6 +37,7 @@ class UserAccessDraft {
     this.partnerId,
   });
 
+  final String businessRole;
   final bool isTakipActive;
   final String isTakipRole;
   final bool teklifActive;
@@ -57,14 +59,117 @@ class AppRoleDefinition {
   final List<String> permissions;
 }
 
+class BusinessRoleDefinition {
+  const BusinessRoleDefinition({
+    required this.code,
+    required this.label,
+    required this.department,
+    required this.description,
+    required this.isTakipActive,
+    required this.isTakipRole,
+    required this.teklifActive,
+    required this.teklifRole,
+    this.customerRole = false,
+  });
+
+  final String code;
+  final String label;
+  final String department;
+  final String description;
+  final bool isTakipActive;
+  final String isTakipRole;
+  final bool teklifActive;
+  final String teklifRole;
+  final bool customerRole;
+}
+
 class UserAccessCatalog {
   const UserAccessCatalog._();
+
+  static const businessRoles = <BusinessRoleDefinition>[
+    BusinessRoleDefinition(
+      code: 'owner',
+      label: 'Patron',
+      department: 'Üst Yönetim',
+      description:
+          'Şirketin tamamına, finansal verilere ve sistem ayarlarına erişir.',
+      isTakipActive: true,
+      isTakipRole: 'admin',
+      teklifActive: true,
+      teklifRole: 'admin',
+    ),
+    BusinessRoleDefinition(
+      code: 'general_manager',
+      label: 'Genel Müdür',
+      department: 'Üst Yönetim',
+      description: 'Günlük operasyonu, satış ve teknik ekipleri yönetir.',
+      isTakipActive: true,
+      isTakipRole: 'manager',
+      teklifActive: true,
+      teklifRole: 'manager',
+    ),
+    BusinessRoleDefinition(
+      code: 'sales_representative',
+      label: 'Satış Personeli',
+      department: 'Satış Departmanı',
+      description:
+          'Cari, keşif ve teklif süreçlerini yürütür; teknik süreci izler.',
+      isTakipActive: true,
+      isTakipRole: 'user',
+      teklifActive: true,
+      teklifRole: 'sales',
+    ),
+    BusinessRoleDefinition(
+      code: 'technical_manager',
+      label: 'Teknik Sorumlu / Mühendis',
+      department: 'Teknik Departman',
+      description: 'Teknik ekibi, iş emirlerini ve saha planlamasını yönetir.',
+      isTakipActive: true,
+      isTakipRole: 'engineer',
+      teklifActive: true,
+      teklifRole: 'operations',
+    ),
+    BusinessRoleDefinition(
+      code: 'technician',
+      label: 'Teknisyen',
+      department: 'Teknik Departman',
+      description:
+          'Kendisine atanan saha işlerini ve servis kayıtlarını yürütür.',
+      isTakipActive: true,
+      isTakipRole: 'technician',
+      teklifActive: false,
+      teklifRole: 'viewer',
+    ),
+    BusinessRoleDefinition(
+      code: 'customer_admin',
+      label: 'Müşteri Firma Yöneticisi',
+      department: 'Müşteri Kullanıcısı',
+      description:
+          'Yalnızca bağlı firmasının servis kayıtlarını kurumsal kapsamda görür.',
+      isTakipActive: true,
+      isTakipRole: 'partner_user',
+      teklifActive: false,
+      teklifRole: 'operations',
+      customerRole: true,
+    ),
+    BusinessRoleDefinition(
+      code: 'customer_user',
+      label: 'Müşteri Kullanıcısı',
+      department: 'Müşteri Kullanıcısı',
+      description: 'Bağlı firmasına ait izin verilen kayıtları görüntüler.',
+      isTakipActive: true,
+      isTakipRole: 'partner_user',
+      teklifActive: false,
+      teklifRole: 'viewer',
+      customerRole: true,
+    ),
+  ];
 
   static const isTakipRoles = <AppRoleDefinition>[
     AppRoleDefinition(
       code: 'admin',
-      label: 'Sistem Yöneticisi',
-      description: 'Tüm modüller, ayarlar ve kullanıcı yönetimi.',
+      label: 'Tam Yetki',
+      description: 'Tüm modüller, şirket ayarları ve kullanıcı yönetimi.',
       permissions: [
         'Tüm iş emirleri',
         'Kullanıcılar',
@@ -74,86 +179,108 @@ class UserAccessCatalog {
     ),
     AppRoleDefinition(
       code: 'manager',
-      label: 'Yönetici',
+      label: 'Operasyon Yönetimi',
       description:
           'Operasyonun tamamını yönetir; kritik sistem ayarları hariç.',
       permissions: ['İş emirleri', 'Raporlar', 'Kullanıcılar', 'Stok yönetimi'],
     ),
     AppRoleDefinition(
-      code: 'supervisor',
-      label: 'Süpervizör',
-      description: 'Saha işlerini, atamaları ve kapanışları yönetir.',
-      permissions: ['İş planlama', 'Atama', 'PDF raporları', 'Stok işlemleri'],
-    ),
-    AppRoleDefinition(
       code: 'engineer',
-      label: 'Mühendis',
-      description: 'Teknik iş emirlerini oluşturur ve düzenler.',
-      permissions: ['İş oluşturma', 'Teknik düzenleme', 'Raporlama'],
+      label: 'Teknik Yönetim',
+      description: 'Teknik işleri, planlamayı ve saha ekibini yönetir.',
+      permissions: [
+        'İş oluşturma',
+        'Teknik düzenleme',
+        'Planlama',
+        'Raporlama',
+      ],
     ),
     AppRoleDefinition(
       code: 'technician',
-      label: 'Teknisyen',
-      description: 'Atanan işleri yürütür, not ve fotoğraf ekler.',
+      label: 'Saha Kullanımı',
+      description: 'Atanan işleri yürütür, not, fotoğraf ve imza ekler.',
       permissions: ['Atanan işler', 'Servis notları', 'Fotoğraf', 'İmza'],
     ),
     AppRoleDefinition(
       code: 'user',
-      label: 'Görüntüleyici',
-      description: 'İşleri ve temel raporları salt okunur görüntüler.',
+      label: 'Operasyon İzleme',
+      description: 'İşleri ve temel raporları değişiklik yapmadan görüntüler.',
       permissions: ['İş listesi', 'Arşiv', 'Temel raporlar'],
     ),
     AppRoleDefinition(
       code: 'partner_user',
-      label: 'Partner Kullanıcısı',
-      description: 'Yalnızca bağlı olduğu partnerin işlerini görür.',
-      permissions: ['Partner işleri', 'Partner notu', 'Sınırlı raporlama'],
+      label: 'Müşteri Firma Erişimi',
+      description: 'Yalnızca bağlı olduğu firmanın servis kayıtlarına erişir.',
+      permissions: ['Firma işleri', 'Servis belgeleri', 'Sınırlı raporlama'],
     ),
   ];
 
   static const teklifRoles = <AppRoleDefinition>[
     AppRoleDefinition(
       code: 'admin',
-      label: 'Teklif Yöneticisi',
+      label: 'Tam Yetki',
       description: 'Teklif uygulamasının tüm alanlarını ve ayarlarını yönetir.',
       permissions: [
         'Tüm teklifler',
-        'Kullanıcı rolleri',
+        'Kullanıcılar',
         'Fiyat politikası',
         'Firma ayarları',
       ],
     ),
     AppRoleDefinition(
       code: 'manager',
-      label: 'Satış Müdürü',
+      label: 'Satış Yönetimi',
       description: 'Satış ekibini, teklifleri ve ticari sonuçları yönetir.',
       permissions: ['Tüm teklifler', 'Satış panosu', 'Cari 360', 'Raporlar'],
     ),
     AppRoleDefinition(
       code: 'sales',
-      label: 'Satış',
+      label: 'Teklif Hazırlama',
       description: 'Teklif ve cari oluşturur, kendi satış sürecini yürütür.',
       permissions: ['Teklif oluşturma', 'Cari işlemleri', 'PDF/Excel çıktısı'],
     ),
     AppRoleDefinition(
       code: 'finance',
-      label: 'Finans',
+      label: 'Finans ve Fiyat',
       description: 'Fiyat, kur ve ticari sonuç alanlarını yönetir.',
       permissions: ['Fiyatlar', 'Kur bilgileri', 'Ticari raporlar'],
     ),
     AppRoleDefinition(
       code: 'operations',
-      label: 'Operasyon',
+      label: 'Keşif ve Teknik Hazırlık',
       description: 'Keşif, ürün ve operasyonel teklif hazırlığını yürütür.',
       permissions: ['Keşif', 'Ürünler', 'Operasyon verileri'],
     ),
     AppRoleDefinition(
       code: 'viewer',
-      label: 'Görüntüleyici',
+      label: 'Salt Okunur',
       description: 'Teklif ve cari kayıtlarını değiştirmeden görüntüler.',
       permissions: ['Teklif görüntüleme', 'Cari görüntüleme'],
     ),
   ];
+
+  static BusinessRoleDefinition businessRole(String code) {
+    return businessRoles.firstWhere(
+      (item) => item.code == code,
+      orElse: () => businessRoles[4],
+    );
+  }
+
+  static String inferBusinessRole({
+    required String profileRole,
+    required bool teklifActive,
+    required String teklifRole,
+  }) {
+    if (profileRole == 'admin') return 'owner';
+    if (profileRole == 'manager') return 'general_manager';
+    if (profileRole == 'engineer') return 'technical_manager';
+    if (profileRole == 'technician') return 'technician';
+    if (profileRole == 'partner_user') {
+      return teklifRole == 'operations' ? 'customer_admin' : 'customer_user';
+    }
+    if (teklifActive && teklifRole == 'sales') return 'sales_representative';
+    return 'technician';
+  }
 
   static AppRoleDefinition roleFor(String appCode, String role) {
     final roles = appCode == 'teklif' ? teklifRoles : isTakipRoles;

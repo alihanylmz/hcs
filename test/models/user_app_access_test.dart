@@ -40,6 +40,17 @@ void main() {
     expect(role.teklifActive, isTrue);
   });
 
+  test('genel müdür tam yetki patron operasyon yetkisi alır', () {
+    final generalManager = UserAccessCatalog.businessRole('general_manager');
+    final owner = UserAccessCatalog.businessRole('owner');
+
+    expect(generalManager.isTakipRole, 'admin');
+    expect(generalManager.teklifRole, 'admin');
+    expect(owner.isTakipRole, 'manager');
+    expect(owner.teklifRole, 'manager');
+    expect(owner.restrictions, contains('Kullanıcı ve rol yönetimi'));
+  });
+
   test('bilinmeyen rol en kisitli role geri doner', () {
     expect(
       UserAccessCatalog.roleFor('is_takip', 'unknown').code,

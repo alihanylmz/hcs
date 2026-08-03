@@ -28,7 +28,7 @@ void main() {
       );
     });
 
-    test('manager loses admin-only stock catalog access', () {
+    test('patron operasyonu yönetir fakat sistem yetkilerine erişemez', () {
       final profile = _profile(UserRole.manager);
 
       expect(
@@ -41,6 +41,21 @@ void main() {
           AppPermission.configureStockCatalog,
         ),
         isFalse,
+      );
+      expect(
+        PermissionService.hasPermission(profile, AppPermission.manageUsers),
+        isFalse,
+      );
+      expect(
+        PermissionService.hasPermission(
+          profile,
+          AppPermission.viewProfileAdminTools,
+        ),
+        isFalse,
+      );
+      expect(
+        PermissionService.hasPermission(profile, AppPermission.manageStock),
+        isTrue,
       );
     });
 

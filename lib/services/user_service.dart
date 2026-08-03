@@ -188,7 +188,7 @@ class UserService {
       throw Exception('Oturum bulunamadı.');
     }
     final actorProfile = await getCurrentUserProfile();
-    if (actorProfile == null || !actorProfile.isManager) {
+    if (actorProfile == null || !actorProfile.isAdmin) {
       throw Exception('Bu işlem için kullanıcı yönetimi yetkiniz yok.');
     }
     final targetQuoteAccess =
@@ -204,17 +204,16 @@ class UserService {
             targetQuoteAccess?['app_role'] == 'admin' ||
             draft.teklifRole == 'admin')) {
       throw Exception(
-        'Yönetici, sistem yöneticisi hesabını değiştiremez veya atayamaz.',
+        'Patron, Genel Müdür hesabını değiştiremez veya tam yetki atayamaz.',
       );
     }
     if (actorId == user.id &&
         (!draft.isTakipActive ||
-            !const {
-              UserRole.admin,
-              UserRole.manager,
-            }.contains(draft.isTakipRole))) {
+            draft.isTakipRole != UserRole.admin ||
+            !draft.teklifActive ||
+            draft.teklifRole != 'admin')) {
       throw Exception(
-        'Kendi İş Takip erişiminizi kapatamaz veya yönetici rolünüzü düşüremezsiniz.',
+        'Genel Müdür kendi erişimini kapatamaz veya tam yetkisini düşüremez.',
       );
     }
     if (user.isAdmin &&

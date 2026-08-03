@@ -5,6 +5,7 @@ import '../models/partner.dart';
 import '../models/user_app_access.dart';
 import '../models/user_profile.dart';
 import '../services/partner_service.dart';
+import '../services/permission_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/access_denied_view.dart';
@@ -112,7 +113,11 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
     try {
       final accessState = await _adminAccessController.load();
-      if (!accessState.hasAccess) {
+      if (!accessState.hasAccess ||
+          !PermissionService.hasPermission(
+            accessState.profile,
+            AppPermission.manageUsers,
+          )) {
         if (!mounted) return;
         setState(() {
           _hasAccess = false;
@@ -865,9 +870,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
   String _getRoleLabel(String role) {
     switch (role) {
       case UserRole.admin:
-        return 'Admin';
+        return 'Genel Müdür';
       case UserRole.manager:
-        return 'Yönetici';
+        return 'Patron';
       case UserRole.supervisor:
         return 'Süpervizör';
       case UserRole.engineer:
@@ -884,5 +889,4 @@ class _UserManagementPageState extends State<UserManagementPage> {
         return role;
     }
   }
-
 }

@@ -38,7 +38,10 @@ class PermissionService {
   );
 
   static final Set<AppPermission> _managerPermissions = Set.unmodifiable(
-    {..._adminPermissions}..remove(AppPermission.configureStockCatalog),
+    {..._adminPermissions}
+      ..remove(AppPermission.manageUsers)
+      ..remove(AppPermission.configureStockCatalog)
+      ..remove(AppPermission.viewProfileAdminTools),
   );
 
   static final Set<AppPermission> _supervisorPermissions = Set.unmodifiable({
@@ -156,9 +159,9 @@ class PermissionService {
   static String roleLabel(String? role) {
     switch (_normalizeRole(role)) {
       case UserRole.admin:
-        return 'Sistem Yonetici';
+        return 'Genel Mudur';
       case UserRole.manager:
-        return 'Yonetici';
+        return 'Patron';
       case UserRole.supervisor:
         return 'Supervizor';
       case UserRole.engineer:

@@ -74,7 +74,7 @@ begin
   from public.profiles
   where id = v_actor_id;
 
-  if v_actor_role not in ('admin', 'manager') then
+  if v_actor_role <> 'admin' then
     raise exception 'Bu işlem için kullanıcı yönetimi yetkiniz yok.';
   end if;
 
@@ -123,9 +123,11 @@ begin
   if p_user_id = v_actor_id
      and (
        not p_is_takip_active
-       or p_is_takip_role not in ('admin', 'manager')
+       or p_is_takip_role <> 'admin'
+       or not p_teklif_active
+       or p_teklif_role <> 'admin'
      ) then
-    raise exception 'Kendi İş Takip erişiminizi kapatamaz veya yönetici rolünüzü düşüremezsiniz.';
+    raise exception 'Genel Müdür kendi erişimini kapatamaz veya tam yetkisini düşüremez.';
   end if;
 
   if v_target_role = 'admin'

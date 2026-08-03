@@ -170,9 +170,9 @@ class UserQuoteProfile {
   static String roleLabel(String role) {
     switch (normalizeRole(role)) {
       case 'admin':
-        return 'Sistem Yöneticisi';
+        return 'Genel Müdür';
       case 'manager':
-        return 'Yönetici';
+        return 'Patron';
       case 'finance':
         return 'Finans';
       case 'operations':

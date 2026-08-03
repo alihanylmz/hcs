@@ -29,6 +29,7 @@ class MainNavigationShell extends StatefulWidget {
 class _MainNavigationShellState extends State<MainNavigationShell> {
   int _index = 0;
   bool _isManager = false;
+  bool _canManageSystem = false;
 
   @override
   void initState() {
@@ -45,7 +46,8 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     if (!mounted) return;
     setState(() {
       _isManager = p?.isManager ?? false;
-      if (!_isManager && _index > 4) _index = 4;
+      _canManageSystem = p?.canManageUsers ?? false;
+      if (!_canManageSystem && _index > 4) _index = 4;
     });
   }
 
@@ -90,7 +92,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                   selectedIcon: Icon(Icons.person_rounded),
                   label: 'Profil',
                 ),
-                if (_isManager)
+                if (_canManageSystem)
                   const NavigationDestination(
                     icon: Icon(Icons.admin_panel_settings_outlined),
                     selectedIcon: Icon(Icons.admin_panel_settings_rounded),
@@ -145,7 +147,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                     selectedIcon: Icon(Icons.person_rounded),
                     label: Text('Profil'),
                   ),
-                  if (_isManager)
+                  if (_canManageSystem)
                     const NavigationRailDestination(
                       icon: Icon(Icons.admin_panel_settings_outlined),
                       selectedIcon: Icon(Icons.admin_panel_settings_rounded),
@@ -223,7 +225,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           onSignOut: widget.onSignOut,
         );
       case 5:
-        if (_isManager) {
+        if (_canManageSystem) {
           return AdminPanelPage(
             userProfileRepository: widget.bootstrap.userProfileRepository,
             adminRepository: widget.bootstrap.adminRepository,

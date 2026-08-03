@@ -94,7 +94,6 @@ jobs:
           cp -a hcs/build/web/. site/is-takip/
           cp -a uzalteklif/build/web/. site/teklif/
           gzip -9 -c hcs/build/web/main.dart.js > site/is-takip/main.dart.js.gz
-          rm -f site/is-takip/main.dart.js
 
           cat > site/is-takip/.htaccess <<'EOF'
           <IfModule mod_mime.c>

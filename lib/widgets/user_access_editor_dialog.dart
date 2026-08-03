@@ -26,6 +26,7 @@ class UserAccessEditorDialog extends StatefulWidget {
 }
 
 class _UserAccessEditorDialogState extends State<UserAccessEditorDialog> {
+  late String _businessRole;
   late bool _isTakipActive;
   late String _isTakipRole;
   late bool _teklifActive;
@@ -35,6 +36,7 @@ class _UserAccessEditorDialogState extends State<UserAccessEditorDialog> {
   @override
   void initState() {
     super.initState();
+    _businessRole = widget.initialDraft.businessRole;
     _isTakipActive = widget.initialDraft.isTakipActive;
     _isTakipRole = widget.initialDraft.isTakipRole;
     _teklifActive = widget.initialDraft.teklifActive;
@@ -69,6 +71,37 @@ class _UserAccessEditorDialogState extends State<UserAccessEditorDialog> {
                   children: [
                     if (widget.readOnly) _buildReadOnlyNotice(),
                     if (widget.isCurrentUser) _buildSelfNotice(),
+                    _buildBusinessRoleSection(),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.tune_rounded,
+                          size: 18,
+                          color: Colors.grey.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Uygulama erişimleri',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.corporateNavy,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          'Gelişmiş ayar',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
                     if (compact) ...[
                       _buildAppAccessCard(
                         appCode: 'is_takip',
@@ -122,6 +155,154 @@ class _UserAccessEditorDialogState extends State<UserAccessEditorDialog> {
         ),
       ),
     );
+  }
+
+  Widget _buildBusinessRoleSection() {
+    final selected = UserAccessCatalog.businessRole(_businessRole);
+    final enabled = !widget.readOnly;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.corporateNavy.withValues(alpha: 0.045),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppColors.corporateNavy.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.account_tree_outlined, color: AppColors.corporateNavy),
+              SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  'Şirketteki görevi',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.corporateNavy,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Görevi seçtiğinizde uygun uygulama yetkileri otomatik hazırlanır.',
+            style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+          ),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<String>(
+            key: ValueKey('business-role-$_businessRole'),
+            initialValue: _businessRole,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Görev / kurumsal rol',
+              prefixIcon: Icon(Icons.badge_outlined),
+            ),
+            items: UserAccessCatalog.businessRoles
+                .map(
+                  (role) => DropdownMenuItem(
+                    value: role.code,
+                    child: Text(role.label, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(growable: false),
+            selectedItemBuilder:
+                (context) => UserAccessCatalog.businessRoles
+                    .map(
+                      (role) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          role.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
+            onChanged:
+                !enabled
+                    ? null
+                    : (value) {
+                      if (value != null) _applyBusinessRole(value);
+                    },
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Chip(
+                avatar: const Icon(Icons.apartment_rounded, size: 16),
+                label: Text(selected.department),
+                visualDensity: VisualDensity.compact,
+              ),
+              if (selected.customerRole)
+                const Chip(
+                  avatar: Icon(Icons.domain_outlined, size: 16),
+                  label: Text('Firma bazlı erişim'),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            selected.description,
+            style: const TextStyle(
+              height: 1.35,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF536475),
+            ),
+          ),
+          if (selected.customerRole) ...[
+            const SizedBox(height: 14),
+            DropdownButtonFormField<int>(
+              key: ValueKey('customer-company-${_partnerId ?? 'none'}'),
+              initialValue: _partnerId,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Bağlı müşteri firması',
+                helperText: 'Kullanıcı yalnızca bu firmanın kayıtlarını görür.',
+                prefixIcon: Icon(Icons.business_outlined),
+              ),
+              items: widget.partners
+                  .map(
+                    (partner) => DropdownMenuItem(
+                      value: partner.id,
+                      child: Text(
+                        partner.name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged:
+                  !enabled
+                      ? null
+                      : (value) => setState(() => _partnerId = value),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _applyBusinessRole(String code) {
+    final role = UserAccessCatalog.businessRole(code);
+    setState(() {
+      _businessRole = code;
+      _isTakipActive = role.isTakipActive;
+      _isTakipRole = role.isTakipRole;
+      _teklifActive = role.teklifActive;
+      _teklifRole = role.teklifRole;
+      if (!role.customerRole) _partnerId = null;
+    });
   }
 
   Widget _buildHeader(ThemeData theme) {
@@ -343,6 +524,19 @@ class _UserAccessEditorDialogState extends State<UserAccessEditorDialog> {
                   ),
                 )
                 .toList(growable: false),
+            selectedItemBuilder:
+                (context) => roles
+                    .map(
+                      (item) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          item.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
             onChanged:
                 !controlsEnabled || !active
                     ? null
@@ -358,35 +552,6 @@ class _UserAccessEditorDialogState extends State<UserAccessEditorDialog> {
                       });
                     },
           ),
-          if (isWorkTracking &&
-              active &&
-              _isTakipRole == UserRole.partnerUser) ...[
-            const SizedBox(height: 12),
-            DropdownButtonFormField<int>(
-              key: ValueKey('partner-${_partnerId ?? 'none'}'),
-              initialValue: _partnerId,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Bağlı partner firma',
-                prefixIcon: Icon(Icons.business_outlined, size: 20),
-              ),
-              items: widget.partners
-                  .map(
-                    (partner) => DropdownMenuItem(
-                      value: partner.id,
-                      child: Text(
-                        partner.name,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  )
-                  .toList(growable: false),
-              onChanged:
-                  !controlsEnabled
-                      ? null
-                      : (value) => setState(() => _partnerId = value),
-            ),
-          ],
           const SizedBox(height: 14),
           Text(
             roleDefinition.description,
@@ -446,17 +611,17 @@ class _UserAccessEditorDialogState extends State<UserAccessEditorDialog> {
   }
 
   void _save() {
-    if (_isTakipActive &&
-        _isTakipRole == UserRole.partnerUser &&
-        _partnerId == null) {
+    final businessRole = UserAccessCatalog.businessRole(_businessRole);
+    if (businessRole.customerRole && _partnerId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Partner kullanıcı için firma seçin.')),
+        const SnackBar(content: Text('Müşteri kullanıcısı için firma seçin.')),
       );
       return;
     }
 
     Navigator.of(context).pop(
       UserAccessDraft(
+        businessRole: _businessRole,
         isTakipActive: _isTakipActive,
         isTakipRole: _isTakipRole,
         teklifActive: _teklifActive,

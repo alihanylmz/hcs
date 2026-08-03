@@ -14,6 +14,32 @@ void main() {
     expect(quoteCodes, containsAll(['admin', 'manager', 'sales', 'viewer']));
   });
 
+  test('kurumsal roller sirket organizasyonunu kapsar', () {
+    final codes =
+        UserAccessCatalog.businessRoles.map((role) => role.code).toSet();
+
+    expect(
+      codes,
+      containsAll([
+        'owner',
+        'general_manager',
+        'sales_representative',
+        'technical_manager',
+        'technician',
+        'customer_admin',
+        'customer_user',
+      ]),
+    );
+  });
+
+  test('satış görevi iki uygulama yetkisine dönüştürülür', () {
+    final role = UserAccessCatalog.businessRole('sales_representative');
+
+    expect(role.isTakipRole, 'user');
+    expect(role.teklifRole, 'sales');
+    expect(role.teklifActive, isTrue);
+  });
+
   test('bilinmeyen rol en kisitli role geri doner', () {
     expect(
       UserAccessCatalog.roleFor('is_takip', 'unknown').code,

@@ -76,7 +76,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
     if (_selectedRoleFilter.isNotEmpty) {
       filtered =
-          filtered.where((user) => user.role == _selectedRoleFilter).toList();
+          filtered.where((user) {
+            if (_selectedRoleFilter == UserRole.pending) return user.isPending;
+            return _businessRoleForUser(user) == _selectedRoleFilter;
+          }).toList();
     }
 
     filtered.sort((a, b) {
@@ -85,8 +88,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
           return (a.email ?? '').compareTo(b.email ?? '');
         case 'role':
           final roleCompare = _roleSortIndex(
-            a.role,
-          ).compareTo(_roleSortIndex(b.role));
+            _businessRoleForUser(a),
+          ).compareTo(_roleSortIndex(_businessRoleForUser(b)));
           if (roleCompare != 0) return roleCompare;
           return a.displayName.compareTo(b.displayName);
         case 'date':
@@ -177,6 +180,11 @@ class _UserManagementPageState extends State<UserManagementPage> {
                 (user.role == UserRole.admin ||
                     quoteAccess?.appRole == 'admin'),
             initialDraft: UserAccessDraft(
+              businessRole: UserAccessCatalog.inferBusinessRole(
+                profileRole: workRole,
+                teklifActive: quoteAccess?.isActive ?? false,
+                teklifRole: quoteRole,
+              ),
               isTakipActive:
                   workAccess?.isActive ?? user.role != UserRole.pending,
               isTakipRole: workRole,
@@ -345,33 +353,11 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       value: UserRole.pending,
                       child: Text(_getRoleLabel(UserRole.pending)),
                     ),
-                    DropdownMenuItem<String>(
-                      value: UserRole.admin,
-                      child: Text(_getRoleLabel(UserRole.admin)),
-                    ),
-                    DropdownMenuItem<String>(
-                      value: UserRole.manager,
-                      child: Text(_getRoleLabel(UserRole.manager)),
-                    ),
-                    DropdownMenuItem<String>(
-                      value: UserRole.supervisor,
-                      child: Text(_getRoleLabel(UserRole.supervisor)),
-                    ),
-                    DropdownMenuItem<String>(
-                      value: UserRole.engineer,
-                      child: Text(_getRoleLabel(UserRole.engineer)),
-                    ),
-                    DropdownMenuItem<String>(
-                      value: UserRole.technician,
-                      child: Text(_getRoleLabel(UserRole.technician)),
-                    ),
-                    DropdownMenuItem<String>(
-                      value: UserRole.user,
-                      child: Text(_getRoleLabel(UserRole.user)),
-                    ),
-                    DropdownMenuItem<String>(
-                      value: UserRole.partnerUser,
-                      child: Text(_getRoleLabel(UserRole.partnerUser)),
+                    ...UserAccessCatalog.businessRoles.map(
+                      (role) => DropdownMenuItem<String>(
+                        value: role.code,
+                        child: Text(role.label),
+                      ),
                     ),
                   ],
                   onChanged: (value) {
@@ -581,7 +567,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
     required Color textColor,
     bool highlightPending = false,
   }) {
-    final roleColor = _getRoleColor(user.role);
     final partnerName = _findPartnerName(user.partnerId);
     final accesses = _appAccessByUser[user.id] ?? const {};
     final workAccess = accesses['is_takip'];
@@ -590,6 +575,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
     final quoteActive = quoteAccess?.isActive ?? false;
     final workRole = workAccess?.appRole ?? user.role;
     final quoteRole = quoteAccess?.appRole ?? 'sales';
+    final businessRole = UserAccessCatalog.inferBusinessRole(
+      profileRole: workRole,
+      teklifActive: quoteActive,
+      teklifRole: quoteRole,
+    );
+    final businessRoleDefinition = UserAccessCatalog.businessRole(businessRole);
+    final roleColor = _getBusinessRoleColor(businessRole);
     final isSaving = _savingUserIds.contains(user.id);
 
     return Card(
@@ -645,7 +637,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        _buildRoleBadge(user.role, roleColor),
+                        _buildRoleBadge(
+                          businessRoleDefinition.label,
+                          roleColor,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -654,6 +649,15 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      businessRoleDefinition.department,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: roleColor,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     if (partnerName != null) ...[
@@ -775,7 +779,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
     );
   }
 
-  Widget _buildRoleBadge(String role, Color color) {
+  Widget _buildRoleBadge(String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
@@ -784,7 +788,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
         border: Border.all(color: color.withValues(alpha: 0.28)),
       ),
       child: Text(
-        _getRoleLabel(role),
+        label,
         style: TextStyle(
           color: color,
           fontSize: 11,
@@ -792,6 +796,26 @@ class _UserManagementPageState extends State<UserManagementPage> {
         ),
       ),
     );
+  }
+
+  Color _getBusinessRoleColor(String role) {
+    switch (role) {
+      case 'owner':
+        return Colors.red.shade700;
+      case 'general_manager':
+        return Colors.deepOrange.shade700;
+      case 'sales_representative':
+        return Colors.green.shade700;
+      case 'technical_manager':
+        return Colors.indigo.shade700;
+      case 'technician':
+        return Colors.blue.shade700;
+      case 'customer_admin':
+      case 'customer_user':
+        return Colors.purple.shade700;
+      default:
+        return Colors.blueGrey;
+    }
   }
 
   String? _findPartnerName(int? partnerId) {
@@ -804,23 +828,34 @@ class _UserManagementPageState extends State<UserManagementPage> {
     return null;
   }
 
+  String _businessRoleForUser(UserProfile user) {
+    final accesses = _appAccessByUser[user.id] ?? const {};
+    final workAccess = accesses['is_takip'];
+    final quoteAccess = accesses['teklif'];
+    return UserAccessCatalog.inferBusinessRole(
+      profileRole: workAccess?.appRole ?? user.role,
+      teklifActive: quoteAccess?.isActive ?? false,
+      teklifRole: quoteAccess?.appRole ?? 'viewer',
+    );
+  }
+
   int _roleSortIndex(String role) {
     switch (role) {
       case UserRole.pending:
         return 0;
-      case UserRole.admin:
+      case 'owner':
         return 1;
-      case UserRole.manager:
+      case 'general_manager':
         return 2;
-      case UserRole.supervisor:
+      case 'sales_representative':
         return 3;
-      case UserRole.engineer:
+      case 'technical_manager':
         return 4;
-      case UserRole.technician:
+      case 'technician':
         return 5;
-      case UserRole.user:
+      case 'customer_admin':
         return 6;
-      case UserRole.partnerUser:
+      case 'customer_user':
         return 7;
       default:
         return 99;
@@ -850,26 +885,4 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
   }
 
-  Color _getRoleColor(String role) {
-    switch (role) {
-      case UserRole.admin:
-        return Colors.red;
-      case UserRole.manager:
-        return Colors.orange;
-      case UserRole.supervisor:
-        return Colors.teal;
-      case UserRole.engineer:
-        return Colors.indigo;
-      case UserRole.technician:
-        return Colors.blue;
-      case UserRole.user:
-        return Colors.blueGrey;
-      case UserRole.partnerUser:
-        return Colors.purple;
-      case UserRole.pending:
-        return Colors.amber.shade700;
-      default:
-        return Colors.grey;
-    }
-  }
 }

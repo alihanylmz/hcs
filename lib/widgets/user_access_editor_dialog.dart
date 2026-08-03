@@ -260,6 +260,35 @@ class _UserAccessEditorDialogState extends State<UserAccessEditorDialog> {
               color: Color(0xFF536475),
             ),
           ),
+          if (selected.restrictions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Bu rolde kapalı',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                color: Colors.red.shade700,
+              ),
+            ),
+            const SizedBox(height: 7),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: selected.restrictions
+                  .map(
+                    (item) => Chip(
+                      visualDensity: VisualDensity.compact,
+                      avatar: Icon(
+                        Icons.block_rounded,
+                        size: 15,
+                        color: Colors.red.shade700,
+                      ),
+                      label: Text(item, style: const TextStyle(fontSize: 11.5)),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+          ],
           if (selected.customerRole) ...[
             const SizedBox(height: 14),
             DropdownButtonFormField<int>(
@@ -360,8 +389,7 @@ class _UserAccessEditorDialogState extends State<UserAccessEditorDialog> {
   Widget _buildReadOnlyNotice() {
     return _notice(
       icon: Icons.lock_outline_rounded,
-      text:
-          'Yönetici rolündeki bir kullanıcıyı yalnızca sistem yöneticisi düzenleyebilir.',
+      text: 'Genel Müdür hesabını yalnızca Genel Müdür düzenleyebilir.',
       color: Colors.orange.shade800,
     );
   }
@@ -370,7 +398,7 @@ class _UserAccessEditorDialogState extends State<UserAccessEditorDialog> {
     return _notice(
       icon: Icons.shield_outlined,
       text:
-          'Kendi İş Takip erişiminizi kapatamaz veya yönetici yetkinizi düşüremezsiniz.',
+          'Genel Müdür kendi erişimini kapatamaz veya tam yetkisini düşüremez.',
       color: Colors.blue.shade800,
     );
   }

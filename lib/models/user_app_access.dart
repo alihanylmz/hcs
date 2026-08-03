@@ -70,6 +70,7 @@ class BusinessRoleDefinition {
     required this.teklifActive,
     required this.teklifRole,
     this.customerRole = false,
+    this.restrictions = const [],
   });
 
   final String code;
@@ -81,6 +82,7 @@ class BusinessRoleDefinition {
   final bool teklifActive;
   final String teklifRole;
   final bool customerRole;
+  final List<String> restrictions;
 }
 
 class UserAccessCatalog {
@@ -92,11 +94,12 @@ class UserAccessCatalog {
       label: 'Patron',
       department: 'Üst Yönetim',
       description:
-          'Şirketin tamamına, finansal verilere ve sistem ayarlarına erişir.',
+          'Tüm operasyon, teklif ve finansal verilere erişir; sistem ayarlarını değiştiremez.',
       isTakipActive: true,
-      isTakipRole: 'admin',
+      isTakipRole: 'manager',
       teklifActive: true,
-      teklifRole: 'admin',
+      teklifRole: 'manager',
+      restrictions: ['Kullanıcı ve rol yönetimi', 'Sistem ayarları'],
     ),
     BusinessRoleDefinition(
       code: 'general_manager',
@@ -104,9 +107,9 @@ class UserAccessCatalog {
       department: 'Üst Yönetim',
       description: 'Günlük operasyonu, satış ve teknik ekipleri yönetir.',
       isTakipActive: true,
-      isTakipRole: 'manager',
+      isTakipRole: 'admin',
       teklifActive: true,
-      teklifRole: 'manager',
+      teklifRole: 'admin',
     ),
     BusinessRoleDefinition(
       code: 'sales_representative',
@@ -118,6 +121,10 @@ class UserAccessCatalog {
       isTakipRole: 'user',
       teklifActive: true,
       teklifRole: 'sales',
+      restrictions: [
+        'Patronların hazırladığı teklifler',
+        'Kullanıcı ve sistem ayarları',
+      ],
     ),
     BusinessRoleDefinition(
       code: 'technical_manager',
@@ -128,6 +135,7 @@ class UserAccessCatalog {
       isTakipRole: 'engineer',
       teklifActive: true,
       teklifRole: 'operations',
+      restrictions: ['Ticari yönetim', 'Kullanıcı ve sistem ayarları'],
     ),
     BusinessRoleDefinition(
       code: 'technician',
@@ -139,6 +147,7 @@ class UserAccessCatalog {
       isTakipRole: 'technician',
       teklifActive: false,
       teklifRole: 'viewer',
+      restrictions: ['Teklif ve finans', 'Kullanıcı ve sistem ayarları'],
     ),
     BusinessRoleDefinition(
       code: 'customer_admin',
@@ -151,6 +160,7 @@ class UserAccessCatalog {
       teklifActive: false,
       teklifRole: 'operations',
       customerRole: true,
+      restrictions: ['Diğer firmalar', 'İç operasyon ve finans'],
     ),
     BusinessRoleDefinition(
       code: 'customer_user',
@@ -162,14 +172,15 @@ class UserAccessCatalog {
       teklifActive: false,
       teklifRole: 'viewer',
       customerRole: true,
+      restrictions: ['Diğer firmalar', 'İç operasyon ve finans'],
     ),
   ];
 
   static const isTakipRoles = <AppRoleDefinition>[
     AppRoleDefinition(
       code: 'admin',
-      label: 'Tam Yetki',
-      description: 'Tüm modüller, şirket ayarları ve kullanıcı yönetimi.',
+      label: 'Genel Müdür · Tam Yetki',
+      description: 'Tüm modüller, şirket ayarları ve kullanıcı/yetki yönetimi.',
       permissions: [
         'Tüm iş emirleri',
         'Kullanıcılar',
@@ -179,10 +190,15 @@ class UserAccessCatalog {
     ),
     AppRoleDefinition(
       code: 'manager',
-      label: 'Operasyon Yönetimi',
+      label: 'Patron · Operasyon Yetkisi',
       description:
-          'Operasyonun tamamını yönetir; kritik sistem ayarları hariç.',
-      permissions: ['İş emirleri', 'Raporlar', 'Kullanıcılar', 'Stok yönetimi'],
+          'Operasyonun tamamını yönetir; kullanıcı ve sistem ayarları hariç.',
+      permissions: [
+        'Tüm iş emirleri',
+        'Raporlar',
+        'Cari/partnerler',
+        'Stok yönetimi',
+      ],
     ),
     AppRoleDefinition(
       code: 'engineer',
@@ -218,7 +234,7 @@ class UserAccessCatalog {
   static const teklifRoles = <AppRoleDefinition>[
     AppRoleDefinition(
       code: 'admin',
-      label: 'Tam Yetki',
+      label: 'Genel Müdür · Tam Yetki',
       description: 'Teklif uygulamasının tüm alanlarını ve ayarlarını yönetir.',
       permissions: [
         'Tüm teklifler',
@@ -229,9 +245,15 @@ class UserAccessCatalog {
     ),
     AppRoleDefinition(
       code: 'manager',
-      label: 'Satış Yönetimi',
-      description: 'Satış ekibini, teklifleri ve ticari sonuçları yönetir.',
-      permissions: ['Tüm teklifler', 'Satış panosu', 'Cari 360', 'Raporlar'],
+      label: 'Patron · Ticari Yetki',
+      description:
+          'Teklif, cari ve ticari sonuçları yönetir; sistem ayarlarına erişemez.',
+      permissions: [
+        'Tüm teklifler',
+        'Satış panosu',
+        'Cari 360',
+        'Fiyat ve raporlar',
+      ],
     ),
     AppRoleDefinition(
       code: 'sales',
@@ -271,8 +293,8 @@ class UserAccessCatalog {
     required bool teklifActive,
     required String teklifRole,
   }) {
-    if (profileRole == 'admin') return 'owner';
-    if (profileRole == 'manager') return 'general_manager';
+    if (profileRole == 'admin') return 'general_manager';
+    if (profileRole == 'manager') return 'owner';
     if (profileRole == 'engineer') return 'technical_manager';
     if (profileRole == 'technician') return 'technician';
     if (profileRole == 'partner_user') {

@@ -281,6 +281,34 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
   }
 
   Future<void> _editQuote() async {
+    final requiresRevision =
+        _quote.status != QuoteStatus.draft &&
+        _quote.status != QuoteStatus.rejected;
+    if (requiresRevision) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Yeni revizyon oluşturulsun mu?'),
+          content: Text(
+            '${_quote.code} artık doğrudan düzenlenemez. Mevcut sürüm '
+            'geçmişte korunarak yeni bir revizyon açılacak.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Vazgeç'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(true),
+              icon: const Icon(Icons.restore_page_rounded),
+              label: const Text('Yeni Revizyon'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
     final result = await Navigator.of(context).push<Quote>(
       MaterialPageRoute(
         builder: (context) => QuoteEditorPage(
@@ -288,6 +316,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
           initialRates: widget.initialRates,
           availableProducts: widget.availableProducts,
           quoteToRevise: _quote,
+          revisionMode: requiresRevision,
           userProfileRepository: widget.userProfileRepository,
           cariRepository: widget.cariRepository,
           ownCompanyRepository: widget.ownCompanyRepository,
@@ -468,7 +497,11 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
           const SizedBox(width: 6),
           if (compact)
             IconButton(
-              tooltip: 'Düzenle',
+              tooltip:
+                  _quote.status == QuoteStatus.draft ||
+                      _quote.status == QuoteStatus.rejected
+                  ? 'Düzenle'
+                  : 'Yeni Revizyon',
               onPressed: _isBusy ? null : _editQuote,
               icon: const Icon(Icons.edit_rounded, size: 19),
             )
@@ -476,7 +509,12 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
             TextButton.icon(
               onPressed: _isBusy ? null : _editQuote,
               icon: const Icon(Icons.edit_rounded, size: 18),
-              label: const Text('Düzenle'),
+              label: Text(
+                _quote.status == QuoteStatus.draft ||
+                        _quote.status == QuoteStatus.rejected
+                    ? 'Düzenle'
+                    : 'Yeni Revizyon',
+              ),
             ),
           const SizedBox(width: 8),
         ],

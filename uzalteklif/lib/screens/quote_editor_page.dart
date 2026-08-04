@@ -41,6 +41,7 @@ class QuoteEditorPage extends StatefulWidget {
     required this.availableProducts,
     this.quoteToRevise,
     this.quoteToCopy,
+    this.revisionMode = false,
     this.initialProductQuantities = const {},
     this.initialProductLines = const [],
     this.initialTitle = '',
@@ -59,7 +60,8 @@ class QuoteEditorPage extends StatefulWidget {
        assert(
          quoteToRevise == null || quoteToCopy == null,
          'A quote cannot be revised and copied at the same time.',
-       );
+       ),
+       assert(!revisionMode || quoteToRevise != null);
 
   final QuoteRepository quoteRepository;
   final List<MarketRate> initialRates;
@@ -75,6 +77,7 @@ class QuoteEditorPage extends StatefulWidget {
   /// Yeni bir teklif icin kullanilacak sablon. Kalemler ve kosullar korunur;
   /// teklif kimligi, numarasi, durumu ve musteri bilgileri tasinmaz.
   final Quote? quoteToCopy;
+  final bool revisionMode;
 
   final UserProfileRepository userProfileRepository;
   final CariRepository cariRepository;
@@ -1350,15 +1353,17 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         deliveryTerms: _deliveryTermsController.text.trim(),
         vatRate: _docVatRate(),
       ),
-      status: src?.status ?? QuoteStatus.draft,
-      submittedAt: src?.submittedAt,
-      approvedAt: src?.approvedAt,
-      approvedByName: src?.approvedByName ?? '',
-      approvalNote: src?.approvalNote ?? '',
+      status: widget.revisionMode
+          ? QuoteStatus.draft
+          : src?.status ?? QuoteStatus.draft,
+      submittedAt: widget.revisionMode ? null : src?.submittedAt,
+      approvedAt: widget.revisionMode ? null : src?.approvedAt,
+      approvedByName: widget.revisionMode ? '' : src?.approvedByName ?? '',
+      approvalNote: widget.revisionMode ? '' : src?.approvalNote ?? '',
       revisionCount: src?.revisionCount ?? 0,
       createdBy: resolvedCreatorId,
       createdByName: resolvedCreatorName,
-      archivedAt: src?.archivedAt,
+      archivedAt: widget.revisionMode ? null : src?.archivedAt,
     );
   }
 

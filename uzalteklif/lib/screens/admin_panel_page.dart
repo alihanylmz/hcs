@@ -324,7 +324,19 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                   strong: true,
                 ),
               ),
-              Expanded(flex: 2, child: _Cell(movement.source)),
+              Expanded(
+                flex: 2,
+                child: Row(
+                  children: [
+                    Expanded(child: _Cell(movement.source)),
+                    IconButton(
+                      tooltip: 'Bu değişiklikten önceki sürümü geri yükle',
+                      onPressed: () => _restorePriceMovement(movement),
+                      icon: const Icon(Icons.settings_backup_restore_rounded),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
       ],
@@ -377,6 +389,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
             newPrice: _formatMovementPrice(newPrice, newUnit),
             percentage: percentage,
             source: _priceChangeSource(oldData, newData),
+            oldSnapshot: oldData,
           ),
         );
       }
@@ -434,6 +447,45 @@ class _AdminPanelPageState extends State<AdminPanelPage>
       return 'Teklifi tamamlama';
     }
     return 'Taslak / revizyon';
+  }
+
+  Future<void> _restorePriceMovement(_PriceMovement movement) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eski teklif sürümü geri yüklensin mi?'),
+        content: Text(
+          '${movement.quoteCode} teklifi ${movement.date} tarihindeki fiyat '
+          'değişikliğinden önceki haline döndürülecek. Mevcut sürüm de '
+          'revizyon geçmişinde korunacak.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.restore_rounded),
+            label: const Text('Eski Sürümü Geri Yükle'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.adminRepository.restoreQuoteSnapshot(movement.oldSnapshot);
+      await _reload();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${movement.quoteCode} geri yüklendi.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Geri yükleme başarısız: $error')));
+    }
   }
 
   Widget _buildReadableRevisions() {
@@ -1190,6 +1242,7 @@ class _PriceMovement {
     required this.newPrice,
     required this.percentage,
     required this.source,
+    required this.oldSnapshot,
   });
 
   final String date;
@@ -1201,6 +1254,7 @@ class _PriceMovement {
   final String newPrice;
   final String percentage;
   final String source;
+  final Map<String, dynamic> oldSnapshot;
 }
 
 class _PanelTable extends StatelessWidget {

@@ -37,4 +37,15 @@ class AdminRepository {
       return const [];
     }
   }
+
+  Future<void> restoreQuoteSnapshot(Map<String, dynamic> snapshot) async {
+    if (!isRemoteReady) {
+      throw StateError('Supabase oturumu hazır değil.');
+    }
+    final id = '${snapshot['id'] ?? ''}'.trim();
+    if (id.isEmpty) {
+      throw ArgumentError('Geri yüklenecek teklif kimliği bulunamadı.');
+    }
+    await _client!.from('quotes').upsert(snapshot);
+  }
 }

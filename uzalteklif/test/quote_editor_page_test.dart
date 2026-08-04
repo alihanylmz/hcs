@@ -302,7 +302,16 @@ void main() {
       createdAt: DateTime(2026, 7, 30, 10),
       displayUnit: 'TL',
       marketSnapshot: const [],
-      items: const [],
+      items: const [
+        QuoteLineItem(
+          id: 'copy-line-1',
+          description: 'Kopyalanacak fiyat kalemi',
+          quantity: 2,
+          unit: 'adet',
+          unitPriceTl: 1234,
+          discountRate: 5,
+        ),
+      ],
       documentProfile: const QuoteDocumentProfile(
         companyName: 'UZAL TEKNİK',
         companyTagline: '',
@@ -342,6 +351,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.text('Eski firma'), findsNothing);
+    expect(find.text('Kopya profil testi'), findsNothing);
+    expect(find.text('Kopyalanacak fiyat kalemi'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, '1234.00'), findsOneWidget);
     await tester.tap(find.text('Bilgileri Düzenle'));
     await tester.pumpAndSettle();
 

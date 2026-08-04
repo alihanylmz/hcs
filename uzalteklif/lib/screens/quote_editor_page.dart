@@ -627,6 +627,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     _customerTitleController.clear();
     _customerPhoneController.clear();
     _customerEmailController.clear();
+    _titleController.clear();
   }
 
   /// Kayitli urun kodundan veya eski tekliflerdeki aciklama on ekinden

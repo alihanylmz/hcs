@@ -47,7 +47,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _reload();
   }
 
@@ -176,6 +176,10 @@ class _AdminPanelPageState extends State<AdminPanelPage>
           tabs: const [
             Tab(icon: Icon(Icons.people_alt_rounded), text: 'Kullanıcılar'),
             Tab(icon: Icon(Icons.history_rounded), text: 'Audit Log'),
+            Tab(
+              icon: Icon(Icons.price_change_rounded),
+              text: 'Fiyat Hareketleri',
+            ),
             Tab(icon: Icon(Icons.restore_page_rounded), text: 'Revizyonlar'),
             Tab(icon: Icon(Icons.apartment_rounded), text: 'Firmalar'),
             Tab(icon: Icon(Icons.percent_rounded), text: 'Fiyat Politikaları'),
@@ -195,6 +199,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                   children: [
                     _buildUsers(),
                     _buildReadableAuditLogs(),
+                    _buildPriceMovements(),
                     _buildReadableRevisions(),
                     _buildCompanies(),
                     _buildPriceRules(),
@@ -280,6 +285,155 @@ class _AdminPanelPageState extends State<AdminPanelPage>
           ),
       ],
     );
+  }
+
+  Widget _buildPriceMovements() {
+    final movements = _collectPriceMovements();
+    return _PanelTable(
+      header: const Row(
+        children: [
+          SizedBox(width: 125, child: _Th('Tarih')),
+          Expanded(flex: 2, child: _Th('Kullanıcı')),
+          Expanded(flex: 2, child: _Th('Teklif')),
+          Expanded(flex: 3, child: _Th('Kalem')),
+          Expanded(flex: 3, child: _Th('Eski → Yeni')),
+          Expanded(flex: 2, child: _Th('İşlem')),
+        ],
+      ),
+      children: [
+        for (final movement in movements)
+          Row(
+            children: [
+              SizedBox(width: 125, child: _Cell(movement.date)),
+              Expanded(flex: 2, child: _Cell(movement.actor)),
+              Expanded(flex: 2, child: _Cell(movement.quoteCode, strong: true)),
+              Expanded(
+                flex: 3,
+                child: _Cell(
+                  [
+                    movement.productCode,
+                    movement.description,
+                  ].where((part) => part.isNotEmpty).join(' - '),
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: _Cell(
+                  '${movement.oldPrice} → ${movement.newPrice} '
+                  '(${movement.percentage})',
+                  strong: true,
+                ),
+              ),
+              Expanded(flex: 2, child: _Cell(movement.source)),
+            ],
+          ),
+      ],
+    );
+  }
+
+  List<_PriceMovement> _collectPriceMovements() {
+    final result = <_PriceMovement>[];
+    for (final log in _auditLogs) {
+      if ('${log['table_name']}' != 'quotes' ||
+          '${log['action']}'.toUpperCase() != 'UPDATE') {
+        continue;
+      }
+      final oldData = _mapFrom(log['old_data']);
+      final newData = _mapFrom(log['new_data']);
+      final oldItems = _mapList(oldData['items']);
+      final newItems = _mapList(newData['items']);
+      final count = oldItems.length < newItems.length
+          ? oldItems.length
+          : newItems.length;
+      for (var index = 0; index < count; index++) {
+        final oldItem = oldItems[index];
+        final newItem = newItems[index];
+        final oldPrice = _displayUnitPrice(oldData, oldItem);
+        final newPrice = _displayUnitPrice(newData, newItem);
+        final oldUnit = '${oldData['display_unit'] ?? 'TL'}';
+        final newUnit = '${newData['display_unit'] ?? 'TL'}';
+        final tolerance = oldPrice.abs() * 0.000001 < 0.005
+            ? 0.005
+            : oldPrice.abs() * 0.000001;
+        if ((oldPrice - newPrice).abs() <= tolerance && oldUnit == newUnit) {
+          continue;
+        }
+
+        final percentage = oldPrice == 0
+            ? 'yeni fiyat'
+            : '${(((newPrice - oldPrice) / oldPrice) * 100).toStringAsFixed(2)}%';
+        result.add(
+          _PriceMovement(
+            date: _date(log['created_at']),
+            actor: _actorLabel(log['actor_id']),
+            quoteCode: '${newData['code'] ?? oldData['code'] ?? '-'}',
+            productCode:
+                '${newItem['product_code'] ?? oldItem['product_code'] ?? ''}'
+                    .trim(),
+            description:
+                '${newItem['description'] ?? oldItem['description'] ?? ''}'
+                    .trim(),
+            oldPrice: _formatMovementPrice(oldPrice, oldUnit),
+            newPrice: _formatMovementPrice(newPrice, newUnit),
+            percentage: percentage,
+            source: _priceChangeSource(oldData, newData),
+          ),
+        );
+      }
+    }
+    return result;
+  }
+
+  List<Map<String, dynamic>> _mapList(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
+  }
+
+  double _displayUnitPrice(
+    Map<String, dynamic> quote,
+    Map<String, dynamic> item,
+  ) {
+    final unitPrice = (item['unit_price_tl'] as num?)?.toDouble() ?? 0;
+    final unit = '${quote['display_unit'] ?? 'TL'}';
+    if (unit == 'TL') return unitPrice;
+    final snapshot = quote['market_snapshot'];
+    if (snapshot is List) {
+      for (final rawRate in snapshot.whereType<Map>()) {
+        if ('${rawRate['code']}' != unit) continue;
+        final rate = (rawRate['value'] as num?)?.toDouble() ?? 0;
+        if (rate > 0) return unitPrice / rate;
+      }
+    }
+    return unitPrice;
+  }
+
+  String _formatMovementPrice(double value, String unit) {
+    final symbol = switch (unit) {
+      'EURTRY' => 'EUR',
+      'USDTRY' => r'$',
+      _ => 'TL',
+    };
+    final formatted = NumberFormat.decimalPatternDigits(
+      locale: 'tr_TR',
+      decimalDigits: 2,
+    ).format(value);
+    return '$symbol $formatted';
+  }
+
+  String _priceChangeSource(
+    Map<String, dynamic> oldData,
+    Map<String, dynamic> newData,
+  ) {
+    final note = '${newData['note'] ?? ''}'.toUpperCase();
+    if (note.contains('CIKTI BICIMI: PDF')) return 'PDF çıktısı';
+    if (note.contains('CIKTI BICIMI: EXCEL')) return 'Excel çıktısı';
+    if ('${oldData['status']}' != '${newData['status']}') {
+      return 'Teklifi tamamlama';
+    }
+    return 'Taslak / revizyon';
   }
 
   Widget _buildReadableRevisions() {
@@ -1023,6 +1177,30 @@ class _OwnCompanyDialogState extends State<_OwnCompanyDialog> {
       ),
     );
   }
+}
+
+class _PriceMovement {
+  const _PriceMovement({
+    required this.date,
+    required this.actor,
+    required this.quoteCode,
+    required this.productCode,
+    required this.description,
+    required this.oldPrice,
+    required this.newPrice,
+    required this.percentage,
+    required this.source,
+  });
+
+  final String date;
+  final String actor;
+  final String quoteCode;
+  final String productCode;
+  final String description;
+  final String oldPrice;
+  final String newPrice;
+  final String percentage;
+  final String source;
 }
 
 class _PanelTable extends StatelessWidget {

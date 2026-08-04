@@ -8,7 +8,7 @@ class AdminRepository {
   bool get isRemoteReady =>
       _client != null && _client.auth.currentSession != null;
 
-  Future<List<Map<String, dynamic>>> fetchAuditLogs({int limit = 80}) async {
+  Future<List<Map<String, dynamic>>> fetchAuditLogs({int limit = 500}) async {
     if (!isRemoteReady) return const [];
     try {
       final rows = await _client!
@@ -16,9 +16,7 @@ class AdminRepository {
           .select()
           .order('created_at', ascending: false)
           .limit(limit);
-      return rows
-          .cast<Map<String, dynamic>>()
-          .toList(growable: false);
+      return rows.cast<Map<String, dynamic>>().toList(growable: false);
     } catch (_) {
       return const [];
     }
@@ -34,9 +32,7 @@ class AdminRepository {
           .select()
           .order('created_at', ascending: false)
           .limit(limit);
-      return rows
-          .cast<Map<String, dynamic>>()
-          .toList(growable: false);
+      return rows.cast<Map<String, dynamic>>().toList(growable: false);
     } catch (_) {
       return const [];
     }

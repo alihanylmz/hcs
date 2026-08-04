@@ -220,6 +220,75 @@ void main() {
     expect(find.widgetWithText(TextFormField, '100.00'), findsOneWidget);
   });
 
+  testWidgets('high value foreign currency quote is never auto divided', (
+    WidgetTester tester,
+  ) async {
+    final rates = [
+      MarketRate(
+        code: 'EURTRY',
+        label: 'Euro',
+        unitLabel: '1 EUR',
+        value: 50,
+        updatedAt: DateTime(2026, 8, 4, 10),
+      ),
+    ];
+    final quote = Quote(
+      id: 'quote-high-value',
+      code: 'UZ-260804-100000',
+      customerName: 'Test Yetkili',
+      customerCompany: 'Yüksek Tutar Test',
+      title: '120.000 EUR teklif',
+      note: '',
+      createdAt: DateTime(2026, 8, 4, 10),
+      displayUnit: 'EURTRY',
+      marketSnapshot: rates,
+      items: const [
+        QuoteLineItem(
+          id: 'line-high-value',
+          description: 'Yüksek tutarlı kontrol sistemi',
+          quantity: 1,
+          unit: 'adet',
+          unitPriceTl: 6000000,
+        ),
+      ],
+      documentProfile: const QuoteDocumentProfile(
+        companyName: 'UZAL TEKNİK',
+        companyTagline: '',
+        companyPhone: '',
+        companyEmail: '',
+        companyWebsite: '',
+        companyAddress: '',
+        preparedByName: 'Test Kullanıcı',
+        preparedByTitle: '',
+        preparedByPhone: '',
+        preparedByEmail: '',
+        customerContactTitle: '',
+        customerPhone: '',
+        customerEmail: '',
+        validityText: '15 gün',
+        paymentTerms: 'Peşin',
+        deliveryTerms: 'Termin teyidi ile',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: QuoteEditorPage(
+          quoteRepository: QuoteRepository(),
+          initialRates: rates,
+          availableProducts: const [],
+          quoteToRevise: quote,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.widgetWithText(TextFormField, '120000.00'), findsOneWidget);
+    expect(find.textContaining('kur carpani hatasi'), findsNothing);
+  });
+
   testWidgets('copied quote uses current user profile in prepared-by fields', (
     WidgetTester tester,
   ) async {

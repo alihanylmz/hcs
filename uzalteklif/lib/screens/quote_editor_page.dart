@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -142,7 +140,6 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   String? _draftQuoteId;
   String? _draftQuoteCode;
   String? _draftShareToken;
-  bool _legacyPriceRepairApplied = false;
   int _codeRefreshToken = 0;
   int _idSequence = 0;
 
@@ -163,9 +160,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     _draftTimestamp = revisionSource?.createdAt ?? DateTime.now();
 
     if (source != null) {
-      final repairedSource = _repairLikelyDoubleConvertedQuote(source);
-      _loadFromExistingQuote(repairedSource);
-      _repairLoadedDraftsAgainstSource(source);
+      _loadFromExistingQuote(source);
       if (copySource != null) {
         _resetCopiedQuoteIdentityAndCustomer();
       }
@@ -278,7 +273,6 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         ),
       );
     }
-    await _restoreReasonableRevisionIfCurrentLooksInflated();
   }
 
   String _resolveOwnCompanySelection(List<OwnCompany> companies) {
@@ -632,174 +626,6 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     _customerEmailController.clear();
   }
 
-  Future<void> _restoreReasonableRevisionIfCurrentLooksInflated() async {
-    final current = widget.quoteToRevise;
-    if (current == null || current.displayUnit == 'TL') return;
-
-    final currentTotal = current.totalFor(current.displayUnit);
-    if (currentTotal <= 0) return;
-
-    late final SupabaseClient client;
-    try {
-      client = Supabase.instance.client;
-    } catch (_) {
-      return;
-    }
-    if (client.auth.currentSession == null) return;
-
-    try {
-      final rows = await client
-          .from('quote_revisions')
-          .select('snapshot')
-          .eq('quote_id', current.id)
-          .order('created_at', ascending: false)
-          .limit(20);
-
-      Quote? best;
-      for (final row in rows.cast<Map<String, dynamic>>()) {
-        final rawSnapshot = row['snapshot'];
-        if (rawSnapshot is! Map) continue;
-        final snapshot = Quote.fromJson(Map<String, dynamic>.from(rawSnapshot));
-        if (snapshot.displayUnit != current.displayUnit) continue;
-        final snapshotTotal = snapshot.totalFor(snapshot.displayUnit);
-        if (snapshotTotal <= 0) continue;
-        if (currentTotal > snapshotTotal * 3) {
-          best = snapshot;
-          break;
-        }
-      }
-
-      if (best == null || !mounted) return;
-      final restored = best;
-
-      setState(() {
-        _clearLoadedQuoteDrafts();
-        _legacyPriceRepairApplied = true;
-        _loadFromExistingQuote(restored);
-        _repairLoadedDraftsAgainstSource(restored);
-      });
-    } catch (_) {
-      // Revision access is manager-only in some installs; local repair below
-      // still protects the editor from saving another multiplied value.
-    }
-  }
-
-  void _repairLoadedDraftsAgainstSource(Quote source) {
-    if (_selectedDisplayUnit == 'TL') return;
-    final rate =
-        source.rateLookup[_selectedDisplayUnit] ??
-        _rateLookup[_selectedDisplayUnit];
-    if (rate == null || rate <= 1) return;
-
-    final expectedTotal = source.totalFor(_selectedDisplayUnit);
-    if (expectedTotal <= 0) return;
-
-    final loadedTotal = _subtotalTl / rate;
-    if (loadedTotal <= expectedTotal * 3) return;
-
-    for (final item in _items) {
-      final raw = double.tryParse(item.unitPriceController.text.trim()) ?? 0;
-      if (raw <= 0) continue;
-      item.unitPriceController.text = (raw / rate).toStringAsFixed(2);
-    }
-
-    _legacyPriceRepairApplied = true;
-  }
-
-  void _clearLoadedQuoteDrafts() {
-    for (final item in _items) {
-      item.dispose();
-    }
-    for (final section in _sections) {
-      section.dispose();
-    }
-    _items.clear();
-    _sections.clear();
-    _hiddenCosts.clear();
-  }
-
-  Quote _repairLikelyDoubleConvertedQuote(Quote source) {
-    if (source.displayUnit == 'TL') return source;
-
-    final rate =
-        source.rateLookup[source.displayUnit] ??
-        _rateLookup[source.displayUnit];
-    if (rate == null || rate <= 1) return source;
-
-    final displayedTotal = source.totalFor(source.displayUnit);
-    if (displayedTotal < 100000) return source;
-
-    _legacyPriceRepairApplied = true;
-    return Quote(
-      id: source.id,
-      code: source.code,
-      customerName: source.customerName,
-      customerCompany: source.customerCompany,
-      cariId: source.cariId,
-      title: source.title,
-      note: source.note,
-      createdAt: source.createdAt,
-      displayUnit: source.displayUnit,
-      items: source.items
-          .map(
-            (item) => QuoteLineItem(
-              id: item.id,
-              productCode: item.productCode,
-              description: item.description,
-              quantity: item.quantity,
-              unit: item.unit,
-              unitPriceTl: item.unitPriceTl / rate,
-              discountRate: item.discountRate,
-              sectionId: item.sectionId,
-            ),
-          )
-          .toList(growable: false),
-      marketSnapshot: source.marketSnapshot,
-      documentProfile: source.documentProfile,
-      hiddenCosts: source.hiddenCosts
-          .map(
-            (cost) => HiddenCostItem(
-              id: cost.id,
-              name: cost.name,
-              note: cost.note,
-              parameters: cost.parameters
-                  .map(
-                    (p) => HiddenCostParameter(
-                      label: p.label,
-                      quantity: p.quantity,
-                      unitPriceTl: p.unitPriceTl / rate,
-                    ),
-                  )
-                  .toList(growable: false),
-            ),
-          )
-          .toList(growable: false),
-      publicToken: source.publicToken,
-      paymentMethod: source.paymentMethod,
-      paymentTermDays: source.paymentTermDays,
-      hidePrices: source.hidePrices,
-      sections: source.sections,
-      status: source.status,
-      submittedAt: source.submittedAt,
-      approvedAt: source.approvedAt,
-      approvedBy: source.approvedBy,
-      approvedByName: source.approvedByName,
-      approvalNote: source.approvalNote,
-      acceptedTotalTl: source.acceptedTotalTl,
-      acceptedAmount: source.acceptedAmount,
-      acceptedCurrencyCode: source.acceptedCurrencyCode,
-      acceptedFxRate: source.acceptedFxRate,
-      acceptedNote: source.acceptedNote,
-      acceptedAt: source.acceptedAt,
-      acceptedBy: source.acceptedBy,
-      acceptedByName: source.acceptedByName,
-      revisionCount: source.revisionCount,
-      createdBy: source.createdBy,
-      createdByName: source.createdByName,
-      archivedAt: source.archivedAt,
-    );
-  }
-
   /// Kayitli urun kodundan veya eski tekliflerdeki aciklama on ekinden
   /// ilgili urunu bulup `id`'sini doner.
   String? _findProductIdFromItem(QuoteLineItem item) {
@@ -822,11 +648,6 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     String displayUnit, [
     Map<String, double>? rates,
   ]) {
-    unitPriceTl = _repairLikelyInflatedUnitPriceTl(
-      unitPriceTl,
-      displayUnit,
-      rates,
-    );
     if (displayUnit == 'TL') {
       return unitPriceTl.toStringAsFixed(2);
     }
@@ -837,20 +658,6 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     }
 
     return (unitPriceTl / rate).toStringAsFixed(2);
-  }
-
-  double _repairLikelyInflatedUnitPriceTl(
-    double unitPriceTl,
-    String displayUnit, [
-    Map<String, double>? rates,
-  ]) {
-    if (displayUnit == 'TL') return unitPriceTl;
-    final rate = rates?[displayUnit] ?? _rateLookup[displayUnit];
-    if (rate == null || rate <= 1) return unitPriceTl;
-    final displayAmount = unitPriceTl / rate;
-    if (displayAmount < 50000) return unitPriceTl;
-    _legacyPriceRepairApplied = true;
-    return unitPriceTl / rate;
   }
 
   @override
@@ -999,6 +806,144 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     return topic.isEmpty ? title : topic;
   }
 
+  Future<bool> _confirmPriceChangesBeforeSave(
+    Quote next, {
+    required String actionLabel,
+  }) async {
+    final previous = widget.quoteToRevise;
+    if (previous == null) return true;
+
+    final changes = _collectPriceChanges(previous, next);
+    if (changes.isEmpty || !mounted) return true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.price_change_rounded, color: Color(0xFFB8843C)),
+            SizedBox(width: 10),
+            Expanded(child: Text('Birim fiyat değişikliği var')),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620, maxHeight: 430),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${changes.length} kalemin birim fiyatı önceki kayıttan farklı. '
+                'Kaydetmeden önce değişiklikleri kontrol edin.',
+              ),
+              const SizedBox(height: 14),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: changes.length,
+                  separatorBuilder: (_, _) => const Divider(height: 18),
+                  itemBuilder: (context, index) {
+                    final change = changes[index];
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                change.label,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              if (change.code.isNotEmpty)
+                                Text(
+                                  change.code,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Text(
+                          '${change.oldText}  →  ${change.newText}',
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Fiyatları Kontrol Et'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.check_rounded),
+            label: Text('$actionLabel ve Onayla'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  List<_QuotePriceChange> _collectPriceChanges(Quote previous, Quote next) {
+    final changes = <_QuotePriceChange>[];
+    final count = previous.items.length < next.items.length
+        ? previous.items.length
+        : next.items.length;
+    for (var index = 0; index < count; index++) {
+      final oldItem = previous.items[index];
+      final newItem = next.items[index];
+      final oldAmount = _unitPriceInQuoteCurrency(previous, oldItem);
+      final newAmount = _unitPriceInQuoteCurrency(next, newItem);
+      final tolerance = oldAmount.abs() * 0.000001 < 0.005
+          ? 0.005
+          : oldAmount.abs() * 0.000001;
+      if ((oldAmount - newAmount).abs() <= tolerance &&
+          previous.displayUnit == next.displayUnit) {
+        continue;
+      }
+      changes.add(
+        _QuotePriceChange(
+          code: newItem.resolvedProductCode.isNotEmpty
+              ? newItem.resolvedProductCode
+              : oldItem.resolvedProductCode,
+          label: newItem.documentDescription.trim().isNotEmpty
+              ? newItem.documentDescription.trim()
+              : oldItem.documentDescription.trim(),
+          oldText: _formatUnitPriceChange(oldAmount, previous.displayUnit),
+          newText: _formatUnitPriceChange(newAmount, next.displayUnit),
+        ),
+      );
+    }
+    return changes;
+  }
+
+  double _unitPriceInQuoteCurrency(Quote quote, QuoteLineItem item) {
+    final rate = quote.rateLookup[quote.displayUnit] ?? 1;
+    return rate == 0 ? item.unitPriceTl : item.unitPriceTl / rate;
+  }
+
+  String _formatUnitPriceChange(double value, String unit) {
+    final symbol = switch (unit) {
+      'EURTRY' => 'EUR',
+      'USDTRY' => r'$',
+      _ => 'TL',
+    };
+    return '$symbol ${NumberFormat.decimalPatternDigits(locale: 'tr_TR', decimalDigits: 2).format(value)}';
+  }
+
   Future<void> _saveQuote() async {
     if (_isSubmitting) {
       return;
@@ -1009,6 +954,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     try {
       final quote = await _buildQuote(source: 'ARSIV');
       if (quote == null) {
+        return;
+      }
+      if (!await _confirmPriceChangesBeforeSave(
+        quote,
+        actionLabel: 'Taslağı Kaydet',
+      )) {
         return;
       }
 
@@ -1036,6 +987,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     try {
       final built = await _buildQuote(source: 'ARSIV');
       if (built == null) return;
+      if (!await _confirmPriceChangesBeforeSave(
+        built,
+        actionLabel: 'Revizyonu Tamamla',
+      )) {
+        return;
+      }
 
       final previousRevision = widget.quoteToRevise?.revisionCount ?? 0;
       final isRevision = widget.quoteToRevise != null;
@@ -1088,17 +1045,6 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         return;
       }
 
-      // Supabase kaydini PDF ile seri bekletme; ag yavaslarsa UI kilitlenirdi.
-      unawaited(
-        widget.quoteRepository.saveQuote(quote).catchError((
-          Object error,
-          StackTrace stackTrace,
-        ) {
-          debugPrint('Quote save failed (continuing with local PDF): $error');
-          debugPrintStack(stackTrace: stackTrace);
-        }),
-      );
-
       final path = await _pdfExportService.exportQuote(
         quote,
         onAfterSaveLocation: () {
@@ -1149,12 +1095,6 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         return;
       }
 
-      try {
-        await widget.quoteRepository.saveQuote(quote);
-      } catch (error, stackTrace) {
-        debugPrint('Quote save failed (continuing with local Excel): $error');
-        debugPrintStack(stackTrace: stackTrace);
-      }
       final path = await _excelExportService.exportQuote(quote);
       if (!mounted || path == null) {
         return;
@@ -3617,37 +3557,6 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             ],
           ),
         ),
-        if (_legacyPriceRepairApplied) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF7E6),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFF3D08A)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.auto_fix_high_rounded,
-                  size: 18,
-                  color: Color(0xFF8A5A00),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Eski kur carpani hatasi algilandi; fiyatlar duzenleme icin onarildi.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF6F4700),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
         if (_hiddenSubtotalTl > 0) ...[
           const SizedBox(height: 12),
           Container(
@@ -4010,6 +3919,20 @@ const List<_HiddenCostPreset> _hiddenCostPresets = [
     ],
   ),
 ];
+
+class _QuotePriceChange {
+  const _QuotePriceChange({
+    required this.code,
+    required this.label,
+    required this.oldText,
+    required this.newText,
+  });
+
+  final String code;
+  final String label;
+  final String oldText;
+  final String newText;
+}
 
 class _LineDraft {
   _LineDraft({

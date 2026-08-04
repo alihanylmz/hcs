@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: alihanylmz/uzalteklif
-          ref: master
+          ref: info
           path: uzalteklif
           token: ${{ secrets.DEPLOY_REPO_TOKEN || github.token }}
 

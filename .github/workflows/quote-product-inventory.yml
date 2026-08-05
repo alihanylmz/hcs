@@ -1,0 +1,180 @@
+name: Compare Legacy and Shared Quote Products
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - test
+    paths:
+      - ".github/workflows/quote-product-inventory.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SOURCE_SUPABASE_URL: ${{ secrets.TEKLIF_SUPABASE_URL }}
+      TARGET_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+
+    steps:
+      - name: Checkout test branch
+        uses: actions/checkout@v4
+        with:
+          ref: test
+
+      - name: Validate configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in SUPABASE_ACCESS_TOKEN SOURCE_SUPABASE_URL TARGET_SUPABASE_URL; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Eksik GitHub secret: $name"
+              exit 1
+            fi
+          done
+          if [[ "$SOURCE_SUPABASE_URL" == "$TARGET_SUPABASE_URL" ]]; then
+            echo "Kaynak ve hedef Supabase aynı olamaz."
+            exit 1
+          fi
+
+      - name: Resolve project keys securely
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_ref="$(python -c 'import os; from urllib.parse import urlparse; print(urlparse(os.environ["SOURCE_SUPABASE_URL"]).hostname.split(".")[0])')"
+          target_ref="$(python -c 'import os; from urllib.parse import urlparse; print(urlparse(os.environ["TARGET_SUPABASE_URL"]).hostname.split(".")[0])')"
+
+          resolve_key() {
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              -H "Accept: application/json" \
+              "https://api.supabase.com/v1/projects/$1/api-keys?reveal=true" |
+              jq -r '(
+                map(select(.name == "service_role")) +
+                map(select((.api_key // "") | startswith("sb_secret_")))
+              )[0].api_key // empty'
+          }
+
+          source_key="$(resolve_key "$source_ref")"
+          target_key="$(resolve_key "$target_ref")"
+          [[ -n "$source_key" && -n "$target_key" ]]
+          echo "::add-mask::$source_key"
+          echo "::add-mask::$target_key"
+          echo "SOURCE_SERVICE_ROLE_KEY=$source_key" >> "$GITHUB_ENV"
+          echo "TARGET_SERVICE_ROLE_KEY=$target_key" >> "$GITHUB_ENV"
+
+      - name: Compare products without writing data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import unicodedata
+          import urllib.request
+          from datetime import datetime, timezone
+
+          def fetch_all(url, key):
+              rows = []
+              page_size = 1000
+              offset = 0
+              while True:
+                  request = urllib.request.Request(
+                      f"{url.rstrip('/')}/rest/v1/products?select=*&order=id&offset={offset}&limit={page_size}",
+                      headers={"apikey": key, "Authorization": f"Bearer {key}"},
+                  )
+                  with urllib.request.urlopen(request, timeout=60) as response:
+                      page = json.load(response)
+                  rows.extend(page)
+                  if len(page) < page_size:
+                      return rows
+                  offset += page_size
+
+          def normalized(value):
+              value = str(value or '').casefold().replace('ı', 'i')
+              return ''.join(
+                  ch for ch in unicodedata.normalize('NFKD', value)
+                  if not unicodedata.combining(ch)
+              )
+
+          def is_inverter(row):
+              text = ' '.join(normalized(row.get(field)) for field in (
+                  'category', 'name', 'model', 'description', 'technical_summary'
+              ))
+              return any(token in text for token in ('inverter', 'invertor'))
+
+          def code(row):
+              return str(row.get('code') or '').strip().upper()
+
+          source = fetch_all(os.environ['SOURCE_SUPABASE_URL'], os.environ['SOURCE_SERVICE_ROLE_KEY'])
+          target = fetch_all(os.environ['TARGET_SUPABASE_URL'], os.environ['TARGET_SERVICE_ROLE_KEY'])
+          target_codes = {code(row) for row in target if code(row)}
+          missing = [row for row in source if code(row) and code(row) not in target_codes]
+          source_inverters = [row for row in source if is_inverter(row)]
+          target_inverters = [row for row in target if is_inverter(row)]
+          missing_inverters = [row for row in missing if is_inverter(row)]
+
+          lines = [
+              '# Eski ve Ortak Supabase Ürün Karşılaştırması',
+              '',
+              f"Kontrol zamanı: `{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}`",
+              '',
+              '> Bu rapor salt okunur hazırlanmıştır; hiçbir veritabanına yazılmamıştır.',
+              '',
+              '| Kontrol | Eski Teklif DB | Ortak DB |',
+              '|---|---:|---:|',
+              f"| Toplam ürün | {len(source)} | {len(target)} |",
+              f"| İnverter eşleşen ürün | {len(source_inverters)} | {len(target_inverters)} |",
+              '',
+              f"Eski veritabanında olup ortak veritabanında kodu bulunmayan ürün: **{len(missing)}**",
+              '',
+              f"Bunların inverter olanları: **{len(missing_inverters)}**",
+              '',
+              '## Eksik inverterler',
+              '',
+          ]
+          if missing_inverters:
+              lines.extend(['| Ürün kodu | Ürün adı | Kategori | Aktif |', '|---|---|---|---|'])
+              for row in sorted(missing_inverters, key=code):
+                  safe = lambda value: str(value or '').replace('|', '\\|').replace('\n', ' ')
+                  lines.append(
+                      f"| {safe(code(row))} | {safe(row.get('name'))} | "
+                      f"{safe(row.get('category'))} | {safe(row.get('is_active'))} |"
+                  )
+          else:
+              lines.append('Eksik inverter bulunmadı.')
+
+          lines.extend(['', '## Ortak veritabanında bulunmayan diğer ürünler', ''])
+          other_missing = [row for row in missing if not is_inverter(row)]
+          if other_missing:
+              lines.extend(['| Ürün kodu | Ürün adı | Kategori |', '|---|---|---|'])
+              for row in sorted(other_missing, key=code):
+                  safe = lambda value: str(value or '').replace('|', '\\|').replace('\n', ' ')
+                  lines.append(
+                      f"| {safe(code(row))} | {safe(row.get('name'))} | {safe(row.get('category'))} |"
+                  )
+          else:
+              lines.append('Başka eksik ürün bulunmadı.')
+
+          os.makedirs('docs/generated', exist_ok=True)
+          with open('docs/generated/quote-product-inventory.md', 'w', encoding='utf-8') as handle:
+              handle.write('\n'.join(lines) + '\n')
+          print('\n'.join(lines[:17]))
+          PY
+
+      - name: Save sanitized report to test branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/generated/quote-product-inventory.md
+          if git diff --cached --quiet; then
+            echo "Karşılaştırma raporu değişmedi."
+          else
+            git commit -m "Update quote product inventory [skip ci]"
+            git push origin HEAD:test
+          fi

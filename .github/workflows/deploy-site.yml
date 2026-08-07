@@ -2,10 +2,6 @@ name: Deploy Site to Plesk
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - master
 
 concurrency:
   group: deploy-site
@@ -15,20 +11,16 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      IS_TAKIP_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      IS_TAKIP_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      TEKLIF_SUPABASE_URL: ${{ secrets.TEKLIF_SUPABASE_URL }}
-      TEKLIF_SUPABASE_ANON_KEY: ${{ secrets.TEKLIF_SUPABASE_ANON_KEY }}
+      SHARED_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SHARED_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       PUBLIC_QUOTE_BASE_URL: ${{ vars.PUBLIC_QUOTE_BASE_URL || 'https://uzalteknikservis.com/t' }}
     steps:
       - name: Validate secrets
         shell: bash
         run: |
           missing=()
-          [[ -z "$IS_TAKIP_SUPABASE_URL" ]] && missing+=("SUPABASE_URL")
-          [[ -z "$IS_TAKIP_SUPABASE_ANON_KEY" ]] && missing+=("SUPABASE_ANON_KEY")
-          [[ -z "$TEKLIF_SUPABASE_URL" ]] && missing+=("TEKLIF_SUPABASE_URL")
-          [[ -z "$TEKLIF_SUPABASE_ANON_KEY" ]] && missing+=("TEKLIF_SUPABASE_ANON_KEY")
+          [[ -z "$SHARED_SUPABASE_URL" ]] && missing+=("SUPABASE_URL")
+          [[ -z "$SHARED_SUPABASE_ANON_KEY" ]] && missing+=("SUPABASE_ANON_KEY")
           [[ -z "${{ secrets.PLESK_HOST }}" ]] && missing+=("PLESK_HOST")
           [[ -z "${{ secrets.PLESK_USER }}" ]] && missing+=("PLESK_USER")
           [[ -z "${{ secrets.PLESK_PASSWORD }}" ]] && missing+=("PLESK_PASSWORD")
@@ -40,12 +32,8 @@ jobs:
           import os
           from urllib.parse import urlparse
 
-          for label, key in (
-              ("Is Takip", "IS_TAKIP_SUPABASE_URL"),
-              ("Teklif", "TEKLIF_SUPABASE_URL"),
-          ):
-              host = urlparse(os.environ.get(key, "")).netloc or "INVALID_URL"
-              print(f"{label} Supabase host: {host}")
+          host = urlparse(os.environ.get("SHARED_SUPABASE_URL", "")).netloc
+          print(f"Ortak Supabase host: {host or 'INVALID_URL'}")
           PY
 
       - name: Checkout Is Takip and portal
@@ -54,14 +42,6 @@ jobs:
           repository: alihanylmz/hcs
           ref: main
           path: hcs
-          token: ${{ secrets.DEPLOY_REPO_TOKEN || github.token }}
-
-      - name: Checkout Teklif
-        uses: actions/checkout@v4
-        with:
-          repository: alihanylmz/uzalteklif
-          ref: master
-          path: uzalteklif
           token: ${{ secrets.DEPLOY_REPO_TOKEN || github.token }}
 
       - name: Setup Flutter stable for Is Takip
@@ -75,8 +55,8 @@ jobs:
         run: |
           flutter pub get
           flutter build web --release --base-href /is-takip/ \
-            --dart-define=SUPABASE_URL="$IS_TAKIP_SUPABASE_URL" \
-            --dart-define=SUPABASE_ANON_KEY="$IS_TAKIP_SUPABASE_ANON_KEY"
+            --dart-define=SUPABASE_URL="$SHARED_SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SHARED_SUPABASE_ANON_KEY"
 
       - name: Setup Flutter beta for Teklif
         uses: subosito/flutter-action@v2
@@ -85,12 +65,12 @@ jobs:
           cache: true
 
       - name: Build Teklif web
-        working-directory: uzalteklif
+        working-directory: hcs/uzalteklif
         run: |
           flutter pub get
           flutter build web --release --base-href /teklif/ \
-            --dart-define=SUPABASE_URL="$TEKLIF_SUPABASE_URL" \
-            --dart-define=SUPABASE_ANON_KEY="$TEKLIF_SUPABASE_ANON_KEY" \
+            --dart-define=SUPABASE_URL="$SHARED_SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SHARED_SUPABASE_ANON_KEY" \
             --dart-define=PUBLIC_QUOTE_BASE_URL="$PUBLIC_QUOTE_BASE_URL"
 
       - name: Prepare Plesk payload
@@ -101,7 +81,7 @@ jobs:
           mkdir -p site/is-takip site/teklif repair/is-takip
           cp -a hcs/portal/. site/
           cp -a hcs/build/web/. site/is-takip/
-          cp -a uzalteklif/build/web/. site/teklif/
+          cp -a hcs/uzalteklif/build/web/. site/teklif/
           gzip -9 -c hcs/build/web/main.dart.js > repair/is-takip/main.dart.js.gz
 
           cat > site/is-takip/.htaccess <<'EOF'
@@ -148,6 +128,15 @@ jobs:
             RewriteCond %{REQUEST_FILENAME} !-f
             RewriteCond %{REQUEST_FILENAME} !-d
             RewriteRule . /teklif/index.html [L]
+          </IfModule>
+          <IfModule mod_headers.c>
+            Header set X-Uzal-Teklif-Deploy "quote-edit-normalize-20260710"
+            <FilesMatch "^(index\.html|flutter_bootstrap\.js|flutter_service_worker\.js)$">
+              Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+            </FilesMatch>
+            <FilesMatch "\.(js|json|wasm)$">
+              Header set Cache-Control "no-cache, must-revalidate"
+            </FilesMatch>
           </IfModule>
           EOF
 

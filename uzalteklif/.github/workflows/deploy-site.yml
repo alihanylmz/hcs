@@ -1,0 +1,99 @@
+name: Deploy Site to Plesk
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      TEKLIF_SUPABASE_URL: ${{ secrets.TEKLIF_SUPABASE_URL }}
+      TEKLIF_SUPABASE_ANON_KEY: ${{ secrets.TEKLIF_SUPABASE_ANON_KEY }}
+      PUBLIC_QUOTE_BASE_URL: ${{ vars.PUBLIC_QUOTE_BASE_URL || 'https://uzalteknikservis.com/t' }}
+    steps:
+      - name: Validate secrets
+        shell: bash
+        run: |
+          missing=()
+          [[ -z "$TEKLIF_SUPABASE_URL" ]] && missing+=("TEKLIF_SUPABASE_URL")
+          [[ -z "$TEKLIF_SUPABASE_ANON_KEY" ]] && missing+=("TEKLIF_SUPABASE_ANON_KEY")
+          [[ -z "${{ secrets.PLESK_HOST }}" ]] && missing+=("PLESK_HOST")
+          [[ -z "${{ secrets.PLESK_USER }}" ]] && missing+=("PLESK_USER")
+          [[ -z "${{ secrets.PLESK_PASSWORD }}" ]] && missing+=("PLESK_PASSWORD")
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing GitHub secrets:\n- %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+      - name: Checkout Teklif
+        uses: actions/checkout@v4
+        with:
+          repository: alihanylmz/uzalteklif
+          ref: master
+          path: uzalteklif
+          token: ${{ secrets.DEPLOY_REPO_TOKEN || github.token }}
+
+      - name: Setup Flutter beta for Teklif
+        uses: subosito/flutter-action@v2
+        with:
+          channel: beta
+          cache: true
+
+      - name: Build Teklif web
+        working-directory: uzalteklif
+        run: |
+          flutter pub get
+          flutter build web --release --base-href /teklif/ \
+            --dart-define=SUPABASE_URL="$TEKLIF_SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$TEKLIF_SUPABASE_ANON_KEY" \
+            --dart-define=PUBLIC_QUOTE_BASE_URL="$PUBLIC_QUOTE_BASE_URL"
+
+      - name: Prepare Plesk payload
+        shell: bash
+        run: |
+          rm -rf site
+          mkdir -p site/teklif
+          cp -a uzalteklif/build/web/. site/teklif/
+
+          cat > site/teklif/.htaccess <<'EOF'
+          <IfModule mod_rewrite.c>
+            RewriteEngine On
+            RewriteBase /teklif/
+            RewriteRule ^index\.html$ - [L]
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule . /teklif/index.html [L]
+          </IfModule>
+          <IfModule mod_headers.c>
+            <FilesMatch "^(index\.html|flutter_bootstrap\.js|flutter_service_worker\.js)$">
+              Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+            </FilesMatch>
+            <FilesMatch "\.(js|json|wasm)$">
+              Header set Cache-Control "no-cache, must-revalidate"
+            </FilesMatch>
+          </IfModule>
+          EOF
+
+      - name: Upload deploy artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plesk-site
+          path: site
+
+      - name: Deploy to Plesk over FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+        with:
+          server: ${{ secrets.PLESK_HOST }}
+          username: ${{ secrets.PLESK_USER }}
+          password: ${{ secrets.PLESK_PASSWORD }}
+          port: ${{ secrets.PLESK_PORT || 21 }}
+          local-dir: site/
+          server-dir: ${{ secrets.PLESK_FTP_TARGET_DIR || '/httpdocs/' }}
+          dangerous-clean-slate: false

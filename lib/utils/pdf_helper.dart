@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'text_sanitizer.dart';
@@ -13,14 +12,12 @@ class PdfHelper {
 
   static Future<pw.Font> loadTurkishFont() async {
     try {
-      final fontData = await rootBundle.load('assets/fonts/NotoSans-Regular.ttf');
+      final fontData = await rootBundle.load(
+        'assets/fonts/NotoSans-Regular.ttf',
+      );
       return pw.Font.ttf(fontData);
     } catch (e) {
-      try {
-        return await PdfGoogleFonts.notoSansRegular();
-      } catch (e2) {
-        return pw.Font.helvetica();
-      }
+      return pw.Font.helvetica();
     }
   }
 
@@ -91,7 +88,12 @@ class PdfHelper {
     );
   }
 
-  static pw.Widget buildInfoRow(String label, String value, pw.Font font, {bool isFullWidth = false}) {
+  static pw.Widget buildInfoRow(
+    String label,
+    String value,
+    pw.Font font, {
+    bool isFullWidth = false,
+  }) {
     return pw.Container(
       width: isFullWidth ? double.infinity : null,
       margin: const pw.EdgeInsets.only(bottom: 6),
@@ -100,12 +102,20 @@ class PdfHelper {
         children: [
           pw.Text(
             label,
-            style: pw.TextStyle(font: font, fontSize: 8, color: PdfColors.grey600),
+            style: pw.TextStyle(
+              font: font,
+              fontSize: 8,
+              color: PdfColors.grey600,
+            ),
           ),
           pw.SizedBox(height: 2),
           pw.Text(
             value,
-            style: pw.TextStyle(font: font, fontSize: 10, color: PdfColors.black),
+            style: pw.TextStyle(
+              font: font,
+              fontSize: 10,
+              color: PdfColors.black,
+            ),
           ),
         ],
       ),

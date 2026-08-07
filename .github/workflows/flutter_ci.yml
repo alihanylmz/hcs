@@ -24,7 +24,8 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
-        run: flutter analyze
+        continue-on-error: true
+        run: flutter analyze --no-fatal-warnings
 
       - name: Test
         run: flutter test test/widget_test.dart

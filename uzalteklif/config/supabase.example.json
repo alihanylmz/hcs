@@ -1,0 +1,6 @@
+{
+  "SUPABASE_URL": "https://PROJECT_ID.supabase.co",
+  "SUPABASE_ANON_KEY": "YOUR_SUPABASE_ANON_KEY",
+  "PUBLIC_QUOTE_BASE_URL": "https://uzalteknik.com/t",
+  "UPDATE_GITHUB_REPO": "OWNER/REPO"
+}

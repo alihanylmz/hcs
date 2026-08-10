@@ -499,16 +499,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
       if (!mounted) return;
 
       if (item == null) {
-        setState(() {
-          _stockSectionIndex = 1;
-          _searchQuery = barcode;
-        });
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('Barkodla eslesen stok bulunamadi: $barcode'),
-            backgroundColor: Colors.orange.shade700,
-          ),
-        );
+        await _showBarcodeLinkSheet(barcode);
         return;
       }
 
@@ -522,6 +513,92 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
           content: Text(
             'Barkod okunabildi ama stok aranamadı. SQL migration calisti mi? $error',
           ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _showBarcodeLinkSheet(String barcode) async {
+    if (!_canManageStock) {
+      if (!mounted) return;
+      setState(() {
+        _stockSectionIndex = 1;
+        _searchQuery = barcode;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Barkodla eslesen stok bulunamadi: $barcode'),
+          backgroundColor: Colors.orange.shade700,
+        ),
+      );
+      return;
+    }
+
+    final selectedItem = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder:
+          (context) => BarcodeStockLinkSheet(
+            barcode: barcode,
+            stocks: _allStocks,
+            asInt: _asInt,
+            safeText: _safeText,
+            iconForCategory: _getIconForCategory,
+          ),
+    );
+
+    if (!mounted || selectedItem == null) return;
+
+    final existingBarcode = selectedItem['barcode']?.toString().trim() ?? '';
+    if (existingBarcode.isNotEmpty && existingBarcode != barcode) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: const Text('Barkodu degistir'),
+              content: Text(
+                '${_safeText(selectedItem['name'])} stok kartinda zaten "$existingBarcode" barkodu var. Yeni barkod "$barcode" ile degistirilsin mi?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Vazgec'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Degistir'),
+                ),
+              ],
+            ),
+      );
+      if (confirm != true) return;
+    }
+
+    try {
+      await _stockService.linkBarcodeToStock(
+        _asInt(selectedItem['id']),
+        barcode,
+      );
+      await _loadStocks();
+      if (!mounted) return;
+      final linkedItem = await _stockService.getStockByBarcode(barcode);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Barkod stok kartina baglandi: $barcode'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      if (linkedItem != null) {
+        await _showScannedStockSheet(linkedItem, barcode);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Barkod eslestirilemedi: $error'),
           backgroundColor: Colors.red,
         ),
       );
@@ -2155,6 +2232,194 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                   icon: const Icon(Icons.open_in_new_rounded),
                   label: const Text('Isi ac'),
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class BarcodeStockLinkSheet extends StatefulWidget {
+  final String barcode;
+  final List<Map<String, dynamic>> stocks;
+  final int Function(dynamic value) asInt;
+  final String Function(dynamic value, {String fallback}) safeText;
+  final IconData Function(String? category) iconForCategory;
+
+  const BarcodeStockLinkSheet({
+    super.key,
+    required this.barcode,
+    required this.stocks,
+    required this.asInt,
+    required this.safeText,
+    required this.iconForCategory,
+  });
+
+  @override
+  State<BarcodeStockLinkSheet> createState() => _BarcodeStockLinkSheetState();
+}
+
+class _BarcodeStockLinkSheetState extends State<BarcodeStockLinkSheet> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _filteredStocks {
+    final query = _normalize(_query);
+    final list = List<Map<String, dynamic>>.from(widget.stocks);
+    if (query.isEmpty) return list;
+
+    return list.where((stock) {
+      final name = _normalize(stock['name']);
+      final category = _normalize(stock['category']);
+      final shelf = _normalize(stock['shelf_location']);
+      final barcode = _normalize(stock['barcode']);
+      return name.contains(query) ||
+          category.contains(query) ||
+          shelf.contains(query) ||
+          barcode.contains(query);
+    }).toList();
+  }
+
+  String _normalize(dynamic value) {
+    return (value?.toString() ?? '')
+        .replaceAll('I', 'ı')
+        .replaceAll('İ', 'i')
+        .replaceAll('Ş', 'ş')
+        .replaceAll('Ğ', 'ğ')
+        .replaceAll('Ü', 'ü')
+        .replaceAll('Ö', 'ö')
+        .replaceAll('Ç', 'ç')
+        .toLowerCase()
+        .trim();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final filteredStocks = _filteredStocks;
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + bottomInset),
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.78,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Barkodu mevcut stoga bagla',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                widget.barcode,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _searchCtrl,
+                autofocus: true,
+                onChanged: (value) => setState(() => _query = value),
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search_rounded),
+                  labelText: 'Stoktaki urunu ara',
+                  hintText: 'Urun adi, kategori, raf veya barkod',
+                ),
+              ),
+              const SizedBox(height: 14),
+              Expanded(
+                child:
+                    filteredStocks.isEmpty
+                        ? Center(
+                          child: Text(
+                            'Eslesen stok bulunamadi.',
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        )
+                        : ListView.separated(
+                          itemCount: filteredStocks.length,
+                          separatorBuilder:
+                              (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final stock = filteredStocks[index];
+                            final quantity = widget.asInt(stock['quantity']);
+                            final unit = widget.safeText(
+                              stock['unit'],
+                              fallback: 'adet',
+                            );
+                            final barcode =
+                                stock['barcode']?.toString().trim() ?? '';
+
+                            return Material(
+                              color: theme.colorScheme.surface,
+                              borderRadius: BorderRadius.circular(14),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(14),
+                                onTap: () => Navigator.pop(context, stock),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        backgroundColor: theme
+                                            .colorScheme
+                                            .primary
+                                            .withOpacity(0.1),
+                                        foregroundColor:
+                                            theme.colorScheme.primary,
+                                        child: Icon(
+                                          widget.iconForCategory(
+                                            stock['category']?.toString(),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              widget.safeText(stock['name']),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '$quantity $unit stokta'
+                                              '${barcode.isEmpty ? '' : ' - Barkod: $barcode'}',
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Icon(Icons.link_rounded),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
               ),
             ],
           ),

@@ -122,6 +122,15 @@ class StockService {
     await _supabase.from(_table).update(data).eq('id', id);
   }
 
+  Future<void> linkBarcodeToStock(int id, String barcode) async {
+    final normalized = barcode.trim();
+    if (normalized.isEmpty) {
+      throw Exception('Barkod bos olamaz.');
+    }
+
+    await _supabase.from(_table).update({'barcode': normalized}).eq('id', id);
+  }
+
   Future<void> deleteStock(int id) async {
     await _supabase.from(_table).delete().eq('id', id);
   }

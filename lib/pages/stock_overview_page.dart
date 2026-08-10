@@ -27,10 +27,13 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
 
   List<Map<String, dynamic>> _allStocks = [];
   List<Map<String, dynamic>> _missingTickets = [];
+  List<Map<String, dynamic>> _stockMovements = [];
 
   bool _isLoading = true;
   bool _missingLoading = true;
+  bool _movementsLoading = true;
   String? _missingError;
+  String? _movementsError;
   String _searchQuery = '';
   bool _isSelectionMode = false;
   Set<int> _selectedItems = {};
@@ -74,6 +77,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     _loadUserProfile();
     _loadStocks();
     _loadMissingTickets();
+    _loadStockMovements();
   }
 
   Future<void> _loadUserProfile() async {
@@ -120,6 +124,30 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
       setState(() {
         _missingError = error.toString();
         _missingLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadStockMovements() async {
+    if (mounted) {
+      setState(() {
+        _movementsLoading = true;
+        _movementsError = null;
+      });
+    }
+
+    try {
+      final data = await _stockService.getStockMovements();
+      if (!mounted) return;
+      setState(() {
+        _stockMovements = data;
+        _movementsLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _movementsError = error.toString();
+        _movementsLoading = false;
       });
     }
   }
@@ -235,6 +263,25 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
           jobCode.contains(query) ||
           missing.contains(query) ||
           customerName.contains(query);
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _getFilteredMovements() {
+    final query = _normalizeTurkish(_searchQuery);
+    if (query.isEmpty) return List<Map<String, dynamic>>.from(_stockMovements);
+
+    return _stockMovements.where((movement) {
+      final inventory = movement['inventory'] as Map<String, dynamic>? ?? {};
+      final name = _normalizeTurkish(inventory['name'] ?? '');
+      final barcode = _normalizeTurkish(inventory['barcode'] ?? '');
+      final reason = _normalizeTurkish(movement['reason'] ?? '');
+      final destination = _normalizeTurkish(movement['destination'] ?? '');
+      final note = _normalizeTurkish(movement['note'] ?? '');
+      return name.contains(query) ||
+          barcode.contains(query) ||
+          reason.contains(query) ||
+          destination.contains(query) ||
+          note.contains(query);
     }).toList();
   }
 
@@ -547,6 +594,24 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                       icon: const Icon(Icons.search_rounded),
                       label: const Text('Listede goster'),
                     ),
+                    if (_canManageStock)
+                      FilledButton.tonalIcon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showStockMovementDialog(item, 'in');
+                        },
+                        icon: const Icon(Icons.add_box_outlined),
+                        label: const Text('Giris yap'),
+                      ),
+                    if (_canManageStock)
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showStockMovementDialog(item, 'out');
+                        },
+                        icon: const Icon(Icons.outbox_outlined),
+                        label: const Text('Cikis yap'),
+                      ),
                     if (_isSelectionMode)
                       OutlinedButton.icon(
                         onPressed: () {
@@ -561,6 +626,62 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
               ],
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showStockMovementDialog(
+    Map<String, dynamic> item,
+    String movementType,
+  ) async {
+    if (!_canManageStock) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (_) {
+        return StockMovementDialog(
+          item: item,
+          movementType: movementType,
+          onSave: ({
+            required quantity,
+            required reason,
+            required destination,
+            required note,
+          }) async {
+            try {
+              await _stockService.registerStockMovement(
+                inventoryId: _asInt(item['id']),
+                movementType: movementType,
+                quantity: quantity,
+                reason: reason,
+                destination: destination,
+                note: note,
+              );
+              if (!mounted) return;
+              await _loadStocks();
+              await _loadStockMovements();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    movementType == 'in'
+                        ? 'Stok girisi kaydedildi.'
+                        : 'Stok cikisi kaydedildi.',
+                  ),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            } catch (error) {
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Stok hareketi kaydedilemedi: $error'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              rethrow;
+            }
+          },
         );
       },
     );
@@ -649,7 +770,11 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
   }
 
   Future<void> _refreshAll() async {
-    await Future.wait([_loadStocks(), _loadMissingTickets()]);
+    await Future.wait([
+      _loadStocks(),
+      _loadMissingTickets(),
+      _loadStockMovements(),
+    ]);
   }
 
   @override
@@ -670,6 +795,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     final filteredStocks = _getFilteredStocks();
     final criticalStocks = _getCriticalStocks();
     final filteredMissingTickets = _getFilteredMissingTickets();
+    final filteredMovements = _getFilteredMovements();
     final totalItems = _allStocks.length;
     final totalUnits = _allStocks.fold<int>(
       0,
@@ -754,7 +880,9 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                               ? criticalStocks.length
                               : _stockSectionIndex == 1
                               ? filteredStocks.length
-                              : filteredMissingTickets.length,
+                              : _stockSectionIndex == 2
+                              ? filteredMissingTickets.length
+                              : filteredMovements.length,
                     ),
                   ],
                 ),
@@ -765,6 +893,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
               criticalStocks: criticalStocks,
               filteredStocks: filteredStocks,
               filteredMissingTickets: filteredMissingTickets,
+              filteredMovements: filteredMovements,
             ),
           ],
         ),
@@ -995,13 +1124,15 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
               hintText:
                   _stockSectionIndex == 2
                       ? 'Is, musteri veya eksik parca ara...'
+                      : _stockSectionIndex == 3
+                      ? 'Urun, barkod, sebep veya hedef ara...'
                       : 'Urun, kategori, raf veya barkod ara...',
               prefixIcon: const Icon(Icons.search_rounded),
             ),
           ),
           const SizedBox(height: 18),
           _buildSectionSelector(theme),
-          if (_stockSectionIndex != 2) ...[
+          if (_stockSectionIndex != 2 && _stockSectionIndex != 3) ...[
             const SizedBox(height: 14),
             _buildCategorySelector(theme),
           ],
@@ -1019,7 +1150,9 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
             ? 'kritik urun'
             : _stockSectionIndex == 1
             ? 'stok kalemi'
-            : 'eksik parca bagli is';
+            : _stockSectionIndex == 2
+            ? 'eksik parca bagli is'
+            : 'stok hareketi';
 
     return Container(
       width: double.infinity,
@@ -1041,6 +1174,8 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
           Text(
             _stockSectionIndex == 2
                 ? 'Is etkisini once gorebilirsiniz.'
+                : _stockSectionIndex == 3
+                ? 'Giris ve cikis kayitlari tekliften bagimsizdir.'
                 : 'Satirdan duzenle, siparise ekle veya sil.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurface.withOpacity(0.65),
@@ -1056,7 +1191,63 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     required List<Map<String, dynamic>> criticalStocks,
     required List<Map<String, dynamic>> filteredStocks,
     required List<Map<String, dynamic>> filteredMissingTickets,
+    required List<Map<String, dynamic>> filteredMovements,
   }) {
+    if (_stockSectionIndex == 3) {
+      if (_movementsLoading) {
+        return const [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        ];
+      }
+
+      if (_movementsError != null) {
+        return [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _buildEmptyState(
+              theme,
+              icon: Icons.error_outline_rounded,
+              title: 'Stok hareketleri yuklenemedi',
+              subtitle: _movementsError!,
+            ),
+          ),
+        ];
+      }
+
+      if (filteredMovements.isEmpty) {
+        return [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _buildEmptyState(
+              theme,
+              icon: Icons.swap_vert_rounded,
+              title: 'Stok hareketi bulunamadi',
+              subtitle:
+                  _searchQuery.trim().isEmpty
+                      ? 'Giris veya cikis yaptikca hareketler burada gorunecek.'
+                      : 'Arama sonucuna uygun hareket yok.',
+            ),
+          ),
+        ];
+      }
+
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) =>
+                  _buildMovementCard(filteredMovements[index], theme),
+              childCount: filteredMovements.length,
+            ),
+          ),
+        ),
+      ];
+    }
+
     if (_stockSectionIndex == 2) {
       if (_missingLoading) {
         return const [
@@ -1218,7 +1409,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
   }
 
   Widget _buildSectionSelector(ThemeData theme) {
-    const labels = ['Kritik', 'Tum Stok', 'Ise Bagli Eksikler'];
+    const labels = ['Kritik', 'Tum Stok', 'Ise Bagli Eksikler', 'Hareketler'];
 
     return Container(
       padding: const EdgeInsets.all(6),
@@ -1547,6 +1738,18 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                       icon: const Icon(Icons.edit_outlined, size: 18),
                       label: const Text('Duzenle'),
                     ),
+                  if (_canManageStock)
+                    FilledButton.icon(
+                      onPressed: () => _showStockMovementDialog(item, 'in'),
+                      icon: const Icon(Icons.add_box_outlined, size: 18),
+                      label: const Text('Giris'),
+                    ),
+                  if (_canManageStock)
+                    OutlinedButton.icon(
+                      onPressed: () => _showStockMovementDialog(item, 'out'),
+                      icon: const Icon(Icons.outbox_outlined, size: 18),
+                      label: const Text('Cikis'),
+                    ),
                   FilledButton.tonalIcon(
                     onPressed: () => _addItemToOrderList(item),
                     icon: Icon(
@@ -1660,6 +1863,149 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
         style: theme.textTheme.labelLarge?.copyWith(
           color: color,
           fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMovementCard(Map<String, dynamic> movement, ThemeData theme) {
+    final inventory = movement['inventory'] as Map<String, dynamic>? ?? {};
+    final isIn = movement['movement_type'] == 'in';
+    final quantity = _asInt(movement['quantity']);
+    final before = _asInt(movement['quantity_before']);
+    final after = _asInt(movement['quantity_after']);
+    final unit = _safeText(inventory['unit'], fallback: 'adet');
+    final name = _safeText(inventory['name'], fallback: 'Silinmis stok');
+    final barcode = inventory['barcode']?.toString().trim() ?? '';
+    final reason = _safeText(movement['reason'], fallback: '-');
+    final destination = _safeText(movement['destination'], fallback: '-');
+    final note = _safeText(movement['note'], fallback: '-');
+    final date = _formatShortDate(movement['created_at']);
+    final color = isIn ? Colors.green.shade700 : theme.colorScheme.error;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: color.withOpacity(0.16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.035),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    isIn
+                        ? Icons.call_received_rounded
+                        : Icons.call_made_rounded,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _buildMetaChip(
+                            theme,
+                            icon: Icons.schedule_outlined,
+                            label: date,
+                          ),
+                          if (barcode.isNotEmpty)
+                            _buildMetaChip(
+                              theme,
+                              icon: Icons.qr_code_rounded,
+                              label: barcode,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                _buildStatusBadge(
+                  theme,
+                  label: isIn ? 'Giris' : 'Cikis',
+                  color: color,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _buildMetricTile(
+                  theme,
+                  label: isIn ? 'Giren adet' : 'Cikan adet',
+                  value: '$quantity $unit',
+                  accentColor: color,
+                ),
+                _buildMetricTile(
+                  theme,
+                  label: 'Once',
+                  value: '$before $unit',
+                  accentColor: theme.colorScheme.primary,
+                ),
+                _buildMetricTile(
+                  theme,
+                  label: 'Sonra',
+                  value: '$after $unit',
+                  accentColor: theme.colorScheme.tertiary,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildMetaChip(theme, icon: Icons.flag_outlined, label: reason),
+                if (!isIn)
+                  _buildMetaChip(
+                    theme,
+                    icon: Icons.place_outlined,
+                    label: destination,
+                  ),
+                if (note != '-')
+                  _buildMetaChip(
+                    theme,
+                    icon: Icons.notes_outlined,
+                    label: note,
+                  ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -1818,6 +2164,169 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
   }
 }
 
+class StockMovementDialog extends StatefulWidget {
+  final Map<String, dynamic> item;
+  final String movementType;
+  final Future<void> Function({
+    required int quantity,
+    required String reason,
+    required String destination,
+    required String note,
+  })
+  onSave;
+
+  const StockMovementDialog({
+    super.key,
+    required this.item,
+    required this.movementType,
+    required this.onSave,
+  });
+
+  @override
+  State<StockMovementDialog> createState() => _StockMovementDialogState();
+}
+
+class _StockMovementDialogState extends State<StockMovementDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _qtyCtrl;
+  late final TextEditingController _reasonCtrl;
+  late final TextEditingController _destinationCtrl;
+  late final TextEditingController _noteCtrl;
+  bool _isSaving = false;
+
+  bool get _isIn => widget.movementType == 'in';
+
+  @override
+  void initState() {
+    super.initState();
+    _qtyCtrl = TextEditingController(text: '1');
+    _reasonCtrl = TextEditingController();
+    _destinationCtrl = TextEditingController();
+    _noteCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _qtyCtrl.dispose();
+    _reasonCtrl.dispose();
+    _destinationCtrl.dispose();
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final itemName = widget.item['name']?.toString() ?? '-';
+    final unit = widget.item['unit']?.toString() ?? 'adet';
+    final currentQty = widget.item['quantity'] as int? ?? 0;
+
+    return AlertDialog(
+      title: Text(_isIn ? 'Stok Girisi' : 'Stok Cikisi'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                itemName,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              Text('Mevcut: $currentQty $unit'),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _qtyCtrl,
+                decoration: InputDecoration(labelText: 'Adet ($unit)'),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  final number = int.tryParse(value?.trim() ?? '');
+                  if (number == null || number <= 0) {
+                    return 'Gecerli bir adet girin';
+                  }
+                  if (!_isIn && number > currentQty) {
+                    return 'Mevcut stoktan fazla cikis yapilamaz';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _reasonCtrl,
+                decoration: InputDecoration(
+                  labelText: _isIn ? 'Giris sebebi / kaynak' : 'Ne icin?',
+                ),
+                validator: (value) {
+                  if (_isIn) return null;
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Cikis sebebi zorunlu';
+                  }
+                  return null;
+                },
+              ),
+              if (!_isIn) ...[
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _destinationCtrl,
+                  decoration: const InputDecoration(labelText: 'Nereye?'),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Cikis hedefi zorunlu';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _noteCtrl,
+                decoration: const InputDecoration(labelText: 'Not'),
+                minLines: 2,
+                maxLines: 4,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Text('Iptal'),
+        ),
+        FilledButton(
+          onPressed: _isSaving ? null : _save,
+          child:
+              _isSaving
+                  ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                  : const Text('Kaydet'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSaving = true);
+    try {
+      await widget.onSave(
+        quantity: int.parse(_qtyCtrl.text.trim()),
+        reason: _reasonCtrl.text.trim(),
+        destination: _destinationCtrl.text.trim(),
+        note: _noteCtrl.text.trim(),
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+}
+
 class StockFormDialog extends StatefulWidget {
   final String type;
   final Map<String, dynamic>? editItem;
@@ -1960,9 +2469,14 @@ class _StockFormDialogState extends State<StockFormDialog> {
               const SizedBox(height: 10),
               TextFormField(
                 controller: _barcodeCtrl,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Barkod / QR Kodu',
                   helperText: 'Kamera okutma icin benzersiz kod',
+                  suffixIcon: IconButton(
+                    tooltip: 'Kameradan okut',
+                    onPressed: _scanBarcodeIntoField,
+                    icon: const Icon(Icons.qr_code_scanner_rounded),
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -2194,6 +2708,16 @@ class _StockFormDialogState extends State<StockFormDialog> {
     ];
   }
 
+  Future<void> _scanBarcodeIntoField() async {
+    final scannedCode = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const StockBarcodeScannerPage()),
+    );
+
+    final code = scannedCode?.trim() ?? '';
+    if (code.isEmpty || !mounted) return;
+    setState(() => _barcodeCtrl.text = code);
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -2266,6 +2790,8 @@ class _StockFormDialogState extends State<StockFormDialog> {
 
     if (_barcodeCtrl.text.trim().isNotEmpty) {
       data['barcode'] = _barcodeCtrl.text.trim();
+    } else if (isEdit) {
+      data['barcode'] = null;
     }
 
     await widget.onSave(data, isEdit);

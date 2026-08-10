@@ -130,6 +130,48 @@ class StockService {
     await _supabase.from(_table).update({'quantity': newQuantity}).eq('id', id);
   }
 
+  // --- STOCK MOVEMENTS ---
+
+  Future<List<Map<String, dynamic>>> getStockMovements({
+    int limit = 100,
+  }) async {
+    final response = await _supabase
+        .from('stock_movements')
+        .select('*, inventory(name, category, unit, barcode)')
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<void> registerStockMovement({
+    required int inventoryId,
+    required String movementType,
+    required int quantity,
+    String? reason,
+    String? destination,
+    String? note,
+  }) async {
+    if (movementType != 'in' && movementType != 'out') {
+      throw Exception('Gecersiz stok hareketi.');
+    }
+
+    if (quantity <= 0) {
+      throw Exception('Adet 0dan buyuk olmali.');
+    }
+
+    await _supabase.rpc(
+      'register_stock_movement',
+      params: {
+        'p_inventory_id': inventoryId,
+        'p_movement_type': movementType,
+        'p_quantity': quantity,
+        'p_reason': reason,
+        'p_destination': destination,
+        'p_note': note,
+      },
+    );
+  }
+
   // --- TICKET PARTS (Kullanılan Malzemeler) ---
 
   /// İş emrine parça ekler ve stoktan düşer

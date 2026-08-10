@@ -44,6 +44,16 @@ class PermissionService {
       ..remove(AppPermission.viewProfileAdminTools),
   );
 
+  static final Set<AppPermission> _stockManagerPermissions = Set.unmodifiable({
+    AppPermission.viewTicketList,
+    AppPermission.viewArchivedTickets,
+    AppPermission.exportFilteredTicketListPdf,
+    AppPermission.exportAllTicketListPdf,
+    AppPermission.viewStock,
+    AppPermission.manageStock,
+    AppPermission.deleteStock,
+  });
+
   static final Set<AppPermission> _supervisorPermissions = Set.unmodifiable({
     AppPermission.viewTicketList,
     AppPermission.viewDraftTickets,
@@ -124,6 +134,8 @@ class PermissionService {
         return _adminPermissions;
       case UserRole.manager:
         return _managerPermissions;
+      case UserRole.stockManager:
+        return _stockManagerPermissions;
       case UserRole.supervisor:
         return _supervisorPermissions;
       case UserRole.engineer:
@@ -162,6 +174,8 @@ class PermissionService {
         return 'Genel Mudur';
       case UserRole.manager:
         return 'Patron';
+      case UserRole.stockManager:
+        return 'Stok Yoneticisi';
       case UserRole.supervisor:
         return 'Supervizor';
       case UserRole.engineer:
@@ -182,6 +196,7 @@ class PermissionService {
     switch (role) {
       case UserRole.admin:
       case UserRole.manager:
+      case UserRole.stockManager:
       case UserRole.supervisor:
       case UserRole.engineer:
       case UserRole.technician:

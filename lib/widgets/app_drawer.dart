@@ -10,6 +10,7 @@ import '../pages/workshop_page.dart';
 import '../pages/service_form_templates_page.dart';
 import '../pages/login_page.dart';
 import '../pages/fault_codes_page.dart';
+import '../pages/stock_overview_page.dart';
 import '../services/permission_service.dart';
 import '../theme/app_colors.dart';
 
@@ -225,10 +226,31 @@ class AppDrawer extends StatelessWidget {
                                   Navigator.pop(context);
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) => const ServiceFormTemplatesPage(),
+                                      builder:
+                                          (_) =>
+                                              const ServiceFormTemplatesPage(),
                                     ),
                                   );
                                 },
+                              ),
+                            if (PermissionService.roleHasPermission(
+                              userRole,
+                              AppPermission.viewStock,
+                            ))
+                              _NavTile(
+                                label: 'Stok',
+                                icon: Icons.inventory_2_outlined,
+                                active: currentPage == AppDrawerPage.stock,
+                                iconMuted: iconMuted,
+                                textColor: textColor,
+                                activeBg: activeBg,
+                                accent: accent,
+                                onTap:
+                                    () => _navigate(
+                                      context,
+                                      AppDrawerPage.stock,
+                                      const StockOverviewPage(),
+                                    ),
                               ),
                             _NavTile(
                               label: 'Biten \u0130\u015fler (Ar\u015fiv)',

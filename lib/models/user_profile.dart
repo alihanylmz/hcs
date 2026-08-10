@@ -6,6 +6,7 @@
 class UserRole {
   static const String admin = 'admin';
   static const String manager = 'manager';
+  static const String stockManager = 'stock_manager';
   static const String engineer = 'engineer';
   static const String technician = 'technician';
   static const String supervisor = 'supervisor';
@@ -43,6 +44,7 @@ class UserProfile {
     const validRoles = {
       UserRole.admin,
       UserRole.manager,
+      UserRole.stockManager,
       UserRole.engineer,
       UserRole.technician,
       UserRole.supervisor,
@@ -102,6 +104,8 @@ class UserProfile {
   bool get isAdmin => role == UserRole.admin;
 
   bool get isManager => role == UserRole.manager || role == UserRole.admin;
+
+  bool get isStockManager => role == UserRole.stockManager;
 
   bool get isEngineer => role == UserRole.engineer;
 

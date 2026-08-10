@@ -288,6 +288,7 @@ class UserService {
     const isTakipRoles = {
       UserRole.admin,
       UserRole.manager,
+      UserRole.stockManager,
       UserRole.supervisor,
       UserRole.engineer,
       UserRole.technician,

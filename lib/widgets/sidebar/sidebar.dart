@@ -7,6 +7,7 @@ import '../../pages/dashboard_page.dart';
 import '../../pages/fault_codes_page.dart';
 import '../../pages/login_page.dart';
 import '../../pages/profile_page.dart';
+import '../../pages/stock_overview_page.dart';
 import '../../pages/ticket_list_page.dart';
 import '../../pages/workshop_page.dart';
 import '../../services/permission_service.dart';
@@ -112,6 +113,20 @@ class Sidebar extends StatelessWidget {
                       iconColor: iconColor,
                       textColor: textColor,
                       onTap: () => _navigate(context, const DashboardPage()),
+                    ),
+                  if (PermissionService.roleHasPermission(
+                    userRole,
+                    AppPermission.viewStock,
+                  ))
+                    SidebarItem(
+                      icon: Icons.inventory_2_outlined,
+                      label: 'Stok',
+                      isActive: activeMenuItem == 'stock',
+                      activeColor: activeColor,
+                      iconColor: iconColor,
+                      textColor: textColor,
+                      onTap:
+                          () => _navigate(context, const StockOverviewPage()),
                     ),
                   SidebarItem(
                     icon: Icons.task_alt_rounded,

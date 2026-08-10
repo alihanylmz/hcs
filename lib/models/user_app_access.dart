@@ -112,6 +112,18 @@ class UserAccessCatalog {
       teklifRole: 'admin',
     ),
     BusinessRoleDefinition(
+      code: 'stock_manager',
+      label: 'Stok Yoneticisi',
+      department: 'Operasyon',
+      description:
+          'Stok kartlarini, barkod eslestirmelerini ve stok giris/cikislarini yonetir.',
+      isTakipActive: true,
+      isTakipRole: 'stock_manager',
+      teklifActive: false,
+      teklifRole: 'viewer',
+      restrictions: ['Kullanici yonetimi', 'Teklif ve finans'],
+    ),
+    BusinessRoleDefinition(
       code: 'sales_representative',
       label: 'Satış Personeli',
       department: 'Satış Departmanı',
@@ -198,6 +210,17 @@ class UserAccessCatalog {
         'Raporlar',
         'Cari/partnerler',
         'Stok yönetimi',
+      ],
+    ),
+    AppRoleDefinition(
+      code: 'stock_manager',
+      label: 'Stok Yoneticisi',
+      description:
+          'Stok kartlarini, barkodlari ve stok giris/cikis hareketlerini yonetir.',
+      permissions: [
+        'Stok goruntuleme',
+        'Stok giris/cikis',
+        'Barkod eslestirme',
       ],
     ),
     AppRoleDefinition(
@@ -295,6 +318,7 @@ class UserAccessCatalog {
   }) {
     if (profileRole == 'admin') return 'general_manager';
     if (profileRole == 'manager') return 'owner';
+    if (profileRole == 'stock_manager') return 'stock_manager';
     if (profileRole == 'engineer') return 'technical_manager';
     if (profileRole == 'technician') return 'technician';
     if (profileRole == 'partner_user') {

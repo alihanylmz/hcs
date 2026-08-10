@@ -809,6 +809,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
         return Colors.red.shade700;
       case 'general_manager':
         return Colors.deepOrange.shade700;
+      case 'stock_manager':
+        return Colors.teal.shade700;
       case 'sales_representative':
         return Colors.green.shade700;
       case 'technical_manager':
@@ -852,16 +854,18 @@ class _UserManagementPageState extends State<UserManagementPage> {
         return 1;
       case 'general_manager':
         return 2;
-      case 'sales_representative':
+      case 'stock_manager':
         return 3;
-      case 'technical_manager':
+      case 'sales_representative':
         return 4;
-      case 'technician':
+      case 'technical_manager':
         return 5;
-      case 'customer_admin':
+      case 'technician':
         return 6;
-      case 'customer_user':
+      case 'customer_admin':
         return 7;
+      case 'customer_user':
+        return 8;
       default:
         return 99;
     }
@@ -873,6 +877,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
         return 'Genel Müdür';
       case UserRole.manager:
         return 'Patron';
+      case UserRole.stockManager:
+        return 'Stok Yoneticisi';
       case UserRole.supervisor:
         return 'Süpervizör';
       case UserRole.engineer:

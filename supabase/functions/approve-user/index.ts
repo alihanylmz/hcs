@@ -10,6 +10,7 @@ const corsHeaders = {
 const validRoles = new Set([
   "admin",
   "manager",
+  "stock_manager",
   "supervisor",
   "engineer",
   "technician",

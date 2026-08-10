@@ -2902,6 +2902,7 @@ class _StockBarcodeScannerPageState extends State<StockBarcodeScannerPage> {
   );
 
   bool _hasResult = false;
+  String? _scannedValue;
 
   @override
   void dispose() {
@@ -2912,18 +2913,37 @@ class _StockBarcodeScannerPageState extends State<StockBarcodeScannerPage> {
   Future<void> _handleDetect(BarcodeCapture capture) async {
     if (_hasResult) return;
 
-    final rawValue = capture.barcodes.firstOrNull?.rawValue?.trim();
-    if (rawValue == null || rawValue.isEmpty) return;
+    final rawValue = _firstReadableBarcode(capture);
+    if (rawValue == null) return;
 
-    _hasResult = true;
+    setState(() {
+      _hasResult = true;
+      _scannedValue = rawValue;
+    });
     await _controller.stop();
     if (!mounted) return;
+    await Future.delayed(const Duration(milliseconds: 650));
+    if (!mounted) return;
     Navigator.of(context).pop(rawValue);
+  }
+
+  String? _firstReadableBarcode(BarcodeCapture capture) {
+    for (final barcode in capture.barcodes) {
+      final raw = barcode.rawValue?.trim();
+      if (raw != null && raw.isNotEmpty) return raw;
+
+      final display = barcode.displayValue?.trim();
+      if (display != null && display.isNotEmpty) return display;
+    }
+
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scanComplete = _scannedValue != null;
+    final frameColor = scanComplete ? Colors.greenAccent : Colors.white;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -2950,13 +2970,34 @@ class _StockBarcodeScannerPageState extends State<StockBarcodeScannerPage> {
           MobileScanner(controller: _controller, onDetect: _handleDetect),
           IgnorePointer(
             child: Center(
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
                 width: 260,
                 height: 180,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white, width: 3),
+                  border: Border.all(color: frameColor, width: 4),
+                  boxShadow:
+                      scanComplete
+                          ? [
+                            BoxShadow(
+                              color: Colors.greenAccent.withOpacity(0.35),
+                              blurRadius: 24,
+                              spreadRadius: 2,
+                            ),
+                          ]
+                          : null,
                 ),
+                child:
+                    scanComplete
+                        ? const Center(
+                          child: Icon(
+                            Icons.check_circle_rounded,
+                            color: Colors.greenAccent,
+                            size: 56,
+                          ),
+                        )
+                        : null,
               ),
             ),
           ),
@@ -2977,16 +3018,20 @@ class _StockBarcodeScannerPageState extends State<StockBarcodeScannerPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Barkodu cercevenin icine getirin',
+                      scanComplete
+                          ? 'Barkod okundu'
+                          : 'Barkodu cercevenin icine getirin',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
+                        color: scanComplete ? Colors.greenAccent : Colors.white,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Web tarafinda kamera icin sitenin HTTPS ile acilmasi gerekir.',
+                      scanComplete
+                          ? _scannedValue!
+                          : 'Okununca cerceve yesile doner ve kod alana yapistirilir.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.white.withOpacity(0.72),

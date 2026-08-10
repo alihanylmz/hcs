@@ -40,7 +40,6 @@ class PermissionService {
   static final Set<AppPermission> _managerPermissions = Set.unmodifiable(
     {..._adminPermissions}
       ..remove(AppPermission.manageUsers)
-      ..remove(AppPermission.configureStockCatalog)
       ..remove(AppPermission.viewProfileAdminTools),
   );
 
@@ -52,6 +51,7 @@ class PermissionService {
     AppPermission.viewStock,
     AppPermission.manageStock,
     AppPermission.deleteStock,
+    AppPermission.configureStockCatalog,
   });
 
   static final Set<AppPermission> _supervisorPermissions = Set.unmodifiable({

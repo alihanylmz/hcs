@@ -58,12 +58,28 @@ class _ControlHardwareLibraryPageState
     try {
       final items = await widget.repository.fetchAll();
       final products = await widget.productRepository.fetchProducts();
+      final importedItems = _buildMissingStockHardware(
+        products: products,
+        existingItems: items,
+      );
+      for (final item in importedItems) {
+        await widget.repository.save(item);
+      }
       if (!mounted) return;
       setState(() {
-        _items = items;
+        _items = [...items, ...importedItems];
         _products = products;
         _loading = false;
       });
+      if (importedItems.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${importedItems.length} stok ürünü DDC/I/O kütüphanesine eklendi.',
+            ),
+          ),
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -106,6 +122,62 @@ class _ControlHardwareLibraryPageState
       setState(() => _products = products);
     }
     return products;
+  }
+
+  List<ControlHardware> _buildMissingStockHardware({
+    required List<Product> products,
+    required List<ControlHardware> existingItems,
+  }) {
+    final existingProductIds = existingItems
+        .map((item) => item.productId.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final existingIds = existingItems.map((item) => item.id).toSet();
+    final imported = <ControlHardware>[];
+    for (final product in products) {
+      if (!product.isActive || existingProductIds.contains(product.id)) {
+        continue;
+      }
+      final type =
+          productMatchesHardwareCategory(
+            product,
+            ProductMainCategory.controller,
+          )
+          ? ControlHardwareType.controller
+          : productMatchesHardwareCategory(
+              product,
+              ProductMainCategory.ioModule,
+            )
+          ? ControlHardwareType.ioModule
+          : null;
+      if (type == null) continue;
+      final id = _stockHardwareId(product, type);
+      if (existingIds.contains(id)) continue;
+      final pools = _channelPoolsFromStockProduct(product, type);
+      if (pools.isEmpty) continue;
+      imported.add(
+        ControlHardware(
+          id: id,
+          type: type,
+          brand: product.brand.trim().isEmpty ? 'Honeywell' : product.brand,
+          model: product.model.trim().isEmpty ? product.code : product.model,
+          family: _stockHardwareFamily(product),
+          productId: product.id,
+          channelPools: pools,
+          compatibilityMode: type == ControlHardwareType.ioModule
+              ? HardwareCompatibilityMode.universalProtocol
+              : HardwareCompatibilityMode.sameFamily,
+          connectionProtocol: _stockHardwareProtocol(product),
+          compatibleFamilies: const [],
+          maxExpansionModules: type == ControlHardwareType.controller ? 8 : 0,
+          isActive: true,
+          note: 'Stok ürününden otomatik oluşturuldu.',
+          updatedAt: DateTime.now(),
+          createdBy: widget.repository.currentUserId,
+        ),
+      );
+    }
+    return imported;
   }
 
   Future<void> _delete(ControlHardware item) async {
@@ -271,6 +343,125 @@ class _ControlHardwareLibraryPageState
     }
     return null;
   }
+}
+
+String _stockHardwareId(Product product, ControlHardwareType type) {
+  final source = product.id.trim().isEmpty ? product.code : product.id;
+  final safe = source
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'-+'), '-')
+      .replaceAll(RegExp(r'^-|-$'), '');
+  return 'stock-${type.storageKey}-${safe.isEmpty ? product.hashCode : safe}';
+}
+
+String _stockHardwareFamily(Product product) {
+  final category = product.category.trim();
+  if (category.isNotEmpty) return category;
+  final supplierGroup = product.specifications['supplier_group']?.trim() ?? '';
+  if (supplierGroup.isNotEmpty) return supplierGroup;
+  return product.brand.trim();
+}
+
+String _stockHardwareProtocol(Product product) {
+  final text = _stockSearchText(product);
+  final protocols = <String>{};
+  if (text.contains('bacnet ip')) protocols.add('BACnet IP');
+  if (text.contains('bacnet ms/tp') || text.contains('bacnet mstp')) {
+    protocols.add('BACnet MS/TP');
+  }
+  if (text.contains('modbus tcp')) protocols.add('Modbus TCP');
+  if (text.contains('modbus rtu')) protocols.add('Modbus RTU');
+  if (text.contains('panel bus')) protocols.add('Panel Bus');
+  if (text.contains('rs-485') || text.contains('rs485')) {
+    protocols.add('RS-485');
+  }
+  return protocols.isEmpty ? 'BACnet MS/TP' : protocols.join(', ');
+}
+
+List<HardwareChannelPool> _channelPoolsFromStockProduct(
+  Product product,
+  ControlHardwareType type,
+) {
+  final text = _stockSearchText(product);
+  final pools = <HardwareChannelPool>[];
+  void add(String key, String label, Set<DiscoveryPointType> types) {
+    final quantity = _readChannelQuantity(text, key);
+    if (quantity <= 0) return;
+    pools.add(
+      HardwareChannelPool(
+        id: '${product.id}-$key'.replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '-'),
+        name: label,
+        quantity: quantity,
+        supportedPointTypes: types,
+      ),
+    );
+  }
+
+  add('ai', 'AI', {DiscoveryPointType.aiActive, DiscoveryPointType.aiPassive});
+  add('ao', 'AO', {DiscoveryPointType.ao});
+  add('di', 'DI', {DiscoveryPointType.di});
+  add('do', 'DO', {DiscoveryPointType.doOutput});
+  add('ui', 'UI', {
+    DiscoveryPointType.aiActive,
+    DiscoveryPointType.aiPassive,
+    DiscoveryPointType.di,
+  });
+  add('uio', 'UIO', {
+    DiscoveryPointType.aiActive,
+    DiscoveryPointType.aiPassive,
+    DiscoveryPointType.ao,
+    DiscoveryPointType.di,
+    DiscoveryPointType.doOutput,
+  });
+
+  if (pools.isNotEmpty) return pools;
+  if (type == ControlHardwareType.controller) {
+    return [
+      HardwareChannelPool(
+        id: '${product.id}-universal-io'.replaceAll(
+          RegExp(r'[^a-zA-Z0-9_-]+'),
+          '-',
+        ),
+        name: 'Universal I/O',
+        quantity: 16,
+        supportedPointTypes: const {
+          DiscoveryPointType.aiActive,
+          DiscoveryPointType.aiPassive,
+          DiscoveryPointType.ao,
+          DiscoveryPointType.di,
+          DiscoveryPointType.doOutput,
+        },
+      ),
+    ];
+  }
+  return const [];
+}
+
+int _readChannelQuantity(String text, String key) {
+  final matches = [
+    RegExp('\\b(\\d+)\\s*$key\\b', caseSensitive: false).firstMatch(text),
+    RegExp('\\b$key\\s*(\\d+)\\b', caseSensitive: false).firstMatch(text),
+  ].whereType<RegExpMatch>();
+  for (final match in matches) {
+    final value = int.tryParse(match.group(1) ?? '');
+    if (value != null && value > 0) return value;
+  }
+  return 0;
+}
+
+String _stockSearchText(Product product) {
+  return [
+    product.code,
+    product.name,
+    product.category,
+    product.brand,
+    product.model,
+    product.description,
+    product.technicalSummary,
+    ...product.specifications.values,
+  ].join(' ').toLowerCase();
 }
 
 class _HardwareCard extends StatelessWidget {

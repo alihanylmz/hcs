@@ -36,8 +36,8 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
   String? _movementsError;
   String _searchQuery = '';
   bool _isSelectionMode = false;
-  Set<int> _selectedItems = {};
-  Map<int, int> _orderQuantities = {};
+  Set<String> _selectedItems = {};
+  Map<String, int> _orderQuantities = {};
   int _selectedCategoryIndex = 0;
   int _stockSectionIndex = 0;
   UserProfile? _userProfile;
@@ -229,10 +229,16 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
 
     return list.where((stock) {
       final name = _normalizeTurkish(stock['name'] ?? '');
+      final code = _normalizeTurkish(stock['code'] ?? '');
+      final brand = _normalizeTurkish(stock['brand'] ?? '');
+      final model = _normalizeTurkish(stock['model'] ?? '');
       final shelf = _normalizeTurkish(stock['shelf_location'] ?? '');
       final category = _normalizeTurkish(stock['category'] ?? '');
       final barcode = _normalizeTurkish(stock['barcode'] ?? '');
       return name.contains(query) ||
+          code.contains(query) ||
+          brand.contains(query) ||
+          model.contains(query) ||
           shelf.contains(query) ||
           category.contains(query) ||
           barcode.contains(query);
@@ -381,7 +387,10 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
           onSave: (data, isEdit) async {
             try {
               if (isEdit) {
-                await _stockService.updateStock(editItem!['id'] as int, data);
+                await _stockService.updateStock(
+                  editItem!['id'].toString(),
+                  data,
+                );
               } else {
                 await _stockService.addStock(data);
               }
@@ -409,7 +418,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     );
   }
 
-  Future<void> _deleteStock(int id) async {
+  Future<void> _deleteStock(String id) async {
     if (!_canDeleteStock) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -593,7 +602,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
 
     try {
       await _stockService.linkBarcodeToStock(
-        _asInt(selectedItem['id']),
+        selectedItem['id'].toString(),
         barcode,
       );
       await _loadStocks();
@@ -743,7 +752,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
           }) async {
             try {
               await _stockService.registerStockMovement(
-                inventoryId: _asInt(item['id']),
+                productId: item['id'].toString(),
                 movementType: movementType,
                 quantity: quantity,
                 reason: reason,
@@ -780,7 +789,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
   }
 
   Future<void> _handleItemSelection(Map<String, dynamic> item) async {
-    final itemId = item['id'] as int;
+    final itemId = item['id'].toString();
 
     if (_selectedItems.contains(itemId)) {
       if (!mounted) return;
@@ -816,13 +825,15 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     }
 
     final selectedStocks =
-        _allStocks.where((stock) => _selectedItems.contains(stock['id'])).map((
-          stock,
-        ) {
-          final enriched = Map<String, dynamic>.from(stock);
-          enriched['order_quantity'] = _orderQuantities[stock['id']] ?? 1;
-          return enriched;
-        }).toList();
+        _allStocks
+            .where((stock) => _selectedItems.contains(stock['id'].toString()))
+            .map((stock) {
+              final enriched = Map<String, dynamic>.from(stock);
+              enriched['order_quantity'] =
+                  _orderQuantities[stock['id'].toString()] ?? 1;
+              return enriched;
+            })
+            .toList();
 
     await _handlePdfExport(
       generator:
@@ -1676,7 +1687,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
             : _isLowStock(item)
             ? 'Kritik'
             : 'Normal';
-    final isSelected = _selectedItems.contains(item['id']);
+    final isSelected = _selectedItems.contains(item['id'].toString());
     final unit = _safeText(item['unit'], fallback: 'adet');
     final category = _safeText(item['category'], fallback: 'Diger');
     final shelf = _safeText(item['shelf_location'], fallback: 'Raf yok');
@@ -1856,7 +1867,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                   ),
                   if (_canDeleteStock)
                     OutlinedButton.icon(
-                      onPressed: () => _deleteStock(_asInt(item['id'])),
+                      onPressed: () => _deleteStock(item['id'].toString()),
                       icon: const Icon(Icons.delete_outline_rounded, size: 18),
                       label: const Text('Sil'),
                       style: OutlinedButton.styleFrom(
@@ -2498,7 +2509,7 @@ class _StockMovementDialogState extends State<StockMovementDialog> {
   Widget build(BuildContext context) {
     final itemName = widget.item['name']?.toString() ?? '-';
     final unit = widget.item['unit']?.toString() ?? 'adet';
-    final currentQty = widget.item['quantity'] as int? ?? 0;
+    final currentQty = (widget.item['quantity'] as num?)?.toInt() ?? 0;
 
     return AlertDialog(
       title: Text(_isIn ? 'Stok Girisi' : 'Stok Cikisi'),
@@ -3298,8 +3309,8 @@ class _StockOrderDialogState extends State<StockOrderDialog> {
   @override
   void initState() {
     super.initState();
-    final currentQty = widget.item['quantity'] as int? ?? 0;
-    final critical = widget.item['critical_level'] as int? ?? 5;
+    final currentQty = (widget.item['quantity'] as num?)?.toInt() ?? 0;
+    final critical = (widget.item['critical_level'] as num?)?.toInt() ?? 5;
     final suggestedQty = critical > currentQty ? critical - currentQty : 1;
     _qtyController = TextEditingController(text: suggestedQty.toString());
   }
@@ -3312,8 +3323,8 @@ class _StockOrderDialogState extends State<StockOrderDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final currentQty = widget.item['quantity'] as int? ?? 0;
-    final critical = widget.item['critical_level'] as int? ?? 5;
+    final currentQty = (widget.item['quantity'] as num?)?.toInt() ?? 0;
+    final critical = (widget.item['critical_level'] as num?)?.toInt() ?? 5;
 
     return AlertDialog(
       title: const Text('Siparis Adedi'),

@@ -6,11 +6,41 @@ import 'package:intl/intl.dart';
 import '../utils/pdf_helper.dart';
 
 class StockPdfService {
+  static Future<List<Map<String, dynamic>>> _fetchProductStocks() async {
+    final supabase = Supabase.instance.client;
+    const pageSize = 500;
+    final stocks = <Map<String, dynamic>>[];
+    var offset = 0;
+
+    while (true) {
+      final response = await supabase
+          .from('products')
+          .select('id, code, name, category, brand, model, unit, stock_quantity, minimum_stock, specifications')
+          .order('category', ascending: true)
+          .order('name', ascending: true)
+          .range(offset, offset + pageSize - 1);
+      final page = List<Map<String, dynamic>>.from(response);
+      for (final product in page) {
+        final specifications = Map<String, dynamic>.from(
+          product['specifications'] as Map? ?? const <String, dynamic>{},
+        );
+        stocks.add({
+          ...product,
+          'quantity': (product['stock_quantity'] as num?)?.toInt() ?? 0,
+          'critical_level': (product['minimum_stock'] as num?)?.toInt() ?? 0,
+          'shelf_location': specifications['shelf_location'],
+        });
+      }
+      if (page.length < pageSize) break;
+      offset += pageSize;
+    }
+
+    return stocks;
+  }
+
   static Future<Uint8List> generateStockReportPdfBytes() async {
     try {
-      final supabase = Supabase.instance.client;
-      final response = await supabase.from('inventory').select().order('category', ascending: true).order('name', ascending: true);
-      final List<Map<String, dynamic>> stocks = List<Map<String, dynamic>>.from(response);
+      final stocks = await _fetchProductStocks();
 
       final pdf = pw.Document();
       final font = await PdfHelper.loadTurkishFont();
@@ -165,14 +195,7 @@ class StockPdfService {
 
   static Future<Uint8List> generateOrderListPdfBytes() async {
     try {
-      final supabase = Supabase.instance.client;
-      final response = await supabase
-          .from('inventory')
-          .select()
-          .order('category', ascending: true)
-          .order('name', ascending: true);
-      
-      final List<Map<String, dynamic>> allStocks = List<Map<String, dynamic>>.from(response);
+      final allStocks = await _fetchProductStocks();
       final List<Map<String, dynamic>> orderItems = allStocks.where((stock) {
         final qty = stock['quantity'] as int? ?? 0;
         final critical = stock['critical_level'] as int? ?? 5;

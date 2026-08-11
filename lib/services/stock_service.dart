@@ -6,6 +6,55 @@ class StockService {
   final _supabase = Supabase.instance.client;
   final String _table = 'inventory';
 
+  Map<String, dynamic> _productToStock(Map<String, dynamic> product) {
+    final specifications = Map<String, dynamic>.from(
+      product['specifications'] as Map? ?? const <String, dynamic>{},
+    );
+    return {
+      ...product,
+      'quantity': product['stock_quantity'] ?? 0,
+      'critical_level': product['minimum_stock'] ?? 0,
+      'barcode': specifications['barcode'] ?? product['code'],
+      'shelf_location': specifications['shelf_location'],
+    };
+  }
+
+  Map<String, dynamic> _stockDataToProduct(
+    Map<String, dynamic> data, {
+    Map<String, dynamic>? current,
+  }) {
+    final specifications = Map<String, dynamic>.from(
+      current?['specifications'] as Map? ?? const <String, dynamic>{},
+    );
+    if (data.containsKey('barcode')) {
+      final barcode = data['barcode']?.toString().trim() ?? '';
+      if (barcode.isEmpty) {
+        specifications.remove('barcode');
+      } else {
+        specifications['barcode'] = barcode;
+      }
+    }
+    if (data.containsKey('shelf_location')) {
+      final shelf = data['shelf_location']?.toString().trim() ?? '';
+      if (shelf.isEmpty) {
+        specifications.remove('shelf_location');
+      } else {
+        specifications['shelf_location'] = shelf;
+      }
+    }
+
+    return {
+      if (data.containsKey('name')) 'name': data['name'],
+      if (data.containsKey('category')) 'category': data['category'],
+      if (data.containsKey('unit')) 'unit': data['unit'],
+      if (data.containsKey('quantity')) 'stock_quantity': data['quantity'],
+      if (data.containsKey('critical_level'))
+        'minimum_stock': data['critical_level'],
+      'specifications': specifications,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+  }
+
   // --- SABİT LİSTELER ---
   static const List<String> categories = [
     'Sürücü',
@@ -71,22 +120,33 @@ class StockService {
   }
 
   Future<List<Map<String, dynamic>>> getStocks() async {
-    final response = await _supabase
-        .from(_table)
-        .select()
-        .order('name', ascending: true);
-    return List<Map<String, dynamic>>.from(response);
+    const pageSize = 500;
+    final stocks = <Map<String, dynamic>>[];
+    var offset = 0;
+    while (true) {
+      final response = await _supabase
+          .from('products')
+          .select()
+          .order('name', ascending: true)
+          .range(offset, offset + pageSize - 1);
+      final page = List<Map<String, dynamic>>.from(response);
+      stocks.addAll(page.map(_productToStock));
+      if (page.length < pageSize) break;
+      offset += pageSize;
+    }
+    return stocks;
   }
 
   Future<Map<String, dynamic>?> getStockByBarcode(String barcode) async {
     final normalized = barcode.trim();
     if (normalized.isEmpty) return null;
-
-    return _supabase
-        .from(_table)
-        .select()
-        .eq('barcode', normalized)
-        .maybeSingle();
+    final stocks = await getStocks();
+    for (final stock in stocks) {
+      final storedBarcode = stock['barcode']?.toString().trim() ?? '';
+      final code = stock['code']?.toString().trim() ?? '';
+      if (storedBarcode == normalized || code == normalized) return stock;
+    }
+    return null;
   }
 
   /// Eksik malzemesi olan işleri getirir (Stok sayfasında göstermek için).
@@ -115,24 +175,54 @@ class StockService {
   }
 
   Future<void> addStock(Map<String, dynamic> data) async {
-    await _supabase.from(_table).insert(data);
+    final now = DateTime.now().toUtc();
+    final token = now.microsecondsSinceEpoch.toString();
+    await _supabase.from('products').insert({
+      'id': 'stock-$token',
+      'code': 'STK-$token',
+      'brand': '',
+      'model': '',
+      ..._stockDataToProduct(data),
+    });
   }
 
-  Future<void> updateStock(int id, Map<String, dynamic> data) async {
-    await _supabase.from(_table).update(data).eq('id', id);
+  Future<void> updateStock(String id, Map<String, dynamic> data) async {
+    final current =
+        await _supabase
+            .from('products')
+            .select('specifications')
+            .eq('id', id)
+            .single();
+    await _supabase
+        .from('products')
+        .update(_stockDataToProduct(data, current: current))
+        .eq('id', id);
   }
 
-  Future<void> linkBarcodeToStock(int id, String barcode) async {
+  Future<void> linkBarcodeToStock(String id, String barcode) async {
     final normalized = barcode.trim();
     if (normalized.isEmpty) {
       throw Exception('Barkod bos olamaz.');
     }
 
-    await _supabase.from(_table).update({'barcode': normalized}).eq('id', id);
+    final current =
+        await _supabase
+            .from('products')
+            .select('specifications')
+            .eq('id', id)
+            .single();
+    final specifications = Map<String, dynamic>.from(
+      current['specifications'] as Map? ?? const <String, dynamic>{},
+    );
+    specifications['barcode'] = normalized;
+    await _supabase
+        .from('products')
+        .update({'specifications': specifications})
+        .eq('id', id);
   }
 
-  Future<void> deleteStock(int id) async {
-    await _supabase.from(_table).delete().eq('id', id);
+  Future<void> deleteStock(String id) async {
+    await _supabase.from('products').delete().eq('id', id);
   }
 
   Future<void> updateQuantity(int id, int newQuantity) async {
@@ -146,14 +236,28 @@ class StockService {
   }) async {
     final response = await _supabase
         .from('stock_movements')
-        .select('*, inventory(name, category, unit, barcode)')
+        .select(
+          '*, products:product_id(id, code, name, category, brand, model, unit, stock_quantity, minimum_stock, specifications)',
+        )
+        .not('product_id', 'is', null)
         .order('created_at', ascending: false)
         .limit(limit);
-    return List<Map<String, dynamic>>.from(response);
+    return List<Map<String, dynamic>>.from(response)
+        .map((movement) {
+          final product = movement['products'];
+          return {
+            ...movement,
+            'inventory':
+                product is Map<String, dynamic>
+                    ? _productToStock(product)
+                    : null,
+          };
+        })
+        .toList(growable: false);
   }
 
   Future<void> registerStockMovement({
-    required int inventoryId,
+    required String productId,
     required String movementType,
     required int quantity,
     String? reason,
@@ -169,9 +273,9 @@ class StockService {
     }
 
     await _supabase.rpc(
-      'register_stock_movement',
+      'register_product_stock_movement',
       params: {
-        'p_inventory_id': inventoryId,
+        'p_product_id': productId,
         'p_movement_type': movementType,
         'p_quantity': quantity,
         'p_reason': reason,

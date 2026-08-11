@@ -2635,12 +2635,15 @@ class _StockFormDialogState extends State<StockFormDialog> {
 
   String? _selectedBrand;
   String? _selectedModel;
+  Map<String, dynamic>? _selectedCatalogStock;
   double? _selectedHmiSize;
   double? _selectedKw;
   late String _selectedUnit;
   List<String> _availableModels = [];
   List<String> _availableBrands = [];
+  List<Map<String, dynamic>> _catalogStocks = [];
   bool _loadingBrands = false;
+  bool _loadingCatalogStocks = false;
 
   @override
   void initState() {
@@ -2686,6 +2689,35 @@ class _StockFormDialogState extends State<StockFormDialog> {
         _availableBrands = [];
         _loadingBrands = false;
       });
+    }
+  }
+
+  Future<void> _pickCatalogStock() async {
+    setState(() => _loadingCatalogStocks = true);
+    try {
+      if (_catalogStocks.isEmpty) {
+        _catalogStocks = await _stockService.getStocks();
+      }
+      if (!mounted) return;
+      final selected = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (context) => StockCatalogPickerDialog(stocks: _catalogStocks),
+      );
+      if (selected == null) return;
+      setState(() {
+        _selectedCatalogStock = selected;
+        _manualNameCtrl.text = selected['name']?.toString().trim() ?? '';
+        _selectedBrand = null;
+        _selectedModel = null;
+        _availableModels = [];
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Stok listesi acilamadi: $error')));
+    } finally {
+      if (mounted) setState(() => _loadingCatalogStocks = false);
     }
   }
 
@@ -2859,6 +2891,38 @@ class _StockFormDialogState extends State<StockFormDialog> {
 
     if (widget.type == 'PLC') {
       return [
+        OutlinedButton.icon(
+          onPressed: _loadingCatalogStocks ? null : _pickCatalogStock,
+          icon:
+              _loadingCatalogStocks
+                  ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                  : const Icon(Icons.inventory_2_outlined),
+          label: Text(
+            _selectedCatalogStock == null
+                ? 'Stoktaki urunlerden sec'
+                : _manualNameCtrl.text,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (_selectedCatalogStock != null) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed:
+                  () => setState(() {
+                    _selectedCatalogStock = null;
+                    _manualNameCtrl.clear();
+                  }),
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('Secimi kaldir'),
+            ),
+          ),
+        ],
+        const SizedBox(height: 10),
         if (_loadingBrands)
           const Padding(
             padding: EdgeInsets.all(16),
@@ -3019,14 +3083,17 @@ class _StockFormDialogState extends State<StockFormDialog> {
               ? '$_selectedBrand $_selectedModel $kw kW Sürücü'
               : '$_selectedBrand $kw kW Sürücü';
     } else if (widget.type == 'PLC') {
-      if (_selectedBrand == null) {
+      if (_manualNameCtrl.text.trim().isNotEmpty) {
+        finalName = _manualNameCtrl.text.trim();
+      } else if (_selectedBrand == null) {
         _showValidation('Lutfen marka secin.');
         return;
+      } else {
+        finalName =
+            _selectedModel != null && _selectedModel!.isNotEmpty
+                ? '$_selectedBrand $_selectedModel PLC'
+                : '$_selectedBrand PLC';
       }
-      finalName =
-          _selectedModel != null && _selectedModel!.isNotEmpty
-              ? '$_selectedBrand $_selectedModel PLC'
-              : '$_selectedBrand PLC';
     } else if (widget.type == 'HMI') {
       if (_selectedBrand == null || _selectedHmiSize == null) {
         _showValidation('Lutfen tum alanlari doldurun.');
@@ -3082,6 +3149,137 @@ class _StockFormDialogState extends State<StockFormDialog> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class StockCatalogPickerDialog extends StatefulWidget {
+  const StockCatalogPickerDialog({super.key, required this.stocks});
+
+  final List<Map<String, dynamic>> stocks;
+
+  @override
+  State<StockCatalogPickerDialog> createState() =>
+      _StockCatalogPickerDialogState();
+}
+
+class _StockCatalogPickerDialogState extends State<StockCatalogPickerDialog> {
+  String _query = '';
+
+  String _text(dynamic value, {String fallback = '-'}) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? fallback : text;
+  }
+
+  String _normalize(String value) {
+    return value
+        .trim()
+        .toLowerCase()
+        .replaceAll('ı', 'i')
+        .replaceAll('İ', 'i')
+        .replaceAll('ş', 's')
+        .replaceAll('ğ', 'g')
+        .replaceAll('ü', 'u')
+        .replaceAll('ö', 'o')
+        .replaceAll('ç', 'c')
+        .replaceAll('Ä±', 'i')
+        .replaceAll('ÅŸ', 's')
+        .replaceAll('ÄŸ', 'g')
+        .replaceAll('Ã¼', 'u')
+        .replaceAll('Ã¶', 'o')
+        .replaceAll('Ã§', 'c');
+  }
+
+  List<Map<String, dynamic>> get _visibleStocks {
+    final query = _normalize(_query);
+    final stocks = List<Map<String, dynamic>>.from(widget.stocks);
+    if (query.isEmpty) return stocks;
+    return stocks
+        .where((stock) {
+          final haystack = _normalize(
+            [
+              stock['name'],
+              stock['category'],
+              stock['barcode'],
+              stock['shelf_location'],
+            ].map((value) => value?.toString() ?? '').join(' '),
+          );
+          return haystack.contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  int _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final stocks = _visibleStocks;
+    return AlertDialog(
+      title: const Text('Stoktaki urunu sec'),
+      content: SizedBox(
+        width: 720,
+        height: 560,
+        child: Column(
+          children: [
+            TextField(
+              autofocus: true,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search_rounded),
+                labelText: 'Tum stokta ara',
+              ),
+              onChanged: (value) => setState(() => _query = value),
+            ),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '${stocks.length} stok kaydi',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child:
+                  stocks.isEmpty
+                      ? const Center(child: Text('Stok kaydi bulunamadi.'))
+                      : ListView.separated(
+                        itemCount: stocks.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final stock = stocks[index];
+                          return ListTile(
+                            leading: const Icon(Icons.inventory_2_outlined),
+                            title: Text(
+                              _text(stock['name']),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              '${_text(stock['category'])} · '
+                              '${_asInt(stock['quantity'])} ${_text(stock['unit'], fallback: 'adet')} · '
+                              'Raf: ${_text(stock['shelf_location'])}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: const Icon(Icons.chevron_right_rounded),
+                            onTap: () => Navigator.pop(context, stock),
+                          );
+                        },
+                      ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Iptal'),
+        ),
+      ],
+    );
   }
 }
 

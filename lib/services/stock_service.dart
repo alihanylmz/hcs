@@ -687,6 +687,69 @@ class StockService {
     }
   }
 
+  Future<int> importBrandModelsFromInventory(String category) async {
+    final stocks = await _supabase
+        .from(_table)
+        .select('name, category')
+        .eq('category', category)
+        .order('name', ascending: true);
+
+    var imported = 0;
+    for (final stock in stocks as List) {
+      final parsed = _parseBrandModelFromStockName(
+        stock['name']?.toString() ?? '',
+        category,
+      );
+      if (parsed == null) continue;
+
+      await addBrand(parsed.brand, category);
+      if (parsed.model.isNotEmpty) {
+        try {
+          await addBrandModel(parsed.brand, parsed.model, category);
+          imported++;
+        } catch (_) {
+          // Zaten varsa gec.
+        }
+      }
+    }
+
+    return imported;
+  }
+
+  _ParsedBrandModel? _parseBrandModelFromStockName(
+    String stockName,
+    String category,
+  ) {
+    var name = stockName.trim();
+    if (name.isEmpty) return null;
+
+    if (category == 'PLC') {
+      name = name.replaceFirst(RegExp(r'\s+PLC$', caseSensitive: false), '');
+    } else if (category == 'HMI') {
+      name = name.replaceFirst(RegExp(r'\s+HMI$', caseSensitive: false), '');
+      name = name.replaceFirst(
+        RegExp(r'\s+\d+([.,]\d+)?\s*(inc|inç|inch)$', caseSensitive: false),
+        '',
+      );
+    } else if (category == 'Sürücü') {
+      name = name.replaceFirst(RegExp(r'\s+Sürücü$', caseSensitive: false), '');
+      name = name.replaceFirst(
+        RegExp(r'\s+\d+([.,]\d+)?\s*kW$', caseSensitive: false),
+        '',
+      );
+    }
+
+    final parts =
+        name.split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+    if (parts.isEmpty) return null;
+
+    final brand = parts.first.trim();
+    final model = parts.skip(1).join(' ').trim();
+    if (brand.isEmpty || brand == 'Diğer') return null;
+
+    return _ParsedBrandModel(brand: brand, model: model);
+  }
+
   /// Marka modeli siler
   Future<void> deleteBrandModel(int id) async {
     try {
@@ -696,4 +759,11 @@ class StockService {
       rethrow;
     }
   }
+}
+
+class _ParsedBrandModel {
+  const _ParsedBrandModel({required this.brand, required this.model});
+
+  final String brand;
+  final String model;
 }

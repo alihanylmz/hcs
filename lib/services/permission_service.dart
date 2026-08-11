@@ -40,6 +40,7 @@ class PermissionService {
   static final Set<AppPermission> _managerPermissions = Set.unmodifiable(
     {..._adminPermissions}
       ..remove(AppPermission.manageUsers)
+      ..remove(AppPermission.configureStockCatalog)
       ..remove(AppPermission.viewProfileAdminTools),
   );
 
@@ -69,8 +70,6 @@ class PermissionService {
     AppPermission.uploadTicketAttachments,
     AppPermission.updateTicketWorkflow,
     AppPermission.manageTicketSignatures,
-    AppPermission.viewStock,
-    AppPermission.manageStock,
     AppPermission.viewTeams,
     AppPermission.viewFaultCodes,
   });
@@ -88,7 +87,6 @@ class PermissionService {
     AppPermission.uploadTicketAttachments,
     AppPermission.updateTicketWorkflow,
     AppPermission.manageTicketSignatures,
-    AppPermission.viewStock,
     AppPermission.viewTeams,
     AppPermission.viewFaultCodes,
   });
@@ -102,7 +100,6 @@ class PermissionService {
     AppPermission.uploadTicketAttachments,
     AppPermission.updateTicketWorkflow,
     AppPermission.manageTicketSignatures,
-    AppPermission.viewStock,
     AppPermission.viewTeams,
     AppPermission.viewFaultCodes,
   });

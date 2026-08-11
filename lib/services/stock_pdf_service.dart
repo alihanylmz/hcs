@@ -15,7 +15,7 @@ class StockPdfService {
     while (true) {
       final response = await supabase
           .from('products')
-          .select('id, code, name, category, brand, model, unit, stock_quantity, minimum_stock, specifications')
+          .select('id, code, name, category, brand, model, unit, stock_quantity, minimum_stock, stock_tracking_started, specifications')
           .order('category', ascending: true)
           .order('name', ascending: true)
           .range(offset, offset + pageSize - 1);
@@ -28,6 +28,9 @@ class StockPdfService {
           ...product,
           'quantity': (product['stock_quantity'] as num?)?.toInt() ?? 0,
           'critical_level': (product['minimum_stock'] as num?)?.toInt() ?? 0,
+          'stock_tracking_started':
+              product['stock_tracking_started'] == true ||
+              ((product['stock_quantity'] as num?) ?? 0) > 0,
           'shelf_location': specifications['shelf_location'],
         });
       }
@@ -80,7 +83,9 @@ class StockPdfService {
                       ...entry.value.map((item) {
                         final qty = item['quantity'] as int? ?? 0;
                         final critical = item['critical_level'] as int? ?? 0;
-                        final isLow = qty <= critical;
+                        final isLow =
+                            item['stock_tracking_started'] == true &&
+                            qty <= critical;
                         return pw.TableRow(children: [
                           pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(item['name'] ?? '-')),
                           pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(qty.toString(), style: pw.TextStyle(color: isLow ? PdfColors.red : PdfColors.black, fontWeight: isLow ? pw.FontWeight.bold : null))),
@@ -197,6 +202,7 @@ class StockPdfService {
     try {
       final allStocks = await _fetchProductStocks();
       final List<Map<String, dynamic>> orderItems = allStocks.where((stock) {
+        if (stock['stock_tracking_started'] != true) return false;
         final qty = stock['quantity'] as int? ?? 0;
         final critical = stock['critical_level'] as int? ?? 5;
         return qty <= critical;

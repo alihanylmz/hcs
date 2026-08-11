@@ -140,6 +140,42 @@ void main() {
         PermissionService.hasPermission(profile, AppPermission.editTicket),
         isFalse,
       );
+      expect(
+        PermissionService.hasPermission(profile, AppPermission.viewStock),
+        isFalse,
+      );
+    });
+
+    test('stock menu is limited to management and stock manager roles', () {
+      for (final role in [
+        UserRole.admin,
+        UserRole.manager,
+        UserRole.stockManager,
+      ]) {
+        expect(
+          PermissionService.hasPermission(
+            _profile(role),
+            AppPermission.viewStock,
+          ),
+          isTrue,
+        );
+      }
+
+      for (final role in [
+        UserRole.supervisor,
+        UserRole.engineer,
+        UserRole.technician,
+        UserRole.user,
+        UserRole.partnerUser,
+      ]) {
+        expect(
+          PermissionService.hasPermission(
+            _profile(role),
+            AppPermission.viewStock,
+          ),
+          isFalse,
+        );
+      }
     });
 
     test('partner user stays scoped to partner actions', () {

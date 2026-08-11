@@ -9,7 +9,6 @@ import '../services/permission_service.dart';
 import '../services/stock_service.dart';
 import '../services/user_service.dart';
 import '../widgets/app_drawer.dart';
-import 'brand_models_settings_page.dart';
 import 'pdf_viewer_page.dart';
 import 'ticket_detail_page.dart';
 
@@ -28,12 +27,15 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
   List<Map<String, dynamic>> _allStocks = [];
   List<Map<String, dynamic>> _missingTickets = [];
   List<Map<String, dynamic>> _stockMovements = [];
+  List<Map<String, dynamic>> _personnelLoans = [];
 
   bool _isLoading = true;
   bool _missingLoading = true;
   bool _movementsLoading = true;
+  bool _loansLoading = true;
   String? _missingError;
   String? _movementsError;
+  String? _loansError;
   String _searchQuery = '';
   bool _isSelectionMode = false;
   Set<String> _selectedItems = {};
@@ -48,28 +50,22 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
   bool get _canManageStock =>
       PermissionService.hasPermission(_userProfile, AppPermission.manageStock);
 
-  bool get _canDeleteStock =>
-      PermissionService.hasPermission(_userProfile, AppPermission.deleteStock);
-
-  bool get _canConfigureStockCatalog => PermissionService.hasPermission(
-    _userProfile,
-    AppPermission.configureStockCatalog,
-  );
-
   bool get _canUseBarcodeScanner =>
       kIsWeb ||
       defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS ||
       defaultTargetPlatform == TargetPlatform.macOS;
 
-  final List<String> _uiCategories = [
-    'Tümü',
-    'Sürücü',
-    'PLC',
-    'HMI',
-    'Şalt',
-    'Diğer',
-  ];
+  List<String> get _uiCategories {
+    final categories =
+        _allStocks
+            .map((item) => item['category']?.toString().trim() ?? '')
+            .where((category) => category.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return ['Tümü', ...categories];
+  }
 
   @override
   void initState() {
@@ -78,6 +74,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     _loadStocks();
     _loadMissingTickets();
     _loadStockMovements();
+    _loadPersonnelLoans();
   }
 
   Future<void> _loadUserProfile() async {
@@ -152,6 +149,29 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     }
   }
 
+  Future<void> _loadPersonnelLoans() async {
+    if (mounted) {
+      setState(() {
+        _loansLoading = true;
+        _loansError = null;
+      });
+    }
+    try {
+      final data = await _stockService.getOpenPersonnelLoans();
+      if (!mounted) return;
+      setState(() {
+        _personnelLoans = data;
+        _loansLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loansError = error.toString();
+        _loansLoading = false;
+      });
+    }
+  }
+
   String _normalizeTurkish(String text) {
     return text
         .replaceAll('I', 'ı')
@@ -194,13 +214,20 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
   }
 
   bool _isLowStock(Map<String, dynamic> item) {
+    if (!_isStockTrackingStarted(item)) return false;
     final quantity = _asInt(item['quantity']);
     return quantity <= _resolvedCriticalLevel(item);
   }
 
   bool _needsReorder(Map<String, dynamic> item) {
+    if (!_isStockTrackingStarted(item)) return false;
     final quantity = _asInt(item['quantity']);
     return quantity < _resolvedCriticalLevel(item);
+  }
+
+  bool _isStockTrackingStarted(Map<String, dynamic> item) {
+    return item['stock_tracking_started'] == true ||
+        _asInt(item['quantity']) > 0;
   }
 
   int _suggestedOrderQuantity(Map<String, dynamic> item) {
@@ -210,18 +237,19 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
   }
 
   List<Map<String, dynamic>> _getFilteredStocks() {
-    final currentTab = _uiCategories[_selectedCategoryIndex];
+    final categories = _uiCategories;
+    final currentTab =
+        categories[_selectedCategoryIndex.clamp(0, categories.length - 1)];
     var list = List<Map<String, dynamic>>.from(_allStocks);
 
     if (currentTab != 'Tümü') {
       list =
-          list.where((stock) {
-            final category = (stock['category'] ?? 'Diğer').toString();
-            if (currentTab == 'Diğer') {
-              return !['Sürücü', 'PLC', 'HMI', 'Şalt'].contains(category);
-            }
-            return category == currentTab;
-          }).toList();
+          list
+              .where(
+                (stock) =>
+                    (stock['category']?.toString().trim() ?? '') == currentTab,
+              )
+              .toList();
     }
 
     final query = _normalizeTurkish(_searchQuery);
@@ -291,189 +319,22 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     }).toList();
   }
 
-  Future<void> _showAddSelectionDialog() async {
-    if (!_canManageStock) return;
+  List<Map<String, dynamic>> _getFilteredPersonnelLoans() {
+    final query = _normalizeTurkish(_searchQuery);
+    if (query.isEmpty) return List<Map<String, dynamic>>.from(_personnelLoans);
 
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Hangi stok tipini eklemek istiyorsunuz?',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _buildTypeOption(
-                  context,
-                  icon: Icons.speed_rounded,
-                  color: Colors.blue,
-                  label: 'Sürücü',
-                ),
-                _buildTypeOption(
-                  context,
-                  icon: Icons.memory_rounded,
-                  color: Colors.orange,
-                  label: 'PLC',
-                ),
-                _buildTypeOption(
-                  context,
-                  icon: Icons.desktop_windows_rounded,
-                  color: Colors.teal,
-                  label: 'HMI',
-                ),
-                _buildTypeOption(
-                  context,
-                  icon: Icons.electric_bolt_rounded,
-                  color: Colors.redAccent,
-                  label: 'Şalt',
-                ),
-                _buildTypeOption(
-                  context,
-                  icon: Icons.category_rounded,
-                  color: Colors.grey,
-                  label: 'Diğer',
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildTypeOption(
-    BuildContext context, {
-    required IconData icon,
-    required Color color,
-    required String label,
-  }) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(
-        backgroundColor: color.withOpacity(0.12),
-        foregroundColor: color,
-        child: Icon(icon),
-      ),
-      title: Text(label),
-      trailing: const Icon(Icons.chevron_right_rounded),
-      onTap: () {
-        Navigator.pop(context);
-        _showSmartAddDialog(label);
-      },
-    );
-  }
-
-  Future<void> _showSmartAddDialog(
-    String type, {
-    Map<String, dynamic>? editItem,
-  }) async {
-    if (!_canManageStock) return;
-
-    await showDialog<void>(
-      context: context,
-      builder: (_) {
-        return StockFormDialog(
-          type: type,
-          editItem: editItem,
-          onSave: (data, isEdit) async {
-            try {
-              if (isEdit) {
-                await _stockService.updateStock(
-                  editItem!['id'].toString(),
-                  data,
-                );
-              } else {
-                await _stockService.addStock(data);
-              }
-
-              if (!mounted) return;
-              await _loadStocks();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Stok kaydi kaydedildi.'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            } catch (error) {
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Kayit hatasi: $error'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _deleteStock(String id) async {
-    if (!_canDeleteStock) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bu islem icin yetkiniz yok.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Stok sil'),
-          content: const Text(
-            'Bu stok kaydini silmek istediginize emin misiniz?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Iptal'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Sil'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirm != true) return;
-
-    try {
-      await _stockService.deleteStock(id);
-      if (!mounted) return;
-      await _loadStocks();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Stok kaydi silindi.'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Silme hatasi: $error'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+    return _personnelLoans.where((loan) {
+      final product = loan['inventory'] as Map<String, dynamic>? ?? {};
+      final haystack = [
+        product['name'],
+        product['code'],
+        product['brand'],
+        product['model'],
+        loan['personnel_name'],
+        loan['note'],
+      ].map((value) => _normalizeTurkish(value?.toString() ?? '')).join(' ');
+      return haystack.contains(query);
+    }).toList();
   }
 
   Future<void> _handlePdfExport({
@@ -676,14 +537,6 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    FilledButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _showSmartAddDialog('Diger', editItem: item);
-                      },
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Stok kartini ac'),
-                    ),
                     OutlinedButton.icon(
                       onPressed: () {
                         Navigator.pop(context);
@@ -788,6 +641,133 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     );
   }
 
+  Future<void> _showPersonnelLoanDialog(Map<String, dynamic> item) async {
+    if (!_canManageStock) return;
+    late final List<UserProfile> users;
+    try {
+      users = await _userService.getStockPersonnel();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Personel listesi alinamadi: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final personnel = users
+        .where(
+          (user) =>
+              !user.isPending &&
+              !user.isPartnerUser &&
+              user.id != _userProfile?.id,
+        )
+        .toList(growable: false);
+    if (personnel.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Secilebilir personel bulunamadi.')),
+      );
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder:
+          (_) => PersonnelLoanDialog(
+            item: item,
+            personnel: personnel,
+            onSave: ({
+              required personnelId,
+              required quantity,
+              required note,
+            }) async {
+              try {
+                await _stockService.registerPersonnelLoan(
+                  productId: item['id'].toString(),
+                  personnelId: personnelId,
+                  quantity: quantity,
+                  note: note,
+                );
+                await Future.wait([
+                  _loadStocks(),
+                  _loadStockMovements(),
+                  _loadPersonnelLoans(),
+                ]);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Urun personele borc olarak kaydedildi.'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              } catch (error) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Personel borcu kaydedilemedi: $error'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+                rethrow;
+              }
+            },
+          ),
+    );
+  }
+
+  Future<void> _closePersonnelLoan(
+    Map<String, dynamic> loan,
+    String resolution,
+  ) async {
+    final isReturned = resolution == 'returned';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text(isReturned ? 'Iade al' : 'Kullanildi olarak kapat'),
+            content: Text(
+              isReturned
+                  ? 'Urun stoga geri eklenecek ve personel borcu kapanacak.'
+                  : 'Urun stoga donmeyecek, personel borcu kullanildi olarak kapanacak.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Vazgec'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Onayla'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _stockService.closePersonnelLoan(
+        loanId: _asInt(loan['id']),
+        resolution: resolution,
+      );
+      await Future.wait([
+        _loadStocks(),
+        _loadStockMovements(),
+        _loadPersonnelLoans(),
+      ]);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Personel borcu kapatilamadi: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   Future<void> _handleItemSelection(Map<String, dynamic> item) async {
     final itemId = item['id'].toString();
 
@@ -877,6 +857,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
       _loadStocks(),
       _loadMissingTickets(),
       _loadStockMovements(),
+      _loadPersonnelLoans(),
     ]);
   }
 
@@ -899,6 +880,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     final criticalStocks = _getCriticalStocks();
     final filteredMissingTickets = _getFilteredMissingTickets();
     final filteredMovements = _getFilteredMovements();
+    final filteredPersonnelLoans = _getFilteredPersonnelLoans();
     final totalItems = _allStocks.length;
     final totalUnits = _allStocks.fold<int>(
       0,
@@ -906,8 +888,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     );
     final criticalCount = _allStocks.where(_isLowStock).length;
     final reorderCount = _allStocks.where(_needsReorder).length;
-    final missingCount = _missingTickets.length;
-    final isCompact = MediaQuery.sizeOf(context).width < 900;
+    final loanCount = _personnelLoans.length;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -971,7 +952,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                       totalUnits: totalUnits,
                       criticalCount: criticalCount,
                       reorderCount: reorderCount,
-                      missingCount: missingCount,
+                      loanCount: loanCount,
                     ),
                     const SizedBox(height: 16),
                     _buildControlPanel(theme),
@@ -985,7 +966,9 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                               ? filteredStocks.length
                               : _stockSectionIndex == 2
                               ? filteredMissingTickets.length
-                              : filteredMovements.length,
+                              : _stockSectionIndex == 3
+                              ? filteredMovements.length
+                              : filteredPersonnelLoans.length,
                     ),
                   ],
                 ),
@@ -997,25 +980,11 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
               filteredStocks: filteredStocks,
               filteredMissingTickets: filteredMissingTickets,
               filteredMovements: filteredMovements,
+              filteredPersonnelLoans: filteredPersonnelLoans,
             ),
           ],
         ),
       ),
-      floatingActionButton:
-          isCompact && _canManageStock
-              ? FloatingActionButton.extended(
-                onPressed: _showAddSelectionDialog,
-                backgroundColor: theme.colorScheme.primary,
-                icon: Icon(
-                  Icons.add_rounded,
-                  color: theme.colorScheme.onPrimary,
-                ),
-                label: Text(
-                  'Yeni Stok',
-                  style: TextStyle(color: theme.colorScheme.onPrimary),
-                ),
-              )
-              : null,
     );
   }
 
@@ -1025,7 +994,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     required int totalUnits,
     required int criticalCount,
     required int reorderCount,
-    required int missingCount,
+    required int loanCount,
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1078,10 +1047,10 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
               width: cardWidth,
               child: _buildSummaryCard(
                 theme,
-                title: 'Ise Bagli Eksik',
-                value: '$missingCount',
-                subtitle: 'Eksik malzeme bekleyen is',
-                icon: Icons.build_circle_outlined,
+                title: 'Personel Borcu',
+                value: '$loanCount',
+                subtitle: 'Personelde bulunan urun',
+                icon: Icons.badge_outlined,
                 accentColor: theme.colorScheme.tertiary,
               ),
             ),
@@ -1156,12 +1125,6 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
             spacing: 10,
             runSpacing: 10,
             children: [
-              if (_canManageStock)
-                FilledButton.icon(
-                  onPressed: _showAddSelectionDialog,
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Yeni stok'),
-                ),
               if (_canUseBarcodeScanner)
                 OutlinedButton.icon(
                   onPressed: _openBarcodeScanner,
@@ -1205,19 +1168,6 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                 icon: const Icon(Icons.trending_up_rounded),
                 label: const Text('Yillik kullanim'),
               ),
-              if (_canConfigureStockCatalog)
-                OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const BrandModelsSettingsPage(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.settings_applications_rounded),
-                  label: const Text('Marka modelleri'),
-                ),
             ],
           ),
           const SizedBox(height: 18),
@@ -1229,13 +1179,15 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                       ? 'Is, musteri veya eksik parca ara...'
                       : _stockSectionIndex == 3
                       ? 'Urun, barkod, sebep veya hedef ara...'
-                      : 'Urun, kategori, raf veya barkod ara...',
+                      : _stockSectionIndex == 4
+                      ? 'Personel, urun, marka veya model ara...'
+                      : 'Urun, kod, marka, model veya kategori ara...',
               prefixIcon: const Icon(Icons.search_rounded),
             ),
           ),
           const SizedBox(height: 18),
           _buildSectionSelector(theme),
-          if (_stockSectionIndex != 2 && _stockSectionIndex != 3) ...[
+          if (_stockSectionIndex < 2) ...[
             const SizedBox(height: 14),
             _buildCategorySelector(theme),
           ],
@@ -1255,7 +1207,9 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
             ? 'stok kalemi'
             : _stockSectionIndex == 2
             ? 'eksik parca bagli is'
-            : 'stok hareketi';
+            : _stockSectionIndex == 3
+            ? 'stok hareketi'
+            : 'acik personel borcu';
 
     return Container(
       width: double.infinity,
@@ -1279,7 +1233,9 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                 ? 'Is etkisini once gorebilirsiniz.'
                 : _stockSectionIndex == 3
                 ? 'Giris ve cikis kayitlari tekliften bagimsizdir.'
-                : 'Satirdan duzenle, siparise ekle veya sil.',
+                : _stockSectionIndex == 4
+                ? 'Iade alabilir veya kullanildi olarak kapatabilirsiniz.'
+                : 'Marka ve model urun kartindan otomatik gelir.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurface.withOpacity(0.65),
             ),
@@ -1295,7 +1251,57 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     required List<Map<String, dynamic>> filteredStocks,
     required List<Map<String, dynamic>> filteredMissingTickets,
     required List<Map<String, dynamic>> filteredMovements,
+    required List<Map<String, dynamic>> filteredPersonnelLoans,
   }) {
+    if (_stockSectionIndex == 4) {
+      if (_loansLoading) {
+        return const [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        ];
+      }
+      if (_loansError != null) {
+        return [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _buildEmptyState(
+              theme,
+              icon: Icons.error_outline_rounded,
+              title: 'Personel borclari yuklenemedi',
+              subtitle: _loansError!,
+            ),
+          ),
+        ];
+      }
+      if (filteredPersonnelLoans.isEmpty) {
+        return [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _buildEmptyState(
+              theme,
+              icon: Icons.badge_outlined,
+              title: 'Acik personel borcu yok',
+              subtitle: 'Personele verilen urunler burada gorunecek.',
+            ),
+          ),
+        ];
+      }
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) =>
+                  _buildPersonnelLoanCard(filteredPersonnelLoans[index], theme),
+              childCount: filteredPersonnelLoans.length,
+            ),
+          ),
+        ),
+      ];
+    }
+
     if (_stockSectionIndex == 3) {
       if (_movementsLoading) {
         return const [
@@ -1512,7 +1518,13 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
   }
 
   Widget _buildSectionSelector(ThemeData theme) {
-    const labels = ['Kritik', 'Tum Stok', 'Ise Bagli Eksikler', 'Hareketler'];
+    const labels = [
+      'Kritik',
+      'Tum Stok',
+      'Is Eksikleri',
+      'Hareketler',
+      'Personel',
+    ];
 
     return Container(
       padding: const EdgeInsets.all(6),
@@ -1520,62 +1532,65 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
         color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
         borderRadius: BorderRadius.circular(18),
       ),
-      child: Row(
-        children:
-            labels.asMap().entries.map((entry) {
-              final index = entry.key;
-              final label = entry.value;
-              final isSelected = _stockSectionIndex == index;
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children:
+              labels.asMap().entries.map((entry) {
+                final index = entry.key;
+                final label = entry.value;
+                final isSelected = _stockSectionIndex == index;
 
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    decoration: BoxDecoration(
-                      color:
-                          isSelected
-                              ? theme.colorScheme.primary
-                              : Colors.transparent,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow:
-                          isSelected
-                              ? [
-                                BoxShadow(
-                                  color: theme.colorScheme.primary.withOpacity(
-                                    0.18,
+                return SizedBox(
+                  width: 124,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      decoration: BoxDecoration(
+                        color:
+                            isSelected
+                                ? theme.colorScheme.primary
+                                : Colors.transparent,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow:
+                            isSelected
+                                ? [
+                                  BoxShadow(
+                                    color: theme.colorScheme.primary
+                                        .withOpacity(0.18),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 6),
                                   ),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ]
-                              : null,
-                    ),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () => setState(() => _stockSectionIndex = index),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        child: Text(
-                          label,
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color:
-                                isSelected
-                                    ? theme.colorScheme.onPrimary
-                                    : theme.colorScheme.onSurface,
+                                ]
+                                : null,
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () => setState(() => _stockSectionIndex = index),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          child: Text(
+                            label,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color:
+                                  isSelected
+                                      ? theme.colorScheme.onPrimary
+                                      : theme.colorScheme.onSurface,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              );
-            }).toList(),
+                );
+              }).toList(),
+        ),
       ),
     );
   }
@@ -1675,14 +1690,19 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
   Widget _buildStockCard(Map<String, dynamic> item, ThemeData theme) {
     final quantity = _asInt(item['quantity']);
     final criticalLevel = _resolvedCriticalLevel(item);
+    final trackingStarted = _isStockTrackingStarted(item);
     final statusColor =
-        quantity == 0
+        !trackingStarted
+            ? theme.colorScheme.outline
+            : quantity == 0
             ? theme.colorScheme.error
             : _isLowStock(item)
             ? theme.colorScheme.secondary
             : Colors.green.shade700;
     final statusLabel =
-        quantity == 0
+        !trackingStarted
+            ? 'Henuz giris yok'
+            : quantity == 0
             ? 'Tukendi'
             : _isLowStock(item)
             ? 'Kritik'
@@ -1690,6 +1710,9 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     final isSelected = _selectedItems.contains(item['id'].toString());
     final unit = _safeText(item['unit'], fallback: 'adet');
     final category = _safeText(item['category'], fallback: 'Diger');
+    final brand = _safeText(item['brand'], fallback: 'Markasiz');
+    final model = _safeText(item['model'], fallback: 'Modelsiz');
+    final code = _safeText(item['code'], fallback: 'Kod yok');
     final shelf = _safeText(item['shelf_location'], fallback: 'Raf yok');
     final barcode = item['barcode']?.toString().trim() ?? '';
 
@@ -1714,10 +1737,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
-        onTap:
-            _isSelectionMode
-                ? () => _handleItemSelection(item)
-                : () => _showSmartAddDialog('Diğer', editItem: item),
+        onTap: _isSelectionMode ? () => _handleItemSelection(item) : null,
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: Column(
@@ -1777,13 +1797,23 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                             ),
                             _buildMetaChip(
                               theme,
+                              icon: Icons.business_outlined,
+                              label: brand,
+                            ),
+                            _buildMetaChip(
+                              theme,
+                              icon: Icons.memory_outlined,
+                              label: model,
+                            ),
+                            _buildMetaChip(
+                              theme,
                               icon: Icons.location_on_outlined,
                               label: shelf,
                             ),
                             _buildMetaChip(
                               theme,
                               icon: Icons.tag_rounded,
-                              label: 'ID ${item['id']}',
+                              label: code,
                             ),
                             if (barcode.isNotEmpty)
                               _buildMetaChip(
@@ -1818,13 +1848,19 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                   _buildMetricTile(
                     theme,
                     label: 'Kritik seviye',
-                    value: '$criticalLevel $unit',
+                    value:
+                        trackingStarted
+                            ? '$criticalLevel $unit'
+                            : 'Ilk giriste baslar',
                     accentColor: theme.colorScheme.primary,
                   ),
                   _buildMetricTile(
                     theme,
                     label: 'Onerilen siparis',
-                    value: '${_suggestedOrderQuantity(item)} $unit',
+                    value:
+                        trackingStarted
+                            ? '${_suggestedOrderQuantity(item)} $unit'
+                            : '-',
                     accentColor: theme.colorScheme.tertiary,
                   ),
                 ],
@@ -1834,13 +1870,6 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  if (_canManageStock)
-                    OutlinedButton.icon(
-                      onPressed:
-                          () => _showSmartAddDialog('Diğer', editItem: item),
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: const Text('Duzenle'),
-                    ),
                   if (_canManageStock)
                     FilledButton.icon(
                       onPressed: () => _showStockMovementDialog(item, 'in'),
@@ -1852,6 +1881,12 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                       onPressed: () => _showStockMovementDialog(item, 'out'),
                       icon: const Icon(Icons.outbox_outlined, size: 18),
                       label: const Text('Cikis'),
+                    ),
+                  if (_canManageStock && quantity > 0)
+                    FilledButton.tonalIcon(
+                      onPressed: () => _showPersonnelLoanDialog(item),
+                      icon: const Icon(Icons.badge_outlined, size: 18),
+                      label: const Text('Personele ver'),
                     ),
                   FilledButton.tonalIcon(
                     onPressed: () => _addItemToOrderList(item),
@@ -1865,15 +1900,6 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                       isSelected ? 'Siparisten cikar' : 'Siparise ekle',
                     ),
                   ),
-                  if (_canDeleteStock)
-                    OutlinedButton.icon(
-                      onPressed: () => _deleteStock(item['id'].toString()),
-                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                      label: const Text('Sil'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: theme.colorScheme.error,
-                      ),
-                    ),
                 ],
               ),
             ],
@@ -1967,6 +1993,100 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
           color: color,
           fontWeight: FontWeight.w800,
         ),
+      ),
+    );
+  }
+
+  Widget _buildPersonnelLoanCard(Map<String, dynamic> loan, ThemeData theme) {
+    final product = loan['inventory'] as Map<String, dynamic>? ?? {};
+    final unit = _safeText(product['unit'], fallback: 'adet');
+    final quantity = _asInt(loan['quantity']);
+    final name = _safeText(product['name'], fallback: 'Urun bulunamadi');
+    final brand = _safeText(product['brand'], fallback: 'Markasiz');
+    final model = _safeText(product['model'], fallback: 'Modelsiz');
+    final personnel = _safeText(
+      loan['personnel_name'],
+      fallback: 'Personel bulunamadi',
+    );
+    final note = _safeText(loan['note'], fallback: '-');
+    final date = _formatShortDate(loan['borrowed_at']);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.colorScheme.secondary.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                backgroundColor: theme.colorScheme.secondary.withOpacity(0.12),
+                foregroundColor: theme.colorScheme.secondary,
+                child: const Icon(Icons.person_outline_rounded),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      personnel,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text('$name - $quantity $unit'),
+                  ],
+                ),
+              ),
+              _buildStatusBadge(
+                theme,
+                label: 'Borclu',
+                color: theme.colorScheme.secondary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildMetaChip(
+                theme,
+                icon: Icons.business_outlined,
+                label: brand,
+              ),
+              _buildMetaChip(theme, icon: Icons.memory_outlined, label: model),
+              _buildMetaChip(theme, icon: Icons.schedule_outlined, label: date),
+              if (note != '-')
+                _buildMetaChip(theme, icon: Icons.notes_outlined, label: note),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: () => _closePersonnelLoan(loan, 'returned'),
+                icon: const Icon(Icons.keyboard_return_rounded),
+                label: const Text('Iade al'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _closePersonnelLoan(loan, 'consumed'),
+                icon: const Icon(Icons.task_alt_rounded),
+                label: const Text('Kullanildi - kapat'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -2452,6 +2572,150 @@ class _BarcodeStockLinkSheetState extends State<BarcodeStockLinkSheet> {
         ),
       ),
     );
+  }
+}
+
+class PersonnelLoanDialog extends StatefulWidget {
+  const PersonnelLoanDialog({
+    super.key,
+    required this.item,
+    required this.personnel,
+    required this.onSave,
+  });
+
+  final Map<String, dynamic> item;
+  final List<UserProfile> personnel;
+  final Future<void> Function({
+    required String personnelId,
+    required int quantity,
+    required String note,
+  })
+  onSave;
+
+  @override
+  State<PersonnelLoanDialog> createState() => _PersonnelLoanDialogState();
+}
+
+class _PersonnelLoanDialogState extends State<PersonnelLoanDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _quantityController = TextEditingController(text: '1');
+  final _noteController = TextEditingController();
+  String? _personnelId;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _quantityController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = (widget.item['quantity'] as num?)?.toInt() ?? 0;
+    final unit = widget.item['unit']?.toString() ?? 'adet';
+    final brand = widget.item['brand']?.toString().trim() ?? '';
+    final model = widget.item['model']?.toString().trim() ?? '';
+
+    return AlertDialog(
+      title: const Text('Personele urun ver'),
+      content: SizedBox(
+        width: 480,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.item['name']?.toString() ?? '-',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                if (brand.isNotEmpty || model.isNotEmpty)
+                  Text([brand, model].where((e) => e.isNotEmpty).join(' - ')),
+                const SizedBox(height: 4),
+                Text('Mevcut: $current $unit'),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _personnelId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Personel',
+                    prefixIcon: Icon(Icons.person_outline_rounded),
+                  ),
+                  items: widget.personnel
+                      .map(
+                        (person) => DropdownMenuItem(
+                          value: person.id,
+                          child: Text(
+                            person.displayName,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (value) => setState(() => _personnelId = value),
+                  validator: (value) => value == null ? 'Personel secin' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _quantityController,
+                  decoration: InputDecoration(labelText: 'Adet ($unit)'),
+                  keyboardType: TextInputType.number,
+                  validator: (value) {
+                    final quantity = int.tryParse(value?.trim() ?? '');
+                    if (quantity == null || quantity <= 0) {
+                      return 'Gecerli bir adet girin';
+                    }
+                    if (quantity > current) return 'Stokta yeterli urun yok';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _noteController,
+                  decoration: const InputDecoration(labelText: 'Aciklama'),
+                  minLines: 2,
+                  maxLines: 4,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('Iptal'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child:
+              _saving
+                  ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                  : const Text('Borc kaydet'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(
+        personnelId: _personnelId!,
+        quantity: int.parse(_quantityController.text.trim()),
+        note: _noteController.text.trim(),
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 }
 

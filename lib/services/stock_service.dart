@@ -14,6 +14,9 @@ class StockService {
       ...product,
       'quantity': product['stock_quantity'] ?? 0,
       'critical_level': product['minimum_stock'] ?? 0,
+      'stock_tracking_started':
+          product['stock_tracking_started'] == true ||
+          ((product['stock_quantity'] as num?) ?? 0) > 0,
       'barcode': specifications['barcode'] ?? product['code'],
       'shelf_location': specifications['shelf_location'],
     };
@@ -48,6 +51,8 @@ class StockService {
       if (data.containsKey('category')) 'category': data['category'],
       if (data.containsKey('unit')) 'unit': data['unit'],
       if (data.containsKey('quantity')) 'stock_quantity': data['quantity'],
+      if (data.containsKey('quantity') && ((data['quantity'] as num?) ?? 0) > 0)
+        'stock_tracking_started': true,
       if (data.containsKey('critical_level'))
         'minimum_stock': data['critical_level'],
       'specifications': specifications,
@@ -282,6 +287,60 @@ class StockService {
         'p_destination': destination,
         'p_note': note,
       },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getOpenPersonnelLoans() async {
+    final response = await _supabase
+        .from('product_stock_loans')
+        .select(
+          '*, products:product_id(id, code, name, category, brand, model, unit, stock_quantity, minimum_stock, stock_tracking_started, specifications)',
+        )
+        .eq('status', 'borrowed')
+        .order('borrowed_at', ascending: false);
+
+    return List<Map<String, dynamic>>.from(response)
+        .map((loan) {
+          final product = loan['products'];
+          return {
+            ...loan,
+            'inventory':
+                product is Map<String, dynamic>
+                    ? _productToStock(product)
+                    : null,
+          };
+        })
+        .toList(growable: false);
+  }
+
+  Future<void> registerPersonnelLoan({
+    required String productId,
+    required String personnelId,
+    required int quantity,
+    String? note,
+  }) async {
+    if (quantity <= 0) throw Exception('Adet 0dan buyuk olmali.');
+    await _supabase.rpc(
+      'register_product_stock_loan',
+      params: {
+        'p_product_id': productId,
+        'p_personnel_id': personnelId,
+        'p_quantity': quantity,
+        'p_note': note,
+      },
+    );
+  }
+
+  Future<void> closePersonnelLoan({
+    required int loanId,
+    required String resolution,
+  }) async {
+    if (resolution != 'returned' && resolution != 'consumed') {
+      throw Exception('Gecersiz kapatma turu.');
+    }
+    await _supabase.rpc(
+      'close_product_stock_loan',
+      params: {'p_loan_id': loanId, 'p_resolution': resolution},
     );
   }
 

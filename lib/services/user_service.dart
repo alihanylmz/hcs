@@ -128,6 +128,25 @@ class UserService {
     }
   }
 
+  Future<List<UserProfile>> getStockPersonnel() async {
+    try {
+      final rows = await _client.rpc('list_stock_personnel');
+      return (rows as List)
+          .map(
+            (row) =>
+                UserProfile.fromJson(Map<String, dynamic>.from(row as Map)),
+          )
+          .toList(growable: false);
+    } catch (error, stackTrace) {
+      _logger.error(
+        'get_stock_personnel_failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
   Future<Set<String>> getActiveAppUserIds(String appCode) async {
     try {
       final List<dynamic> rows = await _client

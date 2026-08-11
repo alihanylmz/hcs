@@ -68,6 +68,26 @@ DiscoveryProductRecommendation recommendationForDiscoveryPoint(
       reason: 'Nokta adı debi ölçümü içeriyor.',
     );
   }
+  if (_containsAny(name, const [
+    'inverter',
+    'inv',
+    'frekans',
+    'surucu',
+    'sürücü',
+    'hiz kontrol',
+    'hız kontrol',
+    'speed control',
+    'fan hiz',
+    'fan hız',
+    'pompa hiz',
+    'pompa hız',
+  ])) {
+    return const DiscoveryProductRecommendation(
+      mainCategory: 'HVAC ve Sürücüler',
+      subcategories: {},
+      reason: 'Nokta adı frekans sürücü veya inverter ihtiyacı içeriyor.',
+    );
+  }
   if (_containsAny(name, const ['damper motor'])) {
     return const DiscoveryProductRecommendation(
       mainCategory: 'Aktüatör ve Vanalar',

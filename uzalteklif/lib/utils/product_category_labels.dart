@@ -76,6 +76,10 @@ ProductMainCategory productMainCategoryFor(Product product) {
       searchable.contains('operatör panel')) {
     return ProductMainCategory.hmi;
   }
+  if (_hasPhysicalIoEvidence(searchable)) return ProductMainCategory.ioModule;
+  if (_hasPhysicalControllerEvidence(searchable)) {
+    return ProductMainCategory.controller;
+  }
   if (searchable.contains('software') ||
       searchable.contains('cloud') ||
       searchable.contains('niagara') ||
@@ -154,19 +158,7 @@ bool productMatchesHardwareCategory(
   }
 
   if (target == ProductMainCategory.controller) {
-    if (_isNonHardwareControllerRecord(searchable)) return false;
-    final hasPhysicalControllerEvidence =
-        searchable.contains('plant controller') ||
-        searchable.contains('unitary controller') ||
-        searchable.contains('vav controller') ||
-        searchable.contains('zone controller') ||
-        searchable.contains('ddc controller') ||
-        searchable.contains('ddc kontrolor') ||
-        searchable.contains('fbxi') ||
-        searchable.contains('unitary 16') ||
-        searchable.contains('hawk8') ||
-        searchable.contains('n-adv device');
-    if (hasPhysicalControllerEvidence) return true;
+    if (_hasPhysicalControllerEvidence(searchable)) return true;
     const controllerCategories = <String>{
       'ddc controller',
       'ddc kontrolor',
@@ -184,15 +176,7 @@ bool productMatchesHardwareCategory(
       category == 'io modulleri') {
     return true;
   }
-  return searchable.contains('i/o module') ||
-      searchable.contains('io module') ||
-      searchable.contains('mixed i/o') ||
-      searchable.contains('mixed io') ||
-      searchable.contains('panel i/o') ||
-      searchable.contains('panel io') ||
-      searchable.contains('remote i/o') ||
-      searchable.contains('remote io') ||
-      RegExp(r'\b\d+\s*(ai|ao|di|do|ui|uio)\b').hasMatch(searchable);
+  return _hasPhysicalIoEvidence(searchable);
 }
 
 String productSubcategoryTurkishLabel(Product product) {
@@ -353,6 +337,40 @@ bool _isNonHardwareIoRecord(String searchable) {
       searchable.contains('terminal') ||
       searchable.contains('accessor') ||
       searchable.contains('service part');
+}
+
+bool _hasPhysicalControllerEvidence(String searchable) {
+  if (_isNonHardwareControllerRecord(searchable)) return false;
+  return searchable.contains('plant controller') ||
+      searchable.contains('unitary controller') ||
+      searchable.contains('vav controller') ||
+      searchable.contains('zone controller') ||
+      searchable.contains('ddc controller') ||
+      searchable.contains('ddc kontrolor') ||
+      searchable.contains('bacnet ms/tp hvac controller') ||
+      searchable.contains('bacnet mstp hvac controller') ||
+      searchable.contains('hvac controller') ||
+      searchable.contains('programmable controller') ||
+      searchable.contains('supervisory controller') ||
+      searchable.contains('fbxi') ||
+      searchable.contains('unitary 16') ||
+      searchable.contains('hawk8') ||
+      searchable.contains('n-adv device') ||
+      RegExp(r'\bclmers\d').hasMatch(searchable);
+}
+
+bool _hasPhysicalIoEvidence(String searchable) {
+  if (_isNonHardwareIoRecord(searchable)) return false;
+  return searchable.contains('i/o module') ||
+      searchable.contains('io module') ||
+      searchable.contains('mixed i/o') ||
+      searchable.contains('mixed io') ||
+      searchable.contains('panel i/o') ||
+      searchable.contains('panel io') ||
+      searchable.contains('remote i/o') ||
+      searchable.contains('remote io') ||
+      RegExp(r'\b\d+\s*(ai|ao|di|do|ui|uio)\b').hasMatch(searchable) ||
+      RegExp(r'\bclio[pn]?\d').hasMatch(searchable);
 }
 
 String productCategoryTurkishLabel(String raw) {

@@ -40,7 +40,6 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
   bool _isSelectionMode = false;
   Set<String> _selectedItems = {};
   Map<String, int> _orderQuantities = {};
-  int _selectedCategoryIndex = 0;
   int _stockSectionIndex = 0;
   UserProfile? _userProfile;
 
@@ -55,17 +54,6 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
       defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS ||
       defaultTargetPlatform == TargetPlatform.macOS;
-
-  List<String> get _uiCategories {
-    final categories =
-        _allStocks
-            .map((item) => item['category']?.toString().trim() ?? '')
-            .where((category) => category.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return ['Tümü', ...categories];
-  }
 
   @override
   void initState() {
@@ -237,20 +225,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
   }
 
   List<Map<String, dynamic>> _getFilteredStocks() {
-    final categories = _uiCategories;
-    final currentTab =
-        categories[_selectedCategoryIndex.clamp(0, categories.length - 1)];
     var list = List<Map<String, dynamic>>.from(_allStocks);
-
-    if (currentTab != 'Tümü') {
-      list =
-          list
-              .where(
-                (stock) =>
-                    (stock['category']?.toString().trim() ?? '') == currentTab,
-              )
-              .toList();
-    }
 
     final query = _normalizeTurkish(_searchQuery);
     if (query.isEmpty) return list;
@@ -261,14 +236,12 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
       final brand = _normalizeTurkish(stock['brand'] ?? '');
       final model = _normalizeTurkish(stock['model'] ?? '');
       final shelf = _normalizeTurkish(stock['shelf_location'] ?? '');
-      final category = _normalizeTurkish(stock['category'] ?? '');
       final barcode = _normalizeTurkish(stock['barcode'] ?? '');
       return name.contains(query) ||
           code.contains(query) ||
           brand.contains(query) ||
           model.contains(query) ||
           shelf.contains(query) ||
-          category.contains(query) ||
           barcode.contains(query);
     }).toList();
   }
@@ -430,7 +403,6 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
             stocks: _allStocks,
             asInt: _asInt,
             safeText: _safeText,
-            iconForCategory: _getIconForCategory,
           ),
     );
 
@@ -522,9 +494,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                       0.12,
                     ),
                     foregroundColor: theme.colorScheme.primary,
-                    child: Icon(
-                      _getIconForCategory(item['category']?.toString()),
-                    ),
+                    child: const Icon(Icons.inventory_2_outlined),
                   ),
                   title: Text(
                     _safeText(item['name']),
@@ -1181,16 +1151,12 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                       ? 'Urun, barkod, sebep veya hedef ara...'
                       : _stockSectionIndex == 4
                       ? 'Personel, urun, marka veya model ara...'
-                      : 'Urun, kod, marka, model veya kategori ara...',
+                      : 'Urun, kod, marka veya model ara...',
               prefixIcon: const Icon(Icons.search_rounded),
             ),
           ),
           const SizedBox(height: 18),
           _buildSectionSelector(theme),
-          if (_stockSectionIndex < 2) ...[
-            const SizedBox(height: 14),
-            _buildCategorySelector(theme),
-          ],
         ],
       ),
     );
@@ -1438,7 +1404,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
             subtitle:
                 _stockSectionIndex == 0
                     ? 'Bu filtrede kritik seviyede urun yok.'
-                    : 'Arama veya kategori filtresini degistirerek tekrar deneyin.',
+                    : 'Arama metnini degistirerek tekrar deneyin.',
           ),
         ),
       ];
@@ -1595,45 +1561,6 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     );
   }
 
-  Widget _buildCategorySelector(ThemeData theme) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children:
-          _uiCategories.asMap().entries.map((entry) {
-            final index = entry.key;
-            final label = entry.value;
-            final isSelected = _selectedCategoryIndex == index;
-
-            return ChoiceChip(
-              selected: isSelected,
-              label: Text(label),
-              onSelected: (_) => setState(() => _selectedCategoryIndex = index),
-              labelStyle: theme.textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-                color:
-                    isSelected
-                        ? theme.colorScheme.onPrimary
-                        : theme.colorScheme.onSurface,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
-              ),
-              selectedColor: theme.colorScheme.primary,
-              backgroundColor: theme.cardColor,
-              side: BorderSide(
-                color:
-                    isSelected
-                        ? Colors.transparent
-                        : theme.dividerColor.withOpacity(0.2),
-              ),
-              showCheckmark: false,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            );
-          }).toList(),
-    );
-  }
-
   Widget _buildEmptyState(
     ThemeData theme, {
     required IconData icon,
@@ -1672,21 +1599,6 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
     );
   }
 
-  IconData _getIconForCategory(String? category) {
-    switch (category) {
-      case 'Sürücü':
-        return Icons.speed_rounded;
-      case 'PLC':
-        return Icons.memory_rounded;
-      case 'HMI':
-        return Icons.desktop_windows_rounded;
-      case 'Şalt':
-        return Icons.electric_bolt_rounded;
-      default:
-        return Icons.category_rounded;
-    }
-  }
-
   Widget _buildStockCard(Map<String, dynamic> item, ThemeData theme) {
     final quantity = _asInt(item['quantity']);
     final criticalLevel = _resolvedCriticalLevel(item);
@@ -1709,7 +1621,6 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
             : 'Normal';
     final isSelected = _selectedItems.contains(item['id'].toString());
     final unit = _safeText(item['unit'], fallback: 'adet');
-    final category = _safeText(item['category'], fallback: 'Diger');
     final brand = _safeText(item['brand'], fallback: 'Markasiz');
     final model = _safeText(item['model'], fallback: 'Modelsiz');
     final code = _safeText(item['code'], fallback: 'Kod yok');
@@ -1766,10 +1677,7 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                       color: statusColor.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Icon(
-                      _getIconForCategory(item['category']?.toString()),
-                      color: statusColor,
-                    ),
+                    child: Icon(Icons.inventory_2_outlined, color: statusColor),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -1790,11 +1698,6 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            _buildMetaChip(
-                              theme,
-                              icon: Icons.grid_view_rounded,
-                              label: category,
-                            ),
                             _buildMetaChip(
                               theme,
                               icon: Icons.business_outlined,
@@ -2392,7 +2295,6 @@ class BarcodeStockLinkSheet extends StatefulWidget {
   final List<Map<String, dynamic>> stocks;
   final int Function(dynamic value) asInt;
   final String Function(dynamic value, {String fallback}) safeText;
-  final IconData Function(String? category) iconForCategory;
 
   const BarcodeStockLinkSheet({
     super.key,
@@ -2400,7 +2302,6 @@ class BarcodeStockLinkSheet extends StatefulWidget {
     required this.stocks,
     required this.asInt,
     required this.safeText,
-    required this.iconForCategory,
   });
 
   @override
@@ -2424,11 +2325,9 @@ class _BarcodeStockLinkSheetState extends State<BarcodeStockLinkSheet> {
 
     return list.where((stock) {
       final name = _normalize(stock['name']);
-      final category = _normalize(stock['category']);
       final shelf = _normalize(stock['shelf_location']);
       final barcode = _normalize(stock['barcode']);
       return name.contains(query) ||
-          category.contains(query) ||
           shelf.contains(query) ||
           barcode.contains(query);
     }).toList();
@@ -2483,7 +2382,7 @@ class _BarcodeStockLinkSheetState extends State<BarcodeStockLinkSheet> {
                 decoration: const InputDecoration(
                   prefixIcon: Icon(Icons.search_rounded),
                   labelText: 'Stoktaki urunu ara',
-                  hintText: 'Urun adi, kategori, raf veya barkod',
+                  hintText: 'Urun adi, marka, model veya barkod',
                 ),
               ),
               const SizedBox(height: 14),
@@ -2527,10 +2426,8 @@ class _BarcodeStockLinkSheetState extends State<BarcodeStockLinkSheet> {
                                             .withOpacity(0.1),
                                         foregroundColor:
                                             theme.colorScheme.primary,
-                                        child: Icon(
-                                          widget.iconForCategory(
-                                            stock['category']?.toString(),
-                                          ),
+                                        child: const Icon(
+                                          Icons.inventory_2_outlined,
                                         ),
                                       ),
                                       const SizedBox(width: 12),
@@ -3473,7 +3370,6 @@ class _StockCatalogPickerDialogState extends State<StockCatalogPickerDialog> {
           final haystack = _normalize(
             [
               stock['name'],
-              stock['category'],
               stock['barcode'],
               stock['shelf_location'],
             ].map((value) => value?.toString() ?? '').join(' '),
@@ -3533,7 +3429,6 @@ class _StockCatalogPickerDialogState extends State<StockCatalogPickerDialog> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
-                              '${_text(stock['category'])} · '
                               '${_asInt(stock['quantity'])} ${_text(stock['unit'], fallback: 'adet')} · '
                               'Raf: ${_text(stock['shelf_location'])}',
                               maxLines: 2,

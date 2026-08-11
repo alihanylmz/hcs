@@ -15,8 +15,7 @@ class StockPdfService {
     while (true) {
       final response = await supabase
           .from('products')
-          .select('id, code, name, category, brand, model, unit, stock_quantity, minimum_stock, stock_tracking_started, specifications')
-          .order('category', ascending: true)
+          .select('id, code, name, brand, model, unit, stock_quantity, minimum_stock, stock_tracking_started, specifications')
           .order('name', ascending: true)
           .range(offset, offset + pageSize - 1);
       final page = List<Map<String, dynamic>>.from(response);
@@ -48,55 +47,36 @@ class StockPdfService {
       final pdf = pw.Document();
       final font = await PdfHelper.loadTurkishFont();
 
-      final Map<String, List<Map<String, dynamic>>> grouped = {};
-      for (var s in stocks) {
-        final cat = s['category'] ?? 'Diğer';
-        if (!grouped.containsKey(cat)) grouped[cat] = [];
-        grouped[cat]!.add(s);
-      }
-
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
           theme: pw.ThemeData.withFont(base: font, bold: font),
           header: (context) => pw.Header(level: 0, child: pw.Text("GÜNCEL STOK RAPORU", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold))),
           build: (context) {
-            return grouped.entries.map((entry) {
-              return pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
+            return [
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey400),
                 children: [
-                  pw.SizedBox(height: 10),
-                  pw.Container(
-                    width: double.infinity,
-                    color: PdfColors.grey200,
-                    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-                    child: pw.Text(entry.key, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-                  ),
-                  pw.Table(
-                    border: pw.TableBorder.all(color: PdfColors.grey400),
-                    children: [
-                      pw.TableRow(decoration: const pw.BoxDecoration(color: PdfColors.grey100), children: [
-                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Ürün Adı', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Adet', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Raf', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
-                      ]),
-                      ...entry.value.map((item) {
-                        final qty = item['quantity'] as int? ?? 0;
-                        final critical = item['critical_level'] as int? ?? 0;
-                        final isLow =
-                            item['stock_tracking_started'] == true &&
-                            qty <= critical;
-                        return pw.TableRow(children: [
-                          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(item['name'] ?? '-')),
-                          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(qty.toString(), style: pw.TextStyle(color: isLow ? PdfColors.red : PdfColors.black, fontWeight: isLow ? pw.FontWeight.bold : null))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(item['shelf_location'] ?? '-')),
-                        ]);
-                      }).toList(),
-                    ],
-                  ),
+                  pw.TableRow(decoration: const pw.BoxDecoration(color: PdfColors.grey100), children: [
+                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Ürün Adı', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Adet', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Raf', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                  ]),
+                  ...stocks.map((item) {
+                    final qty = item['quantity'] as int? ?? 0;
+                    final critical = item['critical_level'] as int? ?? 0;
+                    final isLow =
+                        item['stock_tracking_started'] == true &&
+                        qty <= critical;
+                    return pw.TableRow(children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(item['name'] ?? '-')),
+                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(qty.toString(), style: pw.TextStyle(color: isLow ? PdfColors.red : PdfColors.black, fontWeight: isLow ? pw.FontWeight.bold : null))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(item['shelf_location'] ?? '-')),
+                    ]);
+                  }),
                 ],
-              );
-            }).toList();
+              ),
+            ];
           },
         ),
       );
@@ -251,50 +231,29 @@ class StockPdfService {
               ];
             }
 
-            final Map<String, List<Map<String, dynamic>>> grouped = {};
-            for (var item in orderItems) {
-              final cat = item['category'] as String? ?? 'Diğer';
-              if (!grouped.containsKey(cat)) grouped[cat] = [];
-              grouped[cat]!.add(item);
-            }
-
-            return grouped.entries.map((entry) {
-              return pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
+            return [
+              pw.SizedBox(height: 15),
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey400, width: 1),
                 children: [
-                  pw.SizedBox(height: 15),
-                  pw.Container(
-                    width: double.infinity,
-                    padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                    decoration: pw.BoxDecoration(color: PdfHelper.primaryColor, borderRadius: pw.BorderRadius.circular(4)),
-                    child: pw.Text(entry.key.toUpperCase(), style: pw.TextStyle(font: font, fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
-                  ),
-                  pw.SizedBox(height: 8),
-                  pw.Table(
-                    border: pw.TableBorder.all(color: PdfColors.grey400, width: 1),
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfHelper.lightBgColor),
                     children: [
-                      pw.TableRow(
-                        decoration: const pw.BoxDecoration(color: PdfHelper.lightBgColor),
-                        children: [
-                          pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Ürün Adı', style: pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold, fontSize: 10))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Mevcut', style: pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold, fontSize: 10))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Kritik', style: pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold, fontSize: 10))),
-                        ],
-                      ),
-                      ...entry.value.map((item) {
-                        return pw.TableRow(
-                          children: [
-                            pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(PdfHelper.safeText(item['name']), style: pw.TextStyle(font: font, fontSize: 9))),
-                            pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(item['quantity'].toString(), style: pw.TextStyle(font: font, fontSize: 9), textAlign: pw.TextAlign.center)),
-                            pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(item['critical_level'].toString(), style: pw.TextStyle(font: font, fontSize: 9), textAlign: pw.TextAlign.center)),
-                          ],
-                        );
-                      }).toList(),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Ürün Adı', style: pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Mevcut', style: pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Kritik', style: pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold, fontSize: 10))),
                     ],
                   ),
+                  ...orderItems.map((item) => pw.TableRow(
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(PdfHelper.safeText(item['name']), style: pw.TextStyle(font: font, fontSize: 9))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(item['quantity'].toString(), style: pw.TextStyle(font: font, fontSize: 9), textAlign: pw.TextAlign.center)),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(item['critical_level'].toString(), style: pw.TextStyle(font: font, fontSize: 9), textAlign: pw.TextAlign.center)),
+                    ],
+                  )),
                 ],
-              );
-            }).toList();
+              ),
+            ];
           },
         ),
       );
@@ -349,55 +308,34 @@ class StockPdfService {
               ];
             }
 
-            final Map<String, List<Map<String, dynamic>>> grouped = {};
-            for (var item in items) {
-              final cat = item['category'] as String? ?? 'Diğer';
-              if (!grouped.containsKey(cat)) grouped[cat] = [];
-              grouped[cat]!.add(item);
-            }
-
-            return grouped.entries.map((entry) {
-              return pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
+            return [
+              pw.SizedBox(height: 15),
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey400, width: 1),
+                columnWidths: const {
+                  0: pw.FlexColumnWidth(3),
+                  1: pw.FlexColumnWidth(1),
+                  2: pw.FlexColumnWidth(1),
+                },
                 children: [
-                  pw.SizedBox(height: 15),
-                  pw.Container(
-                    width: double.infinity,
-                    padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                    decoration: pw.BoxDecoration(color: PdfHelper.primaryColor, borderRadius: pw.BorderRadius.circular(4)),
-                    child: pw.Text(entry.key.toUpperCase(), style: pw.TextStyle(font: font, fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
-                  ),
-                  pw.SizedBox(height: 8),
-                  pw.Table(
-                    border: pw.TableBorder.all(color: PdfColors.grey400, width: 1),
-                    columnWidths: const {
-                      0: pw.FlexColumnWidth(3),
-                      1: pw.FlexColumnWidth(1),
-                      2: pw.FlexColumnWidth(1),
-                    },
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfHelper.lightBgColor),
                     children: [
-                      pw.TableRow(
-                        decoration: const pw.BoxDecoration(color: PdfHelper.lightBgColor),
-                        children: [
-                          pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Ürün Adı', style: pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold, fontSize: 10))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Adet', style: pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold, fontSize: 10), textAlign: pw.TextAlign.center)),
-                          pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Birim', style: pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold, fontSize: 10), textAlign: pw.TextAlign.center)),
-                        ],
-                      ),
-                      ...entry.value.map((item) {
-                        return pw.TableRow(
-                          children: [
-                            pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(PdfHelper.safeText(item['name']), style: pw.TextStyle(font: font, fontSize: 9))),
-                            pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text((item['order_quantity'] ?? 1).toString(), style: pw.TextStyle(font: font, fontSize: 9), textAlign: pw.TextAlign.center)),
-                            pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(item['unit'] ?? 'adet', style: pw.TextStyle(font: font, fontSize: 9), textAlign: pw.TextAlign.center)),
-                          ],
-                        );
-                      }).toList(),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Ürün Adı', style: pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Adet', style: pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold, fontSize: 10), textAlign: pw.TextAlign.center)),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Birim', style: pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold, fontSize: 10), textAlign: pw.TextAlign.center)),
                     ],
                   ),
+                  ...items.map((item) => pw.TableRow(
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(PdfHelper.safeText(item['name']), style: pw.TextStyle(font: font, fontSize: 9))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text((item['order_quantity'] ?? 1).toString(), style: pw.TextStyle(font: font, fontSize: 9), textAlign: pw.TextAlign.center)),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(item['unit'] ?? 'adet', style: pw.TextStyle(font: font, fontSize: 9), textAlign: pw.TextAlign.center)),
+                    ],
+                  )),
                 ],
-              );
-            }).toList();
+              ),
+            ];
           },
         ),
       );

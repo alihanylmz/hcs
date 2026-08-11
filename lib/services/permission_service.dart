@@ -93,6 +93,7 @@ class PermissionService {
 
   static final Set<AppPermission> _technicianPermissions = Set.unmodifiable({
     AppPermission.viewTicketList,
+    AppPermission.createTicket,
     AppPermission.viewArchivedTickets,
     AppPermission.exportFilteredTicketListPdf,
     AppPermission.exportAllTicketListPdf,

@@ -134,7 +134,7 @@ void main() {
       );
       expect(
         PermissionService.hasPermission(profile, AppPermission.createTicket),
-        isFalse,
+        isTrue,
       );
       expect(
         PermissionService.hasPermission(profile, AppPermission.editTicket),

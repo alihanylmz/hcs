@@ -691,15 +691,17 @@ class StockService {
     final stocks = await _supabase
         .from(_table)
         .select('name, category')
-        .eq('category', category)
         .order('name', ascending: true);
 
     var imported = 0;
     for (final stock in stocks as List) {
-      final parsed = _parseBrandModelFromStockName(
-        stock['name']?.toString() ?? '',
-        category,
-      );
+      final stockName = stock['name']?.toString() ?? '';
+      final stockCategory = stock['category']?.toString() ?? '';
+      if (!_matchesInventoryCategory(stockName, stockCategory, category)) {
+        continue;
+      }
+
+      final parsed = _parseBrandModelFromStockName(stockName, category);
       if (parsed == null) continue;
 
       await addBrand(parsed.brand, category);
@@ -714,6 +716,51 @@ class StockService {
     }
 
     return imported;
+  }
+
+  bool _matchesInventoryCategory(
+    String stockName,
+    String stockCategory,
+    String targetCategory,
+  ) {
+    final target = _categoryKey(targetCategory);
+    final category = _categoryKey(stockCategory);
+    final name = _categoryKey(stockName);
+
+    if (category == target) return true;
+
+    if (target == 'plc') {
+      return name.contains('plc');
+    }
+    if (target == 'hmi') {
+      return name.contains('hmi');
+    }
+    if (target == 'surucu') {
+      return name.contains('surucu') || name.contains('kw');
+    }
+
+    return false;
+  }
+
+  String _categoryKey(String value) {
+    return value
+        .trim()
+        .toLowerCase()
+        .replaceAll('Ã¼', 'u')
+        .replaceAll('ü', 'u')
+        .replaceAll('Ã¶', 'o')
+        .replaceAll('ö', 'o')
+        .replaceAll('Ä±', 'i')
+        .replaceAll('ı', 'i')
+        .replaceAll('Ä°', 'i')
+        .replaceAll('i̇', 'i')
+        .replaceAll('ÅŸ', 's')
+        .replaceAll('ş', 's')
+        .replaceAll('ÄŸ', 'g')
+        .replaceAll('ğ', 'g')
+        .replaceAll('Ã§', 'c')
+        .replaceAll('ç', 'c')
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '');
   }
 
   _ParsedBrandModel? _parseBrandModelFromStockName(

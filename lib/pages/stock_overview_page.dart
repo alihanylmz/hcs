@@ -535,6 +535,21 @@ class _StockOverviewPageState extends State<StockOverviewPage> {
       return;
     }
 
+    if (_allStocks.isEmpty) {
+      await _loadStocks();
+      if (!mounted) return;
+    }
+
+    if (_allStocks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Stok listesi bos gorunuyor. Once stok karti ekleyin.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     final selectedItem = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,

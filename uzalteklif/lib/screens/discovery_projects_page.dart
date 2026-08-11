@@ -766,6 +766,7 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
         MaterialPageRoute(
           builder: (context) => QuoteEditorPage(
             quoteRepository: widget.quoteRepository,
+            productRepository: widget.productRepository,
             initialRates: rates,
             availableProducts: availableProducts,
             initialProductLines: productLines,

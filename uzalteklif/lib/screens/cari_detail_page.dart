@@ -112,6 +112,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
       MaterialPageRoute(
         builder: (context) => QuoteEditorPage(
           quoteRepository: widget.quoteRepository,
+          productRepository: widget.productRepository,
           initialRates: _rates,
           availableProducts: _products,
           initialCariId: _cari.id,

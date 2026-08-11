@@ -14,6 +14,7 @@ import '../services/excel_export_service.dart';
 import '../services/pdf_export_service.dart';
 import '../services/own_company_repository.dart';
 import '../services/price_adjustment_rule_repository.dart';
+import '../services/product_repository.dart';
 import '../services/quote_code_generator.dart';
 import '../services/quote_repository.dart';
 import '../services/user_profile_repository.dart';
@@ -39,6 +40,7 @@ class QuoteEditorPage extends StatefulWidget {
     required this.quoteRepository,
     required this.initialRates,
     required this.availableProducts,
+    this.productRepository,
     this.quoteToRevise,
     this.quoteToCopy,
     this.revisionMode = false,
@@ -64,6 +66,7 @@ class QuoteEditorPage extends StatefulWidget {
        assert(!revisionMode || quoteToRevise != null);
 
   final QuoteRepository quoteRepository;
+  final ProductRepository? productRepository;
   final List<MarketRate> initialRates;
   final List<Product> availableProducts;
   final Map<String, int> initialProductQuantities;
@@ -150,6 +153,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   List<OwnCompany> _ownCompanies = [OwnCompany.fallback()];
   String _selectedOwnCompanyId = 'default-company';
   List<CariAccount> _cariler = const [];
+  List<Product> _availableProducts = const [];
   String _selectedCariId = '';
 
   @override
@@ -157,6 +161,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     super.initState();
     debugPrint(_liveBuildMarker);
     debugPrint(_lineCurrencyFixMarker);
+    _availableProducts = widget.availableProducts;
     final revisionSource = widget.quoteToRevise;
     final copySource = widget.quoteToCopy;
     final source = revisionSource ?? copySource;
@@ -194,7 +199,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
           ];
     if (seeds.isEmpty) return;
     final productsById = {
-      for (final product in widget.availableProducts) product.id: product,
+      for (final product in _availableProducts) product.id: product,
     };
     final sectionIds = <String, String>{};
     for (final seed in seeds) {
@@ -635,7 +640,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   String? _findProductIdFromItem(QuoteLineItem item) {
     final code = item.resolvedProductCode;
     if (code.isEmpty) return null;
-    for (final product in widget.availableProducts) {
+    for (final product in _availableProducts) {
       if (product.code == code) return product.id;
     }
     return null;
@@ -701,7 +706,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
   List<String> get _productCategories {
     final categories =
-        widget.availableProducts
+        _availableProducts
             .map((product) => product.category)
             .toSet()
             .toList()
@@ -715,24 +720,64 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   };
 
   List<Product> get _filteredProductsForAdd {
-    final query = _productSearchController.text.trim().toLowerCase();
-    return widget.availableProducts
+    final query = _normalizeProductSearch(_productSearchController.text);
+    return _availableProducts
         .where((product) {
           final matchesCategory =
               _productCategoryFilter == 'Tum Kategoriler' ||
               product.category == _productCategoryFilter;
-          final haystack = [
-            product.code,
-            product.name,
-            product.brand,
-            product.model,
-            product.category,
-            product.technicalSummary,
-          ].join(' ').toLowerCase();
+          final haystack = _normalizeProductSearch(
+            [
+              product.code,
+              product.name,
+              product.brand,
+              product.model,
+              product.category,
+              productCategoryTurkishLabel(product.category),
+              productMainCategoryTurkishLabel(product),
+              productSubcategoryTurkishLabel(product),
+              product.description,
+              product.technicalSummary,
+              product.specifications.entries
+                  .map((entry) => '${entry.key} ${entry.value}')
+                  .join(' '),
+            ].join(' '),
+          );
           final matchesSearch = query.isEmpty || haystack.contains(query);
           return matchesCategory && matchesSearch;
         })
         .toList(growable: false);
+  }
+
+  Future<void> _refreshAvailableProductsForAdd() async {
+    final repository = widget.productRepository;
+    if (repository == null) return;
+    try {
+      final products = await repository.fetchProducts();
+      if (!mounted) return;
+      setState(() => _availableProducts = products);
+    } catch (_) {
+      // Mevcut listeyle devam edilir; teklif akisi stok yenileme hatasina takilmasin.
+    }
+  }
+
+  String _normalizeProductSearch(String value) {
+    return value
+        .trim()
+        .toLowerCase()
+        .replaceAll('ı', 'i')
+        .replaceAll('İ', 'i')
+        .replaceAll('ş', 's')
+        .replaceAll('ğ', 'g')
+        .replaceAll('ü', 'u')
+        .replaceAll('ö', 'o')
+        .replaceAll('ç', 'c')
+        .replaceAll('Ä±', 'i')
+        .replaceAll('ÅŸ', 's')
+        .replaceAll('ÄŸ', 'g')
+        .replaceAll('Ã¼', 'u')
+        .replaceAll('Ã¶', 'o')
+        .replaceAll('Ã§', 'c');
   }
 
   double get _visibleSubtotalTl {
@@ -1636,7 +1681,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       return null;
     }
 
-    for (final product in widget.availableProducts) {
+    for (final product in _availableProducts) {
       if (product.id == productId) {
         return product;
       }
@@ -1850,7 +1895,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         const SizedBox(height: 24),
         _buildLinesToolbar(),
         const SizedBox(height: 12),
-        if (widget.availableProducts.isEmpty)
+        if (_availableProducts.isEmpty)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
@@ -2141,7 +2186,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   }
 
   Widget _buildProductCatalog({required List<Product> filteredProducts}) {
-    final hasProducts = widget.availableProducts.isNotEmpty;
+    final hasProducts = _availableProducts.isNotEmpty;
 
     return Container(
       height: 250,
@@ -2230,6 +2275,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   }
 
   Future<void> _openMaterialListDialog() async {
+    _productCategoryFilter = 'Tum Kategoriler';
+    await _refreshAvailableProductsForAdd();
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {

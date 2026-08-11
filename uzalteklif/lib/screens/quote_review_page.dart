@@ -313,6 +313,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
       MaterialPageRoute(
         builder: (context) => QuoteEditorPage(
           quoteRepository: widget.quoteRepository,
+          productRepository: widget.productRepository,
           initialRates: widget.initialRates,
           availableProducts: widget.availableProducts,
           quoteToRevise: _quote,
@@ -334,6 +335,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
       MaterialPageRoute(
         builder: (context) => QuoteEditorPage(
           quoteRepository: widget.quoteRepository,
+          productRepository: widget.productRepository,
           initialRates: widget.initialRates,
           availableProducts: widget.availableProducts,
           quoteToCopy: _quote,

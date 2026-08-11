@@ -8,6 +8,7 @@ import '../models/product.dart';
 import '../services/cari_repository.dart';
 import '../services/control_hardware_repository.dart';
 import '../services/control_hardware_selector.dart';
+import '../services/discovery_point_list_pdf_service.dart';
 import '../services/discovery_repository.dart';
 import '../services/market_rate_service.dart';
 import '../services/own_company_repository.dart';
@@ -451,6 +452,7 @@ class DiscoveryEditorPage extends StatefulWidget {
 }
 
 class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
+  final _pointListPdfService = const DiscoveryPointListPdfService();
   late final TextEditingController _projectNameController;
   late final TextEditingController _projectCodeController;
   late final TextEditingController _revisionController;
@@ -695,6 +697,32 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Keşif kaydedilemedi: $error')));
+    }
+  }
+
+  Future<void> _exportPointListPdf() async {
+    final project = _currentProject;
+    if (project.totalPoints <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PDF için önce nokta ekleyin.')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await widget.repository.save(project);
+      final path = await _pointListPdfService.export(project);
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Nokta listesi PDF kaydedildi: $path')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Nokta listesi PDF çıkarılamadı: $error')),
+      );
     }
   }
 
@@ -1292,6 +1320,14 @@ class _DiscoveryEditorPageState extends State<DiscoveryEditorPage> {
       appBar: AppBar(
         title: const Text('Keşif Düzenle'),
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: OutlinedButton.icon(
+              onPressed: _saving ? null : _exportPointListPdf,
+              icon: const Icon(Icons.picture_as_pdf_rounded),
+              label: const Text('Nokta PDF'),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: FilledButton.tonalIcon(

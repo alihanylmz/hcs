@@ -465,6 +465,33 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
+                  'BİLGİ (CC) / OTOMATİK ARŞİV HESABI',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE6F2FB),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFB8D0ED)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.copy_rounded, size: 16, color: Color(0xFF2B82C9)),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'teklif@uzalteknik.com (Otomatik kopyalanır)',
+                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Color(0xFF17304C)),
+                        ),
+                      ),
+                      Icon(Icons.check_rounded, size: 16, color: Color(0xFF29956F)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
                   'GÖNDEREN E-POSTA YÖNTEMİ / HESABI',
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
                 ),
@@ -561,6 +588,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     if (result == null || !result.containsKey('toEmail')) return;
     final finalToEmail = result['toEmail']!;
 
+    final ccEmail = Uri.encodeComponent('teklif@uzalteknik.com');
     final subject = Uri.encodeComponent('Teklif: ${_quote.code}');
     final body = Uri.encodeComponent(
       'Sayin ${_quote.customerName.trim().isNotEmpty ? _quote.customerName.trim() : "Yetkili"},\n\n'
@@ -568,7 +596,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
       '${_quote.publicToken.isNotEmpty ? "Cevrimici goruntuleme: ${_quote.publicShareSlug}" : ""}\n\n'
       'Bilgilerinize saygilarimizla.',
     );
-    final uri = Uri.parse('mailto:$finalToEmail?subject=$subject&body=$body');
+    final uri = Uri.parse('mailto:$finalToEmail?cc=$ccEmail&subject=$subject&body=$body');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
       await widget.quoteRepository.markEmailSent(_quote.id, finalToEmail);

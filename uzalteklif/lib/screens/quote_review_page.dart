@@ -409,7 +409,8 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
 
     final companyEmail = _quote.documentProfile.companyEmail.trim();
     final preparedByEmail = _quote.documentProfile.preparedByEmail.trim();
-    String selectedSenderAccount = 'default'; // 'default', 'preparedBy', 'company'
+    String selectedSenderAccount = 'default'; // 'default', 'preparedBy', 'company', 'custom'
+    final customSenderCtrl = TextEditingController();
 
     final result = await showDialog<Map<String, String>>(
       context: context,
@@ -571,7 +572,6 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                         const Divider(height: 1),
                         InkWell(
                           onTap: () => setDlgState(() => selectedSenderAccount = 'company'),
-                          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(10)),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             child: Row(
@@ -600,6 +600,46 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                           ),
                         ),
                       ],
+                      const Divider(height: 1),
+                      InkWell(
+                        onTap: () => setDlgState(() => selectedSenderAccount = 'custom'),
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(10)),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    selectedSenderAccount == 'custom'
+                                        ? Icons.radio_button_checked_rounded
+                                        : Icons.radio_button_off_rounded,
+                                    size: 18,
+                                    color: selectedSenderAccount == 'custom'
+                                        ? const Color(0xFF8B5CC7)
+                                        : const Color(0xFF5B6F7F),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text('➕ Farklı Gönderen E-posta Adresi Ekle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF8B5CC7))),
+                                ],
+                              ),
+                              if (selectedSenderAccount == 'custom') ...[
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: customSenderCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Gönderen E-posta Adresiniz',
+                                    hintText: 'ad.soyad@firma.com',
+                                    prefixIcon: Icon(Icons.mark_email_unread_rounded, size: 16),
+                                    isDense: true,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),

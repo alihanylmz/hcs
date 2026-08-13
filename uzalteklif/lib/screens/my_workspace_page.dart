@@ -342,7 +342,7 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                 ),
               );
               Future.delayed(const Duration(milliseconds: 300), () {
-                Navigator.of(context).pushNamedAndRemoveUntil('/tickets', (route) => false);
+                Navigator.of(context).popUntil((route) => route.isFirst);
               });
             },
             icon: const Icon(Icons.build_circle_outlined, size: 18),

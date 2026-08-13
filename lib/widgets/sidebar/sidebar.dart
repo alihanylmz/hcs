@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -410,7 +411,6 @@ class Sidebar extends StatelessWidget {
   }
 
   void _switchToQuoteSystem(BuildContext context) {
-    // Web platformunda hash uzerinden veya direkt kök dizine akici gecis yap
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Teklif ve Keşif sistemine geçiliyor...'),
@@ -419,7 +419,11 @@ class Sidebar extends StatelessWidget {
       ),
     );
     Future.delayed(const Duration(milliseconds: 300), () {
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      if (kIsWeb) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      } else {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
     });
   }
 

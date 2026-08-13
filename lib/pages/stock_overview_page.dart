@@ -1817,65 +1817,84 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                                       onPressed: () => _showStartTrackingForCatalogItem(item),
                                     )
                                   else ...[
-                                    Tooltip(
-                                      message: 'Stok Girişi Yap (IN)',
-                                      child: OutlinedButton.icon(
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: AppColors.mint,
-                                          side: const BorderSide(color: AppColors.mint, width: 1.2),
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        icon: const Icon(Icons.arrow_circle_down, size: 15),
-                                        label: const Text('+ Giriş', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                        onPressed: () => _showStockMovementModal(item, 'in'),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Tooltip(
-                                      message: 'Stok Çıkışı Yap (OUT)',
-                                      child: OutlinedButton.icon(
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: AppColors.brass,
-                                          side: const BorderSide(color: AppColors.brass, width: 1.2),
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        icon: const Icon(Icons.arrow_circle_up, size: 15),
-                                        label: const Text('- Çıkış', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                        onPressed: () => _showStockMovementModal(item, 'out'),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Tooltip(
-                                      message: 'Personele Zimmetle',
-                                      child: OutlinedButton.icon(
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: AppColors.ink,
-                                          side: const BorderSide(color: AppColors.ink, width: 1.2),
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        icon: const Icon(Icons.badge_outlined, size: 15),
-                                        label: const Text('Zimmetle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                        onPressed: () => _showPersonnelLoanModal(item),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 2),
                                     PopupMenuButton<String>(
-                                      icon: const Icon(Icons.more_vert, size: 18, color: AppColors.ink),
+                                      tooltip: 'Stok İşlemleri',
+                                      offset: const Offset(0, 36),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.ink,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.tune_outlined, size: 14, color: Colors.white),
+                                            SizedBox(width: 6),
+                                            Text('Stok İşlemleri', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                                            SizedBox(width: 4),
+                                            Icon(Icons.arrow_drop_down, size: 16, color: Colors.white),
+                                          ],
+                                        ),
+                                      ),
                                       onSelected: (val) {
+                                        if (val == 'in') _showStockMovementModal(item, 'in');
+                                        if (val == 'out') _showStockMovementModal(item, 'out');
+                                        if (val == 'loan') _showPersonnelLoanModal(item);
                                         if (val == 'edit') _showAddOrTrackStockModal(item);
                                         if (val == 'untrack') _showStopTrackingConfirmDialog(item);
                                       },
                                       itemBuilder: (ctx) => [
-                                        const PopupMenuItem(value: 'edit', child: Text('Düzenle')),
+                                        const PopupMenuItem(
+                                          value: 'in',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.arrow_circle_down, color: AppColors.mint, size: 18),
+                                              SizedBox(width: 8),
+                                              Text('Stok Girişi Yap (IN)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.ink)),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'out',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.arrow_circle_up, color: AppColors.brass, size: 18),
+                                              SizedBox(width: 8),
+                                              Text('Stok Çıkışı Yap (OUT)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.ink)),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'loan',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.badge_outlined, color: AppColors.ink, size: 18),
+                                              SizedBox(width: 8),
+                                              Text('Personele Zimmetle', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.ink)),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuDivider(),
+                                        const PopupMenuItem(
+                                          value: 'edit',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.edit_outlined, color: AppColors.ink, size: 18),
+                                              SizedBox(width: 8),
+                                              Text('Ürün Bilgilerini Düzenle', style: TextStyle(fontSize: 13, color: AppColors.ink)),
+                                            ],
+                                          ),
+                                        ),
                                         const PopupMenuItem(
                                           value: 'untrack',
-                                          child: Text('Depodan Çıkar (Katalogda Sakla)', style: TextStyle(color: AppColors.corporateRed)),
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.remove_shopping_cart_outlined, color: AppColors.corporateRed, size: 18),
+                                              SizedBox(width: 8),
+                                              Text('Depodan Çıkar (Katalogda Sakla)', style: TextStyle(fontSize: 13, color: AppColors.corporateRed)),
+                                            ],
+                                          ),
                                         ),
                                       ],
                                     ),

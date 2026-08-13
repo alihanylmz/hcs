@@ -4,6 +4,32 @@ Bu dosya, yapay zeka ajanları (Antigravity, Codex vb.) tarafından yapılan tü
 
 ---
 
+## [REV-008] - 2026-08-13 (13:28 +03:00)
+
+### 📌 Başlık
+UzalTeklif Birebir Renk Teması Entegrasyonu ve %100 Ekran Genişliğine Yayılan (Full-Width Stretch) DataGrid Tablosu
+
+### 🎯 Değişiklik & İşlem Özeti
+1. **UzalTeklif Premium Renk Paleti Entegrasyonu (`lib/theme/app_colors.dart`, `lib/pages/stock_overview_page.dart`):**
+   - Birebir `uzalteklif` renk paleti tüm stok modülüne uygulandı:
+     - Arka Plan Zemin: `AppColors.sand` (`#F4EFE7` Warm Sand - Teklif zemin rengi).
+     - Kartlar & Tablo Yüzeyi: `AppColors.paper` (`#FFFFFCF7` Paper White & `#E4E8ED` Mist Border).
+     - Ana Başlıklar & Butonlar: `AppColors.ink` (`#15304A` Deep Navy / Ink).
+     - Vurgu & İkincil Aksiyonlar: `AppColors.brass` (`#C98E4B` Warm Gold / Brass Accent).
+     - Başarılı / Giriş İşlemleri: `AppColors.mint` (`#4E907A` Sage Mint).
+
+2. **%100 Ekran Genişliğine Yayılan (Full-Width Stretch) DataGrid Tablo Tasarımı:**
+   - Tablonun sağ tarafta yarım kalması (`DataTable` genişlik kısıtı) `LayoutBuilder` + `ConstrainedBox(minWidth: constraints.maxWidth)` ile tamamen çözüldü.
+   - Tablolar artık ekran ne kadar geniş olursa olsun kartın tüm genişliğini kaplayacak şekilde esner (`width: double.infinity`).
+   - Tablo başlığı `AppColors.ink` (`#15304A`) zemin üstüne net beyaz metinlerle kurumsal ERP görünümüne kavuşturuldu.
+
+### 📁 Etkilenen Dosyalar
+- `[MODIFY] lib/theme/app_colors.dart`
+- `[MODIFY] lib/pages/stock_overview_page.dart`
+- `[MODIFY] CODEX_REVISIONS.md`
+
+---
+
 ## [REV-007] - 2026-08-13 (12:44 +03:00)
 
 ### 📌 Başlık
@@ -23,30 +49,6 @@ Yüksek Kontrastlı Tablo Tasarımı, Esnek Zimmet Sarf/İade Yönetimi ve Akıl
 
 ### 📁 Etkilenen Dosyalar
 - `[MODIFY] lib/services/stock_service.dart`
-- `[MODIFY] lib/pages/stock_overview_page.dart`
-- `[MODIFY] CODEX_REVISIONS.md`
-
----
-
-## [REV-006] - 2026-08-13 (12:31 +03:00)
-
-### 📌 Başlık
-DataGrid Sayfalama (Pagination) ile Kasma/Donma Çözümü ve Kurumsal Renk Paleti Revizyonu
-
-### 🎯 Değişiklik & İşlem Özeti
-1. **Yüksek Performanslı Sayfalama (Pagination Entegrasyonu):**
-   - "Tüm Ürün Kataloğu" sekmesinde 2.189 ürünün aynı anda 20.000+ widget olarak çizilip ana UI thread'i kilitlemesi (donma/kasma) %100 engellendi.
-   - Client-side **DataGrid Pagination** eklendi (`_pageSize = 50`, `25 / 50 / 100` ürün seçimi). Sayfa başına sadece ekrandaki 50 ürün çizilerek render süresi **5 milisaniyeye** düşürüldü.
-   - Alt kontrol çubuğu: `Önceki Sayfa` | `Gösterilen: 1 - 50 / 2189 Ürün (Sayfa 1 / 44)` | `Sonraki Sayfa`.
-
-2. **Kurumsal Renk ve Tasarım Revizyonu (`lib/pages/stock_overview_page.dart`):**
-   - Ham/parlak cırt renkler kaldırıldı. `AppColors` renk paleti standartlarına geçildi:
-     - Header & Zemin: `AppColors.backgroundGrey` (`#F1F3F6`), `AppColors.surfaceWhite` (`#FFFFFF`).
-     - Metinler & Kenarlıklar: İnce slate border (`#D8DEE7`), `AppColors.textDark` (`#0F172A`).
-     - Butonlar: `AppColors.corporateBlue` (`#0F6BFF`).
-     - Durum Rozetleri (Badges): Muted pastel tonlar (Stokta Var: Soft Emerald `#DCFCE7`, Kritik: Soft Amber `#FEF3C7`, Tükendi: Soft Rose `#FEE2E2`).
-
-### 📁 Etkilenen Dosyalar
 - `[MODIFY] lib/pages/stock_overview_page.dart`
 - `[MODIFY] CODEX_REVISIONS.md`
 

@@ -31,6 +31,7 @@ Bu dosya, bu repoda calisan tum yapay zeka ajanlari icin baglayici proje talimat
 Gorevle ilgili oldugunda once su kaynaklari oku:
 
 - `README.md`: desteklenen yerel calistirma komutlari.
+- `docs/project-roadmap-and-gdrive-backup.md`: proje mevcut durumu, eksikler ve Google Drive Otomatik PDF Yedekleme mimarisi (ZORUNLU OKUNMALIDIR).
 - `docs/technical-overview.md`: klasor sorumluluklari ve servis sinirlari.
 - `docs/permission-matrix.md`: roller ve yetkiler.
 - `docs/ticket-lifecycle.md`: is emri durum gecisleri.

@@ -1,3 +1,5 @@
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/discovery_project.dart';
 import '../models/product.dart';
 import 'product_category_labels.dart';
@@ -125,16 +127,54 @@ DiscoveryProductRecommendation recommendationForDiscoveryPoint(
 
 /// Kullanicinin bizzat yildizlayarak (⭐) varsayilan yaptigi urunlerin kategorisel hafizasi
 final Map<String, String> _userFavoriteProductIds = {};
+bool _isFavLoaded = false;
 
-void setUserFavoriteProduct(String categoryKey, String productId) {
+String _getCurrentUserPrefix() {
+  final email = Supabase.instance.client.auth.currentUser?.email?.trim().toLowerCase() ?? '';
+  if (email.isNotEmpty) return email.replaceAll(RegExp(r'[^a-z0-9]'), '_');
+  final uid = Supabase.instance.client.auth.currentUser?.id ?? 'default';
+  return uid;
+}
+
+Future<void> loadUserFavoriteProducts() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final prefix = _getCurrentUserPrefix();
+    final keys = prefs.getKeys().where((k) => k.startsWith('fav_prod_${prefix}_'));
+    for (final key in keys) {
+      final catKey = key.replaceFirst('fav_prod_${prefix}_', '');
+      final val = prefs.getString(key);
+      if (val != null && val.isNotEmpty) {
+        _userFavoriteProductIds[catKey] = val;
+      }
+    }
+    _isFavLoaded = true;
+  } catch (_) {}
+}
+
+void setUserFavoriteProduct(String categoryKey, String productId) async {
   if (productId.isEmpty) {
     _userFavoriteProductIds.remove(categoryKey);
   } else {
     _userFavoriteProductIds[categoryKey] = productId;
   }
+
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final prefix = _getCurrentUserPrefix();
+    final prefKey = 'fav_prod_${prefix}_$categoryKey';
+    if (productId.isEmpty) {
+      await prefs.remove(prefKey);
+    } else {
+      await prefs.setString(prefKey, productId);
+    }
+  } catch (_) {}
 }
 
 String? getUserFavoriteProductId(String categoryKey) {
+  if (!_isFavLoaded) {
+    loadUserFavoriteProducts();
+  }
   return _userFavoriteProductIds[categoryKey];
 }
 

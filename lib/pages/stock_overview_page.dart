@@ -2209,6 +2209,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       final pName = (loan['personnel_name'] ?? 'Bilinmeyen Personel').toString().trim();
       final pId = (loan['personnel_id'] ?? pName).toString();
       final qty = _asInt(loan['quantity']);
+      if (qty <= 0) continue; // 0 adet kalmış ürünleri personelin zimmetinde kesinlikle gösterme
 
       if (!grouped.containsKey(pName)) {
         grouped[pName] = {

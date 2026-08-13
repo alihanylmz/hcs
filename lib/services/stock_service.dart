@@ -475,12 +475,27 @@ class StockService {
   // --- ZİMMET YÖNETİMİ (PERSONNEL LOANS) ---
 
   Future<List<Map<String, dynamic>>> getOpenPersonnelLoans() async {
+    try {
+      // 0 veya daha az miktarı kalmış ama durumu hâlâ 'borrowed' olan tüm eski zimmet kayıtlarını otomatik olarak kapat
+      await _supabase
+          .from('product_stock_loans')
+          .update({
+            'status': 'returned',
+            'closed_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('status', 'borrowed')
+          .lte('quantity', 0);
+    } catch (e) {
+      debugPrint('Sıfır zimmet temizleme hatası: $e');
+    }
+
     final response = await _supabase
         .from('product_stock_loans')
         .select(
           '*, products:product_id(id, code, name, category, brand, model, unit, stock_quantity, minimum_stock, stock_tracking_started, specifications)',
         )
         .eq('status', 'borrowed')
+        .gt('quantity', 0)
         .order('borrowed_at', ascending: false);
 
     return List<Map<String, dynamic>>.from(response)

@@ -4,6 +4,31 @@ Bu dosya, yapay zeka ajanları (Antigravity, Codex vb.) tarafından yapılan tü
 
 ---
 
+## [REV-004] - 2026-08-13 (12:04 +03:00)
+
+### 📌 Başlık
+Gerçek Depo Stokları Filtresi (`stock_tracking_started`) ve Katalogdan Stoğa Ekleme Modülü
+
+### 🎯 Değişiklik & İşlem Özeti
+1. **Fiziksel Depo Stokları Ayrıştırması (`lib/services/stock_service.dart`):**
+   - 2.000 parçalık tüm fiyat teklifi ürün kataloğunun stok sayfasında varsayılan olarak kalabalık yapması engellendi.
+   - `getStocks(onlyTracked: true)` filtresi eklenerek varsayılan görünümde yalnızca **depoda fiziksel olarak bulunan / stok takibi başlatılmış (`stock_tracking_started = true` veya `quantity > 0`)** ürünler listelendi.
+   - `startStockTracking()` ve `getCatalogProducts()` metotları ile katalogdaki herhangi bir ürün için miktar, raf yeri (`shelf_location`), barkod ve kritik stok seviyesi girilerek atomik olarak stok takibi başlatma desteği getirildi.
+
+2. **Arayüz ve Stok Kayıt Modalı Yenilenmesi (`lib/pages/stock_overview_page.dart`):**
+   - **Depodaki Stoklar (Varsayılan):** Sadece fiziksel depo stoklarını gösteren temiz DataGrid görünümü.
+   - **Tüm Ürün Kataloğu Sekmesi:** İsteğe bağlı olarak 2.000+ ürünlük tüm fiyat teklifi kataloğunu görüp tek tıkla `[Stoğa Al]` butonu ile depoya aktarma imkanı.
+   - **Yenilenmiş Stok Kayıt / Stoğa Alma Modalı (`_StockAddOrTrackDialog`):**
+     - *Sekme 1 (Katalogdan Stoğa Al):* Katalog ürünlerinde arama yapıp seçerek depoya alma ve stok takibini başlatma.
+     - *Sekme 2 (Sıfırdan Özel Ürün Ekle):* Katalogda bulunmayan özel malzemeler için yeni ürün kartı ve stok kaydı açma.
+
+### 📁 Etkilenen Dosyalar
+- `[MODIFY] lib/services/stock_service.dart`
+- `[MODIFY] lib/pages/stock_overview_page.dart`
+- `[MODIFY] CODEX_REVISIONS.md`
+
+---
+
 ## [REV-003] - 2026-08-13 (11:51 +03:00)
 
 ### 📌 Başlık

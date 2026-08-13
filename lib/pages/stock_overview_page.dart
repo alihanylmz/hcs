@@ -31,13 +31,11 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   List<Map<String, dynamic>> _personnelLoans = [];
 
   bool _isLoading = true;
-  bool _missingLoading = true;
-  bool _movementsLoading = true;
-  bool _loansLoading = true;
+  bool _onlyTracked = true; // Varsayılan: Sadece depoda bulunan / takibi olan stoklar
 
   String _searchQuery = '';
   String _selectedCategory = 'Tümü';
-  int _activeTab = 0; // 0: Tüm Stoklar, 1: Kritik Stoklar, 2: Zimmetler, 3: Stok Hareketleri, 4: Eksik İşler
+  int _activeTab = 0; // 0: Depodaki Stoklar, 1: Kritik Stoklar, 2: Tüm Katalog, 3: Zimmetler, 4: Hareketler, 5: Eksik İşler
 
   bool _isSelectionMode = false;
   final Set<String> _selectedProductIds = {};
@@ -82,7 +80,9 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   Future<void> _loadStocks() async {
     if (mounted) setState(() => _isLoading = true);
     try {
-      final data = await _stockService.getStocks();
+      // activeTab == 2 ise tüm kataloğu çeker, aksi halde sadece fiziksel stokları getirir
+      final fetchOnlyTracked = _activeTab != 2 && _onlyTracked;
+      final data = await _stockService.getStocks(onlyTracked: fetchOnlyTracked);
       if (mounted) {
         setState(() {
           _allStocks = data;
@@ -95,51 +95,27 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   }
 
   Future<void> _loadMissingTickets() async {
-    if (mounted) setState(() => _missingLoading = true);
     try {
       final data = await _stockService.getTicketsWithMissingParts();
-      if (mounted) {
-        setState(() {
-          _missingTickets = data;
-          _missingLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _missingLoading = false);
-    }
+      if (mounted) setState(() => _missingTickets = data);
+    } catch (_) {}
   }
 
   Future<void> _loadStockMovements() async {
-    if (mounted) setState(() => _movementsLoading = true);
     try {
       final data = await _stockService.getStockMovements();
-      if (mounted) {
-        setState(() {
-          _stockMovements = data;
-          _movementsLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _movementsLoading = false);
-    }
+      if (mounted) setState(() => _stockMovements = data);
+    } catch (_) {}
   }
 
   Future<void> _loadPersonnelLoans() async {
-    if (mounted) setState(() => _loansLoading = true);
     try {
       final data = await _stockService.getOpenPersonnelLoans();
-      if (mounted) {
-        setState(() {
-          _personnelLoans = data;
-          _loansLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _loansLoading = false);
-    }
+      if (mounted) setState(() => _personnelLoans = data);
+    } catch (_) {}
   }
 
-  // --- YARDIMCI FİLTRE & MATEMATİK METODLARI ---
+  // --- FİLTRELEME & YARDIMCI METODLAR ---
 
   int _asInt(dynamic val) {
     if (val is int) return val;
@@ -193,324 +169,403 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     return '$day.$month.$year $hour:$min';
   }
 
-  // --- DİYALOGLAR & AKSİYONLAR ---
+  // --- YENİLENMİŞ STOK KAYIT / KATALOGDAN STOĞA ALMA MODALI ---
 
-  void _showAddEditStockModal([Map<String, dynamic>? stock]) {
+  void _showAddOrTrackStockModal([Map<String, dynamic>? editItem]) {
     if (!_canManageStock) return;
-    final isEditing = stock != null;
-    final nameCtrl = TextEditingController(text: stock?['name'] ?? '');
-    final brandCtrl = TextEditingController(text: stock?['brand'] ?? '');
-    final modelCtrl = TextEditingController(text: stock?['model'] ?? '');
-    final unitCtrl = TextEditingController(text: stock?['unit'] ?? 'Adet');
-    final qtyCtrl = TextEditingController(
-      text: (stock?['quantity'] ?? 0).toString(),
-    );
-    final minCtrl = TextEditingController(
-      text: (stock?['critical_level'] ?? 0).toString(),
-    );
-    final barcodeCtrl = TextEditingController(text: stock?['barcode'] ?? '');
-    final shelfCtrl = TextEditingController(
-      text: stock?['shelf_location'] ?? '',
-    );
-    String category = stock?['category'] ?? StockService.categories.first;
+
+    if (editItem != null) {
+      _showEditStockDialog(editItem);
+      return;
+    }
 
     showDialog(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: Text(
-              isEditing ? 'Stok Ürününü Düzenle' : 'Yeni Stok Ürünü Ekle',
-            ),
-            content: SingleChildScrollView(
-              child: Container(
-                width: 450,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+      builder: (ctx) => const _StockAddOrTrackDialog(),
+    ).then((updated) {
+      if (updated == true) _loadStocks();
+    });
+  }
+
+  void _showEditStockDialog(Map<String, dynamic> stock) {
+    final nameCtrl = TextEditingController(text: stock['name'] ?? '');
+    final brandCtrl = TextEditingController(text: stock['brand'] ?? '');
+    final modelCtrl = TextEditingController(text: stock['model'] ?? '');
+    final unitCtrl = TextEditingController(text: stock['unit'] ?? 'Adet');
+    final qtyCtrl = TextEditingController(text: (stock['quantity'] ?? 0).toString());
+    final minCtrl = TextEditingController(text: (stock['critical_level'] ?? 0).toString());
+    final barcodeCtrl = TextEditingController(text: stock['barcode'] ?? '');
+    final shelfCtrl = TextEditingController(text: stock['shelf_location'] ?? '');
+    String category = stock['category'] ?? StockService.categories.first;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Stok Ürününü Düzenle'),
+        content: SingleChildScrollView(
+          child: Container(
+            width: 450,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Ürün Adı *',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
                   children: [
-                    TextField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Ürün Adı *',
-                        border: OutlineInputBorder(),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: StockService.categories.contains(category)
+                            ? category
+                            : StockService.categories.first,
+                        decoration: const InputDecoration(
+                          labelText: 'Kategori',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: StockService.categories
+                            .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                            .toList(),
+                        onChanged: (val) => category = val!,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value:
-                                StockService.categories.contains(category)
-                                    ? category
-                                    : StockService.categories.first,
-                            decoration: const InputDecoration(
-                              labelText: 'Kategori',
-                              border: OutlineInputBorder(),
-                            ),
-                            items:
-                                StockService.categories
-                                    .map(
-                                      (c) => DropdownMenuItem(
-                                        value: c,
-                                        child: Text(c),
-                                      ),
-                                    )
-                                    .toList(),
-                            onChanged:
-                                (val) => setState(() => category = val!),
-                          ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: unitCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Birim (Adet/m/kg)',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: unitCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Birim (Adet/m/kg)',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: brandCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Marka',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: modelCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Model',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: qtyCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Stok Miktarı',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: minCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Kritik Seviye',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: barcodeCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Barkod / Karekod',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: shelfCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Raf / Kasa No',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: brandCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Marka',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: modelCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Model',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: qtyCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Stok Miktarı',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: minCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Kritik Seviye',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: barcodeCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Barkod / Karekod',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: shelfCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Raf / Kasa No',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('İptal'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  if (nameCtrl.text.trim().isEmpty) return;
-                  final payload = {
-                    'name': nameCtrl.text.trim(),
-                    'category': category,
-                    'unit': unitCtrl.text.trim(),
-                    'brand': brandCtrl.text.trim(),
-                    'model': modelCtrl.text.trim(),
-                    'quantity': int.tryParse(qtyCtrl.text.trim()) ?? 0,
-                    'critical_level': int.tryParse(minCtrl.text.trim()) ?? 0,
-                    'barcode': barcodeCtrl.text.trim(),
-                    'shelf_location': shelfCtrl.text.trim(),
-                  };
-                  Navigator.pop(ctx);
-                  if (isEditing) {
-                    await _stockService.updateStock(stock['id'], payload);
-                  } else {
-                    await _stockService.addStock(payload);
-                  }
-                  _loadStocks();
-                },
-                child: Text(isEditing ? 'Kaydet' : 'Ekle'),
-              ),
-            ],
           ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (nameCtrl.text.trim().isEmpty) return;
+              final payload = {
+                'name': nameCtrl.text.trim(),
+                'category': category,
+                'unit': unitCtrl.text.trim(),
+                'brand': brandCtrl.text.trim(),
+                'model': modelCtrl.text.trim(),
+                'quantity': int.tryParse(qtyCtrl.text.trim()) ?? 0,
+                'critical_level': int.tryParse(minCtrl.text.trim()) ?? 0,
+                'barcode': barcodeCtrl.text.trim(),
+                'shelf_location': shelfCtrl.text.trim(),
+              };
+              Navigator.pop(ctx);
+              await _stockService.updateStock(stock['id'], payload);
+              _loadStocks();
+            },
+            child: const Text('Kaydet'),
+          ),
+        ],
+      ),
     );
   }
 
-  void _showStockMovementModal(
-    Map<String, dynamic> stock,
-    String movementType,
-  ) {
+  void _showStartTrackingForCatalogItem(Map<String, dynamic> catalogItem) {
+    if (!_canManageStock) return;
+    final qtyCtrl = TextEditingController(text: '1');
+    final minCtrl = TextEditingController(text: '5');
+    final shelfCtrl = TextEditingController(text: catalogItem['shelf_location'] ?? '');
+    final barcodeCtrl = TextEditingController(text: catalogItem['barcode'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.add_shopping_cart, color: Colors.blue),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Stoğa Al: ${catalogItem['name']}')),
+          ],
+        ),
+        content: Container(
+          width: 420,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Ürün Kod: ${catalogItem['code'] ?? '-'}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('Kategori: ${catalogItem['category'] ?? '-'} | Marka: ${catalogItem['brand'] ?? '-'}'),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: qtyCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'İlk Stok Miktarı *',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: minCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Kritik Seviye',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: shelfCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Raf / Kasa No',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: barcodeCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Barkod',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+          ElevatedButton(
+            onPressed: () async {
+              final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+              final min = int.tryParse(minCtrl.text.trim()) ?? 0;
+              Navigator.pop(ctx);
+              try {
+                await _stockService.startStockTracking(
+                  productId: catalogItem['id'].toString(),
+                  initialQuantity: qty,
+                  minimumStock: min,
+                  shelfLocation: shelfCtrl.text.trim(),
+                  barcode: barcodeCtrl.text.trim(),
+                );
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Ürün stok takibine alındı ve depoya eklendi.'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                _loadStocks();
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Stoğa Ekle ve Takip Başlat'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showStockMovementModal(Map<String, dynamic> stock, String movementType) {
     if (!_canManageStock) return;
     final qtyCtrl = TextEditingController(text: '1');
     final reasonCtrl = TextEditingController();
     final destCtrl = TextEditingController();
     final noteCtrl = TextEditingController();
-
     final isIn = movementType == 'in';
 
     showDialog(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(
-                  isIn
-                      ? Icons.arrow_circle_down_rounded
-                      : Icons.arrow_circle_up_rounded,
-                  color: isIn ? Colors.green : Colors.orange,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  isIn ? 'Stok Girişi Yap (IN)' : 'Stok Çıkışı Yap (OUT)',
-                ),
-              ],
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              isIn ? Icons.arrow_circle_down_rounded : Icons.arrow_circle_up_rounded,
+              color: isIn ? Colors.green : Colors.orange,
             ),
-            content: Container(
-              width: 400,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Ürün: ${stock['name']} (${stock['code']})',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  Text('Mevcut Stok: ${stock['quantity']} ${stock['unit'] ?? 'Adet'}'),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: qtyCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Miktar *',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: reasonCtrl,
-                    decoration: InputDecoration(
-                      labelText: isIn ? 'Geliş Nedeni / Fatura No' : 'Çıkış Nedeni',
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: destCtrl,
-                    decoration: InputDecoration(
-                      labelText: isIn ? 'Tedarikçi Firma' : 'Teslim Edilen Yer / Müşteri',
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: noteCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Açıklama / Not',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
+            const SizedBox(width: 8),
+            Text(isIn ? 'Stok Girişi Yap (IN)' : 'Stok Çıkışı Yap (OUT)'),
+          ],
+        ),
+        content: Container(
+          width: 400,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Ürün: ${stock['name']} (${stock['code']})', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('Mevcut Stok: ${stock['quantity']} ${stock['unit'] ?? 'Adet'}'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: qtyCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Miktar *', border: OutlineInputBorder()),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('İptal'),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isIn ? Colors.green : Colors.orange,
-                  foregroundColor: Colors.white,
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonCtrl,
+                decoration: InputDecoration(
+                  labelText: isIn ? 'Geliş Nedeni / Fatura No' : 'Çıkış Nedeni',
+                  border: const OutlineInputBorder(),
                 ),
-                onPressed: () async {
-                  final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
-                  if (qty <= 0) return;
-                  Navigator.pop(ctx);
-                  try {
-                    await _stockService.registerStockMovement(
-                      productId: stock['id'],
-                      movementType: movementType,
-                      quantity: qty,
-                      reason: reasonCtrl.text.trim(),
-                      destination: destCtrl.text.trim(),
-                      note: noteCtrl.text.trim(),
-                    );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          isIn
-                              ? 'Stok girişi kaydedildi.'
-                              : 'Stok çıkışı kaydedildi.',
-                        ),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                    _loadStocks();
-                    _loadStockMovements();
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Hata: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                },
-                child: const Text('İşlemi Kaydet'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: destCtrl,
+                decoration: InputDecoration(
+                  labelText: isIn ? 'Tedarikçi Firma' : 'Teslim Edilen Yer / Müşteri',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteCtrl,
+                decoration: const InputDecoration(labelText: 'Açıklama / Not', border: OutlineInputBorder()),
               ),
             ],
           ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isIn ? Colors.green : Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+              if (qty <= 0) return;
+              Navigator.pop(ctx);
+              try {
+                await _stockService.registerStockMovement(
+                  productId: stock['id'],
+                  movementType: movementType,
+                  quantity: qty,
+                  reason: reasonCtrl.text.trim(),
+                  destination: destCtrl.text.trim(),
+                  note: noteCtrl.text.trim(),
+                );
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(isIn ? 'Stok girişi kaydedildi.' : 'Stok çıkışı kaydedildi.'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                _loadStocks();
+                _loadStockMovements();
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('İşlemi Kaydet'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -521,9 +576,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
     if (personnelList.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Zimmet verilebilecek yetkili personel bulunamadı.'),
-        ),
+        const SnackBar(content: Text('Zimmet verilebilecek yetkili personel bulunamadı.')),
       );
       return;
     }
@@ -534,112 +587,80 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
     showDialog(
       context: context,
-      builder:
-          (ctx) => StatefulBuilder(
-            builder: (ctx, setModalState) {
-              return AlertDialog(
-                title: const Row(
-                  children: [
-                    Icon(Icons.badge_outlined, color: Colors.blue),
-                    SizedBox(width: 8),
-                    Text('Personele Zimmet Ver'),
-                  ],
-                ),
-                content: Container(
-                  width: 420,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Ürün: ${stock['name']} (${stock['code']})',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      Text('Mevcut Stok: ${stock['quantity']} ${stock['unit'] ?? 'Adet'}'),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: selectedPersonnelId,
-                        decoration: const InputDecoration(
-                          labelText: 'Teknik Personel *',
-                          border: OutlineInputBorder(),
-                        ),
-                        items:
-                            personnelList
-                                .map(
-                                  (p) => DropdownMenuItem(
-                                    value: p['id'].toString(),
-                                    child: Text(
-                                      p['full_name'] ?? p['email'] ?? p['id'],
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                        onChanged:
-                            (val) =>
-                                setModalState(() => selectedPersonnelId = val),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: qtyCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Miktar *',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: noteCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Zimmet Notu / İş Emri Kodu',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.badge_outlined, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('Personele Zimmet Ver'),
+              ],
+            ),
+            content: Container(
+              width: 420,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Ürün: ${stock['name']} (${stock['code']})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text('Mevcut Stok: ${stock['quantity']} ${stock['unit'] ?? 'Adet'}'),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedPersonnelId,
+                    decoration: const InputDecoration(labelText: 'Teknik Personel *', border: OutlineInputBorder()),
+                    items: personnelList
+                        .map((p) => DropdownMenuItem(value: p['id'].toString(), child: Text(p['full_name'] ?? p['email'] ?? p['id'])))
+                        .toList(),
+                    onChanged: (val) => setModalState(() => selectedPersonnelId = val),
                   ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('İptal'),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: qtyCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Miktar *', border: OutlineInputBorder()),
                   ),
-                  ElevatedButton(
-                    onPressed: () async {
-                      if (selectedPersonnelId == null) return;
-                      final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
-                      if (qty <= 0) return;
-                      Navigator.pop(ctx);
-                      try {
-                        await _stockService.registerPersonnelLoan(
-                          productId: stock['id'],
-                          personnelId: selectedPersonnelId!,
-                          quantity: qty,
-                          note: noteCtrl.text.trim(),
-                        );
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Zimmet kaydı oluşturuldu.'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                        _loadStocks();
-                        _loadPersonnelLoans();
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Hata: $e'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                    },
-                    child: const Text('Zimmetle'),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: noteCtrl,
+                    decoration: const InputDecoration(labelText: 'Zimmet Notu / İş Emri Kodu', border: OutlineInputBorder()),
                   ),
                 ],
-              );
-            },
-          ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+              ElevatedButton(
+                onPressed: () async {
+                  if (selectedPersonnelId == null) return;
+                  final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+                  if (qty <= 0) return;
+                  Navigator.pop(ctx);
+                  try {
+                    await _stockService.registerPersonnelLoan(
+                      productId: stock['id'],
+                      personnelId: selectedPersonnelId!,
+                      quantity: qty,
+                      note: noteCtrl.text.trim(),
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Zimmet kaydı oluşturuldu.'), backgroundColor: Colors.green),
+                    );
+                    _loadStocks();
+                    _loadPersonnelLoans();
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                },
+                child: const Text('Zimmetle'),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -648,52 +669,43 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     final loanId = loan['id'];
     showDialog(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: const Text('Zimmeti Kapat / Durum Seç'),
-            content: Text(
-              '${loan['personnel_name']} üzerindeki ${loan['quantity']} adet ${loan['inventory']?['name'] ?? 'ürün'} zimmeti için işlem seçiniz:',
-            ),
-            actions: [
-              OutlinedButton.icon(
-                icon: const Icon(Icons.assignment_turned_in, color: Colors.blue),
-                label: const Text('İşletmede Sarf Edildi (Consumed)'),
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  await _stockService.closePersonnelLoan(
-                    loanId: loanId,
-                    resolution: 'consumed',
-                  );
-                  _loadPersonnelLoans();
-                  _loadStockMovements();
-                },
-              ),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.archive_outlined, color: Colors.white),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                label: const Text('Stoğa İade Alındı (Returned)'),
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  await _stockService.closePersonnelLoan(
-                    loanId: loanId,
-                    resolution: 'returned',
-                  );
-                  _loadStocks();
-                  _loadPersonnelLoans();
-                  _loadStockMovements();
-                },
-              ),
-            ],
+      builder: (ctx) => AlertDialog(
+        title: const Text('Zimmeti Kapat / Durum Seç'),
+        content: Text(
+          '${loan['personnel_name']} üzerindeki ${loan['quantity']} adet ${loan['inventory']?['name'] ?? 'ürün'} zimmeti için işlem seçiniz:',
+        ),
+        actions: [
+          OutlinedButton.icon(
+            icon: const Icon(Icons.assignment_turned_in, color: Colors.blue),
+            label: const Text('İşletmede Sarf Edildi (Consumed)'),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _stockService.closePersonnelLoan(loanId: loanId, resolution: 'consumed');
+              _loadPersonnelLoans();
+              _loadStockMovements();
+            },
           ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.archive_outlined, color: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            label: const Text('Stoğa İade Alındı (Returned)'),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _stockService.closePersonnelLoan(loanId: loanId, resolution: 'returned');
+              _loadStocks();
+              _loadPersonnelLoans();
+              _loadStockMovements();
+            },
+          ),
+        ],
+      ),
     );
   }
 
   void _showBarcodeScannerModal() {
     if (!_canUseScanner) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bu cihazda barkod tarayıcı desteklenmiyor.'),
-        ),
+        const SnackBar(content: Text('Bu cihazda barkod tarayıcı desteklenmiyor.')),
       );
       return;
     }
@@ -710,10 +722,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 title: const Text('Barkod / Karekod Taraması'),
                 automaticallyImplyLeading: false,
                 actions: [
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
                 ],
               ),
               Expanded(
@@ -724,9 +733,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                       final code = barcodes.first.rawValue ?? '';
                       if (code.isNotEmpty) {
                         Navigator.pop(ctx);
-                        final match = await _stockService.getStockByBarcode(
-                          code,
-                        );
+                        final match = await _stockService.getStockByBarcode(code);
                         if (!mounted) return;
                         if (match != null) {
                           setState(() {
@@ -734,17 +741,11 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                             _activeTab = 0;
                           });
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Eşleşen Ürün Bulundu: ${match['name']}'),
-                              backgroundColor: Colors.green,
-                            ),
+                            SnackBar(content: Text('Eşleşen Ürün Bulundu: ${match['name']}'), backgroundColor: Colors.green),
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Barkod ($code) stokta bulunamadı.'),
-                              backgroundColor: Colors.orange,
-                            ),
+                            SnackBar(content: Text('Barkod ($code) stokta bulunamadı.'), backgroundColor: Colors.orange),
                           );
                         }
                       }
@@ -762,19 +763,16 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   void _generateOrderPdfFromSelected() {
     if (_selectedProductIds.isEmpty) return;
     final selectedItems =
-        _allStocks
-            .where((s) => _selectedProductIds.contains(s['id']))
-            .toList();
+        _allStocks.where((s) => _selectedProductIds.contains(s['id'])).toList();
 
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (_) => PdfViewerPage(
-              title: 'Sipariş Listesi PDF',
-              pdfFileName: 'siparis_listesi.pdf',
-              pdfGenerator: () => StockPdfService.generateOrderListPdfBytesFromList(selectedItems),
-            ),
+        builder: (_) => PdfViewerPage(
+          title: 'Sipariş Listesi PDF',
+          pdfFileName: 'siparis_listesi.pdf',
+          pdfGenerator: () => StockPdfService.generateOrderListPdfBytesFromList(selectedItems),
+        ),
       ),
     );
   }
@@ -785,10 +783,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       return Scaffold(
         appBar: AppBar(title: const Text('Stok Durumu')),
         body: const Center(
-          child: Text(
-            'Bu sayfaya erişim yetkiniz yok.',
-            style: TextStyle(fontSize: 16),
-          ),
+          child: Text('Bu sayfaya erişim yetkiniz yok.', style: TextStyle(fontSize: 16)),
         ),
       );
     }
@@ -823,10 +818,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
             SvgPicture.asset('assets/images/log.svg', width: 32, height: 32),
           ],
         ),
-        title: const Text(
-          'Stok Yönetimi ERP',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-        ),
+        title: const Text('Stok Yönetimi ERP', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
         actions: [
           if (_canUseScanner)
             IconButton(
@@ -838,16 +830,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
             IconButton(
               icon: const Icon(Icons.picture_as_pdf_outlined),
               tooltip: 'Seçilenlerden Sipariş PDF Oluştur',
-              onPressed: _selectedProductIds.isEmpty
-                  ? null
-                  : _generateOrderPdfFromSelected,
+              onPressed: _selectedProductIds.isEmpty ? null : _generateOrderPdfFromSelected,
             ),
           IconButton(
-            icon: Icon(
-              _isSelectionMode
-                  ? Icons.check_box_outlined
-                  : Icons.check_box_outline_blank,
-            ),
+            icon: Icon(_isSelectionMode ? Icons.check_box_outlined : Icons.check_box_outline_blank),
             tooltip: _isSelectionMode ? 'Seçimi Kapat' : 'Çoklu Seçim Modu',
             onPressed: () {
               setState(() {
@@ -865,9 +851,9 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       ),
       floatingActionButton: _canManageStock
           ? FloatingActionButton.extended(
-              onPressed: () => _showAddEditStockModal(),
-              icon: const Icon(Icons.add),
-              label: const Text('Yeni Stok Ekle'),
+              onPressed: () => _showAddOrTrackStockModal(),
+              icon: const Icon(Icons.add_box_rounded),
+              label: const Text('Stoğa Al / Ürün Ekle'),
             )
           : null,
       body: RefreshIndicator(
@@ -882,7 +868,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 children: [
                   Expanded(
                     child: _buildKpiCard(
-                      title: 'Toplam Çeşit',
+                      title: _onlyTracked && _activeTab != 2 ? 'Depodaki Çeşit' : 'Katalog Çeşit',
                       value: '${_allStocks.length} Kalem',
                       icon: Icons.inventory_2_outlined,
                       color: Colors.blue,
@@ -903,9 +889,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                       title: 'Kritik Stok',
                       value: '${criticalStocks.length} Ürün',
                       icon: Icons.warning_amber_rounded,
-                      color: criticalStocks.isNotEmpty
-                          ? Colors.orange
-                          : Colors.grey,
+                      color: criticalStocks.isNotEmpty ? Colors.orange : Colors.grey,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -932,7 +916,9 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                         child: TextField(
                           onChanged: (val) => setState(() => _searchQuery = val),
                           decoration: InputDecoration(
-                            hintText: 'Ürün Kodu, İsim, Marka, Barkod veya Raf Ara...',
+                            hintText: _activeTab == 2
+                                ? 'Katalogda Ürün Kodu, İsim veya Marka Ara...'
+                                : 'Depoda Ürün Kodu, İsim, Barkod veya Raf Ara...',
                             prefixIcon: const Icon(Icons.search),
                             suffixIcon: _searchQuery.isNotEmpty
                                 ? IconButton(
@@ -967,34 +953,37 @@ class _StockOverviewPageState extends State<StockOverviewPage>
               ),
               const SizedBox(height: 16),
 
-              // 3. SEKMELİ GEZİNTİ BUTONLARI (MODÜLLER)
+              // 3. SEKMELİ GEZİNTİ BUTONLARI
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildTabChip(0, 'Tüm Stoklar (${filteredStocks.length})', Icons.table_chart),
+                    _buildTabChip(0, 'Depodaki Stoklar (Fiziksel)', Icons.table_chart),
                     const SizedBox(width: 8),
-                    _buildTabChip(1, 'Kritik Stoklar (${criticalStocks.length})', Icons.warning_amber),
+                    _buildTabChip(1, 'Kritik Depo Stokları (${criticalStocks.length})', Icons.warning_amber),
                     const SizedBox(width: 8),
-                    _buildTabChip(2, 'Personel Zimmetleri (${_personnelLoans.length})', Icons.badge),
+                    _buildTabChip(2, 'Tüm Ürün Kataloğu', Icons.menu_book),
                     const SizedBox(width: 8),
-                    _buildTabChip(3, 'Stok Hareket Logları (${_stockMovements.length})', Icons.history),
+                    _buildTabChip(3, 'Personel Zimmetleri (${_personnelLoans.length})', Icons.badge),
                     const SizedBox(width: 8),
-                    _buildTabChip(4, 'Eksik Malzemeli İşler (${_missingTickets.length})', Icons.assignment_late),
+                    _buildTabChip(4, 'Stok Hareket Logları (${_stockMovements.length})', Icons.history),
+                    const SizedBox(width: 8),
+                    _buildTabChip(5, 'Eksik Malzemeli İşler (${_missingTickets.length})', Icons.assignment_late),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
 
-              // 4. İÇERİK TABLOSU (ELEKTRONİK TABLO / DATAGRID)
+              // 4. İÇERİK TABLOSU (DATAGRID)
               if (_isLoading)
                 const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
               else ...[
-                if (_activeTab == 0) _buildStockDataGrid(filteredStocks),
-                if (_activeTab == 1) _buildStockDataGrid(criticalStocks),
-                if (_activeTab == 2) _buildPersonnelLoansTable(),
-                if (_activeTab == 3) _buildMovementsTable(),
-                if (_activeTab == 4) _buildMissingTicketsTable(),
+                if (_activeTab == 0) _buildStockDataGrid(filteredStocks, showTrackButton: false),
+                if (_activeTab == 1) _buildStockDataGrid(criticalStocks, showTrackButton: false),
+                if (_activeTab == 2) _buildStockDataGrid(filteredStocks, showTrackButton: true),
+                if (_activeTab == 3) _buildPersonnelLoansTable(),
+                if (_activeTab == 4) _buildMovementsTable(),
+                if (_activeTab == 5) _buildMissingTicketsTable(),
               ],
             ],
           ),
@@ -1063,19 +1052,25 @@ class _StockOverviewPageState extends State<StockOverviewPage>
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
       onSelected: (selected) {
-        if (selected) setState(() => _activeTab = index);
+        if (selected) {
+          setState(() {
+            _activeTab = index;
+            _onlyTracked = index != 2;
+          });
+          _loadStocks();
+        }
       },
     );
   }
 
-  // --- ELEKTRONİK TABLO (DATAGRID) BİLEŞENİ ---
+  // --- ELEKTRONİK TABLO (DATAGRID) ---
 
-  Widget _buildStockDataGrid(List<Map<String, dynamic>> stocks) {
+  Widget _buildStockDataGrid(List<Map<String, dynamic>> stocks, {required bool showTrackButton}) {
     if (stocks.isEmpty) {
       return const Card(
         child: Padding(
           padding: EdgeInsets.all(32),
-          child: Center(child: Text('Kriterlere uygun stok ürünü bulunamadı.')),
+          child: Center(child: Text('Kriterlere uygun stok veya katalog ürünü bulunamadı.')),
         ),
       );
     }
@@ -1103,8 +1098,9 @@ class _StockOverviewPageState extends State<StockOverviewPage>
             final isSelected = _selectedProductIds.contains(id);
             final qty = _asInt(item['quantity']);
             final min = _asInt(item['critical_level']);
-            final isLow = qty <= min;
-            final isOut = qty == 0;
+            final isTracked = item['stock_tracking_started'] == true || qty > 0;
+            final isLow = isTracked && qty <= min;
+            final isOut = isTracked && qty == 0;
 
             return DataRow(
               selected: isSelected,
@@ -1145,28 +1141,30 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 DataCell(Chip(label: Text(item['category'] ?? 'Diğer'), visualDensity: VisualDensity.compact)),
                 DataCell(Text('${item['brand'] ?? ''} ${item['model'] ?? ''}'.trim())),
                 DataCell(
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isOut
-                          ? Colors.red.shade100
-                          : isLow
-                              ? Colors.amber.shade100
-                              : Colors.green.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '$qty ${item['unit'] ?? 'Adet'}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: isOut
-                            ? Colors.red.shade900
-                            : isLow
-                                ? Colors.amber.shade900
-                                : Colors.green.shade900,
-                      ),
-                    ),
-                  ),
+                  isTracked
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isOut
+                                ? Colors.red.shade100
+                                : isLow
+                                    ? Colors.amber.shade100
+                                    : Colors.green.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '$qty ${item['unit'] ?? 'Adet'}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: isOut
+                                  ? Colors.red.shade900
+                                  : isLow
+                                      ? Colors.amber.shade900
+                                      : Colors.green.shade900,
+                            ),
+                          ),
+                        )
+                      : const Text('Takip Yok', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
                 ),
                 DataCell(Text('$min ${item['unit'] ?? 'Adet'}')),
                 DataCell(Text(item['shelf_location'] ?? '-')),
@@ -1176,34 +1174,47 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(
-                          icon: const Icon(Icons.arrow_circle_down, color: Colors.green),
-                          tooltip: 'Stok Girişi (IN)',
-                          onPressed: () => _showStockMovementModal(item, 'in'),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.arrow_circle_up, color: Colors.orange),
-                          tooltip: 'Stok Çıkışı (OUT)',
-                          onPressed: () => _showStockMovementModal(item, 'out'),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.badge, color: Colors.blue),
-                          tooltip: 'Personele Zimmetle',
-                          onPressed: () => _showPersonnelLoanModal(item),
-                        ),
-                        PopupMenuButton<String>(
-                          onSelected: (val) {
-                            if (val == 'edit') _showAddEditStockModal(item);
-                            if (val == 'delete') {
-                              _stockService.deleteStock(item['id']);
-                              _loadStocks();
-                            }
-                          },
-                          itemBuilder: (ctx) => [
-                            const PopupMenuItem(value: 'edit', child: Text('Düzenle')),
-                            const PopupMenuItem(value: 'delete', child: Text('Sil', style: TextStyle(color: Colors.red))),
-                          ],
-                        ),
+                        if (!isTracked || showTrackButton)
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            ),
+                            icon: const Icon(Icons.add_shopping_cart, size: 14),
+                            label: const Text('Stoğa Al'),
+                            onPressed: () => _showStartTrackingForCatalogItem(item),
+                          )
+                        else ...[
+                          IconButton(
+                            icon: const Icon(Icons.arrow_circle_down, color: Colors.green),
+                            tooltip: 'Stok Girişi (IN)',
+                            onPressed: () => _showStockMovementModal(item, 'in'),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.arrow_circle_up, color: Colors.orange),
+                            tooltip: 'Stok Çıkışı (OUT)',
+                            onPressed: () => _showStockMovementModal(item, 'out'),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.badge, color: Colors.blue),
+                            tooltip: 'Personele Zimmetle',
+                            onPressed: () => _showPersonnelLoanModal(item),
+                          ),
+                          PopupMenuButton<String>(
+                            onSelected: (val) {
+                              if (val == 'edit') _showAddOrTrackStockModal(item);
+                              if (val == 'delete') {
+                                _stockService.deleteStock(item['id']);
+                                _loadStocks();
+                              }
+                            },
+                            itemBuilder: (ctx) => [
+                              const PopupMenuItem(value: 'edit', child: Text('Düzenle')),
+                              const PopupMenuItem(value: 'delete', child: Text('Sil', style: TextStyle(color: Colors.red))),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -1214,8 +1225,6 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       ),
     );
   }
-
-  // --- PERSONEL ZİMMETLERİ TABLOSU ---
 
   Widget _buildPersonnelLoansTable() {
     if (_personnelLoans.isEmpty) {
@@ -1264,8 +1273,6 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       ),
     );
   }
-
-  // --- STOK HAREKET LOGLARI TABLOSU ---
 
   Widget _buildMovementsTable() {
     if (_stockMovements.isEmpty) {
@@ -1318,8 +1325,6 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       ),
     );
   }
-
-  // --- EKSİK MALZEMELİ İŞLER TABLOSU ---
 
   Widget _buildMissingTicketsTable() {
     if (_missingTickets.isEmpty) {
@@ -1379,5 +1384,383 @@ class _StockOverviewPageState extends State<StockOverviewPage>
         ),
       ),
     );
+  }
+}
+
+// --- DÜZELTİLMİŞ STOK KAYIT / KATALOGDAN STOĞA ALMA DİYALOĞU ---
+
+class _StockAddOrTrackDialog extends StatefulWidget {
+  const _StockAddOrTrackDialog();
+
+  @override
+  State<_StockAddOrTrackDialog> createState() => _StockAddOrTrackDialogState();
+}
+
+class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
+  final StockService _stockService = StockService();
+
+  int _selectedTab = 0; // 0: Katalogdan Stoğa Al, 1: Sıfırdan Özel Ürün Ekle
+
+  // Tab 1 State: Katalog Arama
+  List<Map<String, dynamic>> _catalogProducts = [];
+  bool _loadingCatalog = false;
+  Map<String, dynamic>? _selectedCatalogProduct;
+  final TextEditingController _catalogSearchCtrl = TextEditingController();
+
+  final _trackQtyCtrl = TextEditingController(text: '1');
+  final _trackMinCtrl = TextEditingController(text: '5');
+  final _trackShelfCtrl = TextEditingController();
+  final _trackBarcodeCtrl = TextEditingController();
+
+  // Tab 2 State: Sıfırdan Ürün Ekle
+  final _nameCtrl = TextEditingController();
+  final _brandCtrl = TextEditingController();
+  final _modelCtrl = TextEditingController();
+  final _unitCtrl = TextEditingController(text: 'Adet');
+  final _qtyCtrl = TextEditingController(text: '1');
+  final _minCtrl = TextEditingController(text: '5');
+  final _barcodeCtrl = TextEditingController();
+  final _shelfCtrl = TextEditingController();
+  String _category = StockService.categories.first;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCatalog();
+  }
+
+  Future<void> _fetchCatalog([String? search]) async {
+    setState(() => _loadingCatalog = true);
+    try {
+      final results = await _stockService.getCatalogProducts(search: search);
+      if (mounted) {
+        setState(() {
+          _catalogProducts = results;
+          _loadingCatalog = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingCatalog = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Column(
+        children: [
+          const Text('Stok Kaydı / Depoya Ürün Ekleme', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(
+                value: 0,
+                label: Text('Katalogdan Stoğa Al'),
+                icon: Icon(Icons.search_outlined),
+              ),
+              ButtonSegment(
+                value: 1,
+                label: Text('Sıfırdan Özel Ürün Ekle'),
+                icon: Icon(Icons.add_circle_outline),
+              ),
+            ],
+            selected: {_selectedTab},
+            onSelectionChanged: (val) {
+              setState(() => _selectedTab = val.first);
+            },
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Container(
+          width: 500,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: _selectedTab == 0 ? _buildCatalogTrackTab() : _buildNewProductTab(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('İptal'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Theme.of(context).primaryColor,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: _submit,
+          child: Text(_selectedTab == 0 ? 'Stoğa Al ve Takip Başlat' : 'Ürünü ve Stoğu Kaydet'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCatalogTrackTab() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _catalogSearchCtrl,
+          decoration: InputDecoration(
+            labelText: 'Katalogda Ürün Ara (Ad, Kod, Marka)',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.arrow_forward),
+              onPressed: () => _fetchCatalog(_catalogSearchCtrl.text),
+            ),
+            border: const OutlineInputBorder(),
+          ),
+          onSubmitted: (val) => _fetchCatalog(val),
+        ),
+        const SizedBox(height: 12),
+
+        if (_loadingCatalog)
+          const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
+        else if (_catalogProducts.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text('Katalogda eşleşen ürün bulunamadı. "Sıfırdan Özel Ürün Ekle" sekmesini kullanabilirsiniz.'),
+          )
+        else
+          Container(
+            height: 160,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ListView.builder(
+              itemCount: _catalogProducts.length,
+              itemBuilder: (ctx, i) {
+                final item = _catalogProducts[i];
+                final isSelected = _selectedCatalogProduct?['id'] == item['id'];
+                return ListTile(
+                  dense: true,
+                  selected: isSelected,
+                  selectedTileColor: Colors.blue.shade50,
+                  title: Text(item['name'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('Kod: ${item['code']} | Kat: ${item['category']} | Marka: ${item['brand']}'),
+                  onTap: () {
+                    setState(() {
+                      _selectedCatalogProduct = item;
+                      _trackShelfCtrl.text = item['shelf_location'] ?? '';
+                      _trackBarcodeCtrl.text = item['barcode'] ?? '';
+                    });
+                  },
+                );
+              },
+            ),
+          ),
+
+        if (_selectedCatalogProduct != null) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.blue.shade50,
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.blue),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Seçilen Ürün: ${_selectedCatalogProduct!['name']}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _trackQtyCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'İlk Stok Miktarı *', border: OutlineInputBorder()),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _trackMinCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Kritik Seviye', border: OutlineInputBorder()),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _trackShelfCtrl,
+                  decoration: const InputDecoration(labelText: 'Raf / Kasa No', border: OutlineInputBorder()),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _trackBarcodeCtrl,
+                  decoration: const InputDecoration(labelText: 'Barkod / Karekod', border: OutlineInputBorder()),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildNewProductTab() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          controller: _nameCtrl,
+          decoration: const InputDecoration(labelText: 'Ürün Adı *', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                value: _category,
+                decoration: const InputDecoration(labelText: 'Kategori', border: OutlineInputBorder()),
+                items: StockService.categories
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (val) => setState(() => _category = val!),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _unitCtrl,
+                decoration: const InputDecoration(labelText: 'Birim (Adet/m/kg)', border: OutlineInputBorder()),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _brandCtrl,
+                decoration: const InputDecoration(labelText: 'Marka', border: OutlineInputBorder()),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _modelCtrl,
+                decoration: const InputDecoration(labelText: 'Model', border: OutlineInputBorder()),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _qtyCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'İlk Stok Miktarı', border: OutlineInputBorder()),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _minCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Kritik Seviye', border: OutlineInputBorder()),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _barcodeCtrl,
+                decoration: const InputDecoration(labelText: 'Barkod / Karekod', border: OutlineInputBorder()),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _shelfCtrl,
+                decoration: const InputDecoration(labelText: 'Raf / Kasa No', border: OutlineInputBorder()),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _submit() async {
+    if (_selectedTab == 0) {
+      if (_selectedCatalogProduct == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lütfen listeden stoğa alınacak bir katalog ürünü seçiniz.')),
+        );
+        return;
+      }
+
+      final qty = int.tryParse(_trackQtyCtrl.text.trim()) ?? 0;
+      final min = int.tryParse(_trackMinCtrl.text.trim()) ?? 0;
+
+      try {
+        await _stockService.startStockTracking(
+          productId: _selectedCatalogProduct!['id'].toString(),
+          initialQuantity: qty,
+          minimumStock: min,
+          shelfLocation: _trackShelfCtrl.text.trim(),
+          barcode: _trackBarcodeCtrl.text.trim(),
+        );
+        if (mounted) Navigator.pop(context, true);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    } else {
+      if (_nameCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lütfen ürün adını giriniz.')),
+        );
+        return;
+      }
+
+      final payload = {
+        'name': _nameCtrl.text.trim(),
+        'category': _category,
+        'unit': _unitCtrl.text.trim(),
+        'brand': _brandCtrl.text.trim(),
+        'model': _modelCtrl.text.trim(),
+        'quantity': int.tryParse(_qtyCtrl.text.trim()) ?? 0,
+        'critical_level': int.tryParse(_minCtrl.text.trim()) ?? 0,
+        'barcode': _barcodeCtrl.text.trim(),
+        'shelf_location': _shelfCtrl.text.trim(),
+      };
+
+      try {
+        await _stockService.addStock(payload);
+        if (mounted) Navigator.pop(context, true);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
   }
 }

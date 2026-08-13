@@ -13,8 +13,8 @@ class StockService {
     );
     return {
       ...product,
-      'quantity': product['stock_quantity'] ?? 0,
-      'critical_level': product['minimum_stock'] ?? 0,
+      'quantity': (product['stock_quantity'] as num?)?.toInt() ?? 0,
+      'critical_level': (product['minimum_stock'] as num?)?.toInt() ?? 0,
       'stock_tracking_started':
           product['stock_tracking_started'] == true ||
           ((product['stock_quantity'] as num?) ?? 0) > 0,
@@ -117,17 +117,25 @@ class StockService {
     return val.toString();
   }
 
-  /// Tüm stok ürünlerini sayfalayarak çeker.
-  Future<List<Map<String, dynamic>>> getStocks() async {
+  /// Stok ürünlerini çeker.
+  /// [onlyTracked] true (varsayılan) ise yalnızca fiziksel olarak takibi başlatılmış (stock_tracking_started = true veya quantity > 0) depo ürünlerini getirir.
+  Future<List<Map<String, dynamic>>> getStocks({
+    bool onlyTracked = true,
+  }) async {
     const pageSize = 500;
     final stocks = <Map<String, dynamic>>[];
     var offset = 0;
     while (true) {
-      final response = await _supabase
-          .from(_table)
-          .select()
+      var query = _supabase.from(_table).select();
+
+      if (onlyTracked) {
+        query = query.or('stock_tracking_started.eq.true,stock_quantity.gt.0');
+      }
+
+      final response = await query
           .order('name', ascending: true)
           .range(offset, offset + pageSize - 1);
+
       final page = List<Map<String, dynamic>>.from(response);
       stocks.addAll(page.map(_productToStock));
       if (page.length < pageSize) break;
@@ -136,11 +144,79 @@ class StockService {
     return stocks;
   }
 
+  /// Katalogdaki ürünleri aramak için kullanılır (Stok takibi başlamış ya da başlamamış tüm ürünler).
+  Future<List<Map<String, dynamic>>> getCatalogProducts({
+    String? search,
+    String? category,
+  }) async {
+    var query = _supabase.from(_table).select();
+    if (category != null && category.isNotEmpty && category != 'Tümü') {
+      query = query.eq('category', category);
+    }
+    final response = await query.order('name', ascending: true).limit(300);
+    final products = List<Map<String, dynamic>>.from(response).map(_productToStock).toList();
+
+    if (search != null && search.trim().isNotEmpty) {
+      final q = search.trim().toLowerCase();
+      return products.where((p) {
+        final code = (p['code'] ?? '').toString().toLowerCase();
+        final name = (p['name'] ?? '').toString().toLowerCase();
+        final brand = (p['brand'] ?? '').toString().toLowerCase();
+        return code.contains(q) || name.contains(q) || brand.contains(q);
+      }).toList();
+    }
+
+    return products;
+  }
+
+  /// Katalogdaki bir ürün için stok takibini başlatır ve depoya giriş hareketi kaydeder.
+  Future<void> startStockTracking({
+    required String productId,
+    required int initialQuantity,
+    int minimumStock = 0,
+    String? shelfLocation,
+    String? barcode,
+  }) async {
+    final current =
+        await _supabase
+            .from(_table)
+            .select('specifications')
+            .eq('id', productId)
+            .single();
+
+    final specifications = Map<String, dynamic>.from(
+      current['specifications'] as Map? ?? const <String, dynamic>{},
+    );
+
+    if (shelfLocation != null && shelfLocation.trim().isNotEmpty) {
+      specifications['shelf_location'] = shelfLocation.trim();
+    }
+    if (barcode != null && barcode.trim().isNotEmpty) {
+      specifications['barcode'] = barcode.trim();
+    }
+
+    await _supabase.from(_table).update({
+      'stock_tracking_started': true,
+      'minimum_stock': minimumStock,
+      'specifications': specifications,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', productId);
+
+    if (initialQuantity > 0) {
+      await registerStockMovement(
+        productId: productId,
+        movementType: 'in',
+        quantity: initialQuantity,
+        reason: 'Stok takibi başlatıldı / İlk depo girişi',
+      );
+    }
+  }
+
   /// Barkod veya ürün koduna göre tek ürün getirir.
   Future<Map<String, dynamic>?> getStockByBarcode(String barcode) async {
     final normalized = barcode.trim();
     if (normalized.isEmpty) return null;
-    final stocks = await getStocks();
+    final stocks = await getStocks(onlyTracked: false);
     for (final stock in stocks) {
       final storedBarcode = stock['barcode']?.toString().trim() ?? '';
       final code = stock['code']?.toString().trim() ?? '';
@@ -174,7 +250,7 @@ class StockService {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  /// Yeni ürün stok kaydı oluşturur.
+  /// Sıfırdan özel ürün stok kaydı oluşturur ve stok takibini başlatır.
   Future<void> addStock(Map<String, dynamic> data) async {
     final now = DateTime.now().toUtc();
     final token = now.microsecondsSinceEpoch.toString();
@@ -183,8 +259,19 @@ class StockService {
       'code': 'STK-$token',
       'brand': data['brand'] ?? '',
       'model': data['model'] ?? '',
+      'stock_tracking_started': true,
       ..._stockDataToProduct(data),
     });
+
+    final qty = (data['quantity'] as num?)?.toInt() ?? 0;
+    if (qty > 0) {
+      await registerStockMovement(
+        productId: 'stock-$token',
+        movementType: 'in',
+        quantity: qty,
+        reason: 'Yeni özel ürün açılışı / İlk stok girişi',
+      );
+    }
   }
 
   /// Stok kaydını günceller.
@@ -224,7 +311,7 @@ class StockService {
         .eq('id', id);
   }
 
-  /// Stok kaydını siler.
+  /// Stok takibini durdurur veya siler.
   Future<void> deleteStock(String id) async {
     await _supabase.from(_table).delete().eq('id', id);
   }
@@ -243,7 +330,6 @@ class StockService {
 
   // --- STOCK MOVEMENTS (STOK HAREKETLERİ) ---
 
-  /// Stok hareket geçmişini getirir.
   Future<List<Map<String, dynamic>>> getStockMovements({
     int limit = 100,
   }) async {
@@ -270,7 +356,6 @@ class StockService {
         .toList(growable: false);
   }
 
-  /// Supabase RPC `register_product_stock_movement` kullanarak stok girişi/çıkışı kaydeder.
   Future<void> registerStockMovement({
     required String productId,
     required String movementType,
@@ -302,7 +387,6 @@ class StockService {
 
   // --- ZİMMET YÖNETİMİ (PERSONNEL LOANS) ---
 
-  /// Açık personel zimmetlerini getirir.
   Future<List<Map<String, dynamic>>> getOpenPersonnelLoans() async {
     final response = await _supabase
         .from('product_stock_loans')
@@ -326,7 +410,6 @@ class StockService {
         .toList(growable: false);
   }
 
-  /// Stok zimmeti verilebilecek yetkili personeli listeler (RPC).
   Future<List<Map<String, dynamic>>> listStockPersonnel() async {
     try {
       final response = await _supabase.rpc('list_stock_personnel');
@@ -337,7 +420,6 @@ class StockService {
     }
   }
 
-  /// Supabase RPC `register_product_stock_loan` kullanarak personele zimmet verir.
   Future<void> registerPersonnelLoan({
     required String productId,
     required String personnelId,
@@ -356,7 +438,6 @@ class StockService {
     );
   }
 
-  /// Supabase RPC `close_product_stock_loan` kullanarak zimmeti kapatır (iade / tüketildi).
   Future<void> closePersonnelLoan({
     required int loanId,
     required String resolution,
@@ -370,19 +451,19 @@ class StockService {
     );
   }
 
-  // --- TICKET PARTS (İş Emrinde Kullanılan Malzemeler) ---
+  // --- TICKET PARTS ---
 
-  /// İş emrine parça ekler ve stoktan düşer
   Future<void> addPartToTicket(
     String ticketId,
-    String productId,
+    dynamic productId,
     int quantity,
   ) async {
+    final strProductId = productId.toString();
     final inv =
         await _supabase
             .from(_table)
             .select('stock_quantity')
-            .eq('id', productId)
+            .eq('id', strProductId)
             .single();
     final currentQty = (inv['stock_quantity'] as num?)?.toInt() ?? 0;
 
@@ -392,14 +473,13 @@ class StockService {
 
     await _supabase.from('ticket_parts').insert({
       'ticket_id': ticketId,
-      'product_id': productId,
+      'product_id': strProductId,
       'quantity': quantity,
     });
 
-    await updateQuantity(productId, currentQty - quantity);
+    await updateQuantity(strProductId, currentQty - quantity);
   }
 
-  /// İş emrinden parça siler ve stoğa iade eder
   Future<void> removePartFromTicket(int partId) async {
     final part =
         await _supabase
@@ -424,12 +504,11 @@ class StockService {
         final currentQty = (inv['stock_quantity'] as num?)?.toInt() ?? 0;
         await updateQuantity(productId, currentQty + qty);
       } catch (e) {
-        debugPrint('Stok iade edilirken hata (Ürün silinmiş olabilir): $e');
+        debugPrint('Stok iade edilirken hata: $e');
       }
     }
   }
 
-  /// İş emrine ait parçaları çeker.
   Future<List<TicketPart>> getTicketParts(String ticketId) async {
     final response = await _supabase
         .from('ticket_parts')

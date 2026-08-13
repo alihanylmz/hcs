@@ -109,9 +109,9 @@ class _CariDetailPageState extends State<CariDetailPage> {
     String selectedToEmail = emailList.isNotEmpty ? emailList.first : '';
     final customEmailCtrl = TextEditingController();
 
-    // Sirket kurumsal e-postasi ve Hazirlayan e-postasi
     final companyEmail = q.documentProfile.companyEmail.trim();
     final preparedByEmail = q.documentProfile.preparedByEmail.trim();
+    String selectedSenderAccount = 'default'; // 'default', 'preparedBy', 'company'
 
     final result = await showDialog<Map<String, String>>(
       context: context,
@@ -200,7 +200,6 @@ class _CariDetailPageState extends State<CariDetailPage> {
                 ),
                 const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF6F8FA),
                     borderRadius: BorderRadius.circular(10),
@@ -208,56 +207,99 @@ class _CariDetailPageState extends State<CariDetailPage> {
                   ),
                   child: Column(
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.devices_rounded, size: 18, color: Color(0xFF17304C)),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                      InkWell(
+                        onTap: () => setDlgState(() => selectedSenderAccount = 'default'),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          child: Row(
+                            children: [
+                              Icon(
+                                selectedSenderAccount == 'default'
+                                    ? Icons.radio_button_checked_rounded
+                                    : Icons.radio_button_off_rounded,
+                                size: 18,
+                                color: selectedSenderAccount == 'default'
+                                    ? const Color(0xFF29956F)
+                                    : const Color(0xFF5B6F7F),
+                              ),
+                              const SizedBox(width: 8),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Varsayılan İstemci (Outlook/Mail App)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
+                                    Text('Cihazınızda açık olan varsayılan e-posta hesabınız kullanılır.', style: TextStyle(fontSize: 10, color: Color(0xFF5B6F7F))),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (preparedByEmail.isNotEmpty) ...[
+                        const Divider(height: 1),
+                        InkWell(
+                          onTap: () => setDlgState(() => selectedSenderAccount = 'preparedBy'),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            child: Row(
                               children: [
-                                Text('Varsayılan İstemci (Outlook/Mail)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
-                                Text('Cihazınızda tanımlı aktif e-posta hesabınız kullanılır.', style: TextStyle(fontSize: 10, color: Color(0xFF5B6F7F))),
+                                Icon(
+                                  selectedSenderAccount == 'preparedBy'
+                                      ? Icons.radio_button_checked_rounded
+                                      : Icons.radio_button_off_rounded,
+                                  size: 18,
+                                  color: selectedSenderAccount == 'preparedBy'
+                                      ? const Color(0xFF2B82C9)
+                                      : const Color(0xFF5B6F7F),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Hazırlayan Personel Hesabı', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
+                                      Text(preparedByEmail, style: const TextStyle(fontSize: 10.5, color: Color(0xFF9D5C1D), fontWeight: FontWeight.w700)),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
                           ),
-                          Icon(Icons.check_circle_rounded, size: 18, color: const Color(0xFF29956F)),
-                        ],
-                      ),
-                      if (preparedByEmail.isNotEmpty) ...[
-                        const Divider(height: 14),
-                        Row(
-                          children: [
-                            const Icon(Icons.person_rounded, size: 18, color: Color(0xFF9D5C1D)),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Hazırlayan Personel E-postası', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
-                                  Text(preparedByEmail, style: const TextStyle(fontSize: 10, color: Color(0xFF9D5C1D), fontWeight: FontWeight.w700)),
-                                ],
-                              ),
-                            ),
-                          ],
                         ),
                       ],
                       if (companyEmail.isNotEmpty) ...[
-                        const Divider(height: 14),
-                        Row(
-                          children: [
-                            const Icon(Icons.business_rounded, size: 18, color: Color(0xFF2B82C9)),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Kurumsal Firma Hesabı', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
-                                  Text(companyEmail, style: const TextStyle(fontSize: 10, color: Color(0xFF2B82C9), fontWeight: FontWeight.w700)),
-                                ],
-                              ),
+                        const Divider(height: 1),
+                        InkWell(
+                          onTap: () => setDlgState(() => selectedSenderAccount = 'company'),
+                          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(10)),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  selectedSenderAccount == 'company'
+                                      ? Icons.radio_button_checked_rounded
+                                      : Icons.radio_button_off_rounded,
+                                  size: 18,
+                                  color: selectedSenderAccount == 'company'
+                                      ? const Color(0xFF2B82C9)
+                                      : const Color(0xFF5B6F7F),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Kurumsal Şirket Hesabı', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
+                                      Text(companyEmail, style: const TextStyle(fontSize: 10.5, color: Color(0xFF2B82C9), fontWeight: FontWeight.w700)),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ],
                     ],

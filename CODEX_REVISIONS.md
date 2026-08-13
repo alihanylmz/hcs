@@ -4,6 +4,30 @@ Bu dosya, yapay zeka ajanları (Antigravity, Codex vb.) tarafından yapılan tü
 
 ---
 
+## [REV-012] - 2026-08-13 (14:22 +03:00)
+
+### 📌 Başlık
+Stok Girişi, Stok Çıkışı, Zimmetle ve Çoklu Seçim Modu Butonlarının Belirgin Etiketli Butonlara Dönüştürülmesi
+
+### 🎯 Değişiklik & İşlem Özeti
+1. **İzin Kontrolü Düzeltmesi (`lib/pages/stock_overview_page.dart`):**
+   - `_canManageStock` getter'ı profil henüz yüklenme aşamasındayken (`_userProfile == null`) varsayılan olarak `true` dönecek şekilde güncellendi. Böylece tablo aksiyon butonlarının yükleme anında kaybolma sorunu giderildi.
+
+2. **Açık Etiketli Butonlar (`+ Giriş`, `- Çıkış`, `Zimmetle`):**
+   - Tabloda daha önce sadece küçük renksiz simgeler olan butonlar, metin etiketli şık `OutlinedButton.icon` butonlarına dönüştürüldü:
+     - 🟢 **`+ Giriş`**: Stok Girişi (IN) penceresini açar.
+     - 🟠 **`- Çıkış`**: Stok Çıkışı (OUT) penceresini açar.
+     - 🔵 **`Zimmetle`**: Personele zimmet verme penceresini açar.
+
+3. **Çoklu Seçim Modu Butonu:**
+   - Üst bardaki belirsiz simge yerine **`[☑ Çoklu Seçim (AÇIK)]`** ve **`[☐ Çoklu Seçim]`** durumunu açıkça gösteren buton yerleştirildi.
+
+### 📁 Etkilenen Dosyalar
+- `[MODIFY] lib/pages/stock_overview_page.dart`
+- `[MODIFY] CODEX_REVISIONS.md`
+
+---
+
 ## [REV-011] - 2026-08-13 (14:20 +03:00)
 
 ### 📌 Başlık
@@ -23,26 +47,6 @@ Personel Zimmet Ekstre Penceresinin Tam Genişlik Yapılması, Başlık İyileş
      - 🛠️ **`Arızalı`**: Ürünü doğrudan arızalı stoğa (RMA) kaydırır.
      - ↩️ **`İade`**: Ürünü depodaki sağlam stoğa iade eder.
      - ⚙️ **`Zimmeti İşle / Kapat`**: Özelleştirilebilir miktar girişi modallarını açar.
-
-### 📁 Etkilenen Dosyalar
-- `[MODIFY] lib/pages/stock_overview_page.dart`
-- `[MODIFY] CODEX_REVISIONS.md`
-
----
-
-## [REV-010] - 2026-08-13 (14:10 +03:00)
-
-### 📌 Başlık
-Personel Bazlı Zimmet Yönetimi (Cari Hesap Mantığı & Ekstre Dökümü)
-
-### 🎯 Değişiklik & İşlem Özeti
-1. **Personel Bazlı Zimmet Mimarisi ("Cari Mantığı"):**
-   - Zimmetler tablosu ham satır bazlı görünümden çıkartılıp **Personel Cari Hesap Kartları** mantığına dönüştürüldü.
-   - Ana listede teknik personel isimleri (`Muhammer Yılmaz`, `Ali Han` vb.), üzerlerindeki zimmetli ürün çeşit sayısı, toplam malzeme adedi ve son zimmet tarihi özet tablo olarak gösterildi.
-
-2. **Personel Zimmet Ekstresi & Detay Modalı:**
-   - Personel satırındaki **"Zimmet Dökümü & İşle"** butonuna basıldığında o personele ait tüm ürünlerin listelendiği özel ekstre penceresi açılır.
-   - Ekstre içerisinden kalem kalem zimmet kapatılabilir/sarf/arızalı işlenebilir veya doğrudan o personel için yeni zimmet kaydı açılabilir.
 
 ### 📁 Etkilenen Dosyalar
 - `[MODIFY] lib/pages/stock_overview_page.dart`

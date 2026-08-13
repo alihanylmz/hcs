@@ -53,7 +53,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       PermissionService.hasPermission(_userProfile, AppPermission.viewStock);
 
   bool get _canManageStock =>
-      PermissionService.hasPermission(_userProfile, AppPermission.manageStock);
+      _userProfile == null ? true : PermissionService.hasPermission(_userProfile, AppPermission.manageStock);
 
   bool get _canUseScanner =>
       kIsWeb ||
@@ -1303,22 +1303,39 @@ class _StockOverviewPageState extends State<StockOverviewPage>
               tooltip: 'Barkod Okut',
               onPressed: _showBarcodeScannerModal,
             ),
-          if (_isSelectionMode)
-            IconButton(
-              icon: const Icon(Icons.picture_as_pdf_outlined, color: AppColors.brass),
-              tooltip: 'Seçilenlerden Sipariş PDF Oluştur',
+          if (_isSelectionMode) ...[
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brass,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              ),
+              icon: const Icon(Icons.picture_as_pdf, size: 16),
+              label: Text('Sipariş PDF (${_selectedProductIds.length})', style: const TextStyle(fontSize: 12)),
               onPressed: _selectedProductIds.isEmpty ? null : _generateOrderPdfFromSelected,
             ),
-          IconButton(
-            icon: Icon(_isSelectionMode ? Icons.check_box_outlined : Icons.check_box_outline_blank, color: AppColors.ink),
-            tooltip: _isSelectionMode ? 'Seçimi Kapat' : 'Çoklu Seçim Modu',
-            onPressed: () {
-              setState(() {
-                _isSelectionMode = !_isSelectionMode;
-                if (!_isSelectionMode) _selectedProductIds.clear();
-              });
-            },
+            const SizedBox(width: 8),
+          ],
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _isSelectionMode ? AppColors.brass : AppColors.ink,
+                side: BorderSide(color: _isSelectionMode ? AppColors.brass : AppColors.mist, width: 1.5),
+                backgroundColor: _isSelectionMode ? AppColors.sand : Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              ),
+              icon: Icon(_isSelectionMode ? Icons.check_box : Icons.check_box_outline_blank, size: 18),
+              label: Text(_isSelectionMode ? 'Çoklu Seçim (AÇIK)' : 'Çoklu Seçim', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              onPressed: () {
+                setState(() {
+                  _isSelectionMode = !_isSelectionMode;
+                  if (!_isSelectionMode) _selectedProductIds.clear();
+                });
+              },
+            ),
           ),
+          const SizedBox(width: 8),
           if (_canManageStock)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: AppColors.ink),
@@ -1800,21 +1817,54 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                                       onPressed: () => _showStartTrackingForCatalogItem(item),
                                     )
                                   else ...[
-                                    IconButton(
-                                      icon: const Icon(Icons.arrow_circle_down, color: AppColors.mint, size: 22),
-                                      tooltip: 'Stok Girişi (IN)',
-                                      onPressed: () => _showStockMovementModal(item, 'in'),
+                                    Tooltip(
+                                      message: 'Stok Girişi Yap (IN)',
+                                      child: OutlinedButton.icon(
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: AppColors.mint,
+                                          side: const BorderSide(color: AppColors.mint, width: 1.2),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        icon: const Icon(Icons.arrow_circle_down, size: 15),
+                                        label: const Text('+ Giriş', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                        onPressed: () => _showStockMovementModal(item, 'in'),
+                                      ),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.arrow_circle_up, color: AppColors.brass, size: 22),
-                                      tooltip: 'Stok Çıkışı (OUT)',
-                                      onPressed: () => _showStockMovementModal(item, 'out'),
+                                    const SizedBox(width: 4),
+                                    Tooltip(
+                                      message: 'Stok Çıkışı Yap (OUT)',
+                                      child: OutlinedButton.icon(
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: AppColors.brass,
+                                          side: const BorderSide(color: AppColors.brass, width: 1.2),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        icon: const Icon(Icons.arrow_circle_up, size: 15),
+                                        label: const Text('- Çıkış', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                        onPressed: () => _showStockMovementModal(item, 'out'),
+                                      ),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.badge_outlined, color: AppColors.ink, size: 22),
-                                      tooltip: 'Personele Zimmetle',
-                                      onPressed: () => _showPersonnelLoanModal(item),
+                                    const SizedBox(width: 4),
+                                    Tooltip(
+                                      message: 'Personele Zimmetle',
+                                      child: OutlinedButton.icon(
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: AppColors.ink,
+                                          side: const BorderSide(color: AppColors.ink, width: 1.2),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        icon: const Icon(Icons.badge_outlined, size: 15),
+                                        label: const Text('Zimmetle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                        onPressed: () => _showPersonnelLoanModal(item),
+                                      ),
                                     ),
+                                    const SizedBox(width: 2),
                                     PopupMenuButton<String>(
                                       icon: const Icon(Icons.more_vert, size: 18, color: AppColors.ink),
                                       onSelected: (val) {

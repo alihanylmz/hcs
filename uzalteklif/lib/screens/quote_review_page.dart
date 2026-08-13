@@ -412,9 +412,17 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     String selectedSenderAccount = 'default'; // 'default', 'preparedBy', 'company', 'custom'
     final customSenderCtrl = TextEditingController();
 
-    final quoteUrl = _quote.publicShareSlug.isNotEmpty 
-        ? _quote.publicShareSlug 
-        : 'https://uzalteknikservis.info/#/quote/${_quote.id}';
+    final String quoteUrl;
+    if (_quote.publicShareSlug.startsWith('http://') || _quote.publicShareSlug.startsWith('https://')) {
+      quoteUrl = _quote.publicShareSlug;
+    } else if (_quote.publicShareSlug.isNotEmpty) {
+      final cleanSlug = _quote.publicShareSlug.startsWith('/') ? _quote.publicShareSlug : '/${_quote.publicShareSlug}';
+      quoteUrl = 'https://uzalteknikservis.info/#$cleanSlug';
+    } else if (_quote.publicToken.isNotEmpty) {
+      quoteUrl = 'https://uzalteknikservis.info/#/p/${_quote.publicToken}';
+    } else {
+      quoteUrl = 'https://uzalteknikservis.info/#/quote/${_quote.id}';
+    }
 
     final contactNameStr = _quote.customerName.trim().isNotEmpty ? _quote.customerName.trim() : "Yetkili";
     final subjectCtrl = TextEditingController(text: 'Teklif: ${_quote.code} - Uzal Teklif');

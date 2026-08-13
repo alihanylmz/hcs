@@ -114,9 +114,17 @@ class _CariDetailPageState extends State<CariDetailPage> {
     String selectedSenderAccount = 'default'; // 'default', 'preparedBy', 'company', 'custom'
     final customSenderCtrl = TextEditingController();
 
-    final quoteUrl = q.publicShareSlug.isNotEmpty 
-        ? q.publicShareSlug 
-        : 'https://uzalteknikservis.info/#/quote/${q.id}';
+    final String quoteUrl;
+    if (q.publicShareSlug.startsWith('http://') || q.publicShareSlug.startsWith('https://')) {
+      quoteUrl = q.publicShareSlug;
+    } else if (q.publicShareSlug.isNotEmpty) {
+      final cleanSlug = q.publicShareSlug.startsWith('/') ? q.publicShareSlug : '/${q.publicShareSlug}';
+      quoteUrl = 'https://uzalteknikservis.info/#$cleanSlug';
+    } else if (q.publicToken.isNotEmpty) {
+      quoteUrl = 'https://uzalteknikservis.info/#/p/${q.publicToken}';
+    } else {
+      quoteUrl = 'https://uzalteknikservis.info/#/quote/${q.id}';
+    }
 
     final contactNameStr = _cari.contactName.trim().isNotEmpty ? _cari.contactName.trim() : "Yetkili";
     final subjectCtrl = TextEditingController(text: 'Teklif: ${q.code} - Uzal Teklif');

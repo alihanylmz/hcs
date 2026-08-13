@@ -141,7 +141,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
   }
 
   Future<void> _addPartDialog() async {
-    int? selectedInventoryId;
+    String? selectedInventoryId;
     int quantity = 1;
     final controller = TextEditingController(text: '1');
 
@@ -155,21 +155,20 @@ class _EditTicketPageState extends State<EditTicketPage> {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    DropdownButtonFormField<int>(
+                    DropdownButtonFormField<String>(
                       isExpanded: true,
                       hint: const Text('Ürün Seçiniz'),
                       value: selectedInventoryId,
                       items:
                           _allInventory.map((item) {
-                            return DropdownMenuItem<int>(
-                              value: item['id'] as int,
+                            final itemId = item['id']?.toString() ?? '';
+                            final qty = (item['quantity'] as num?)?.toInt() ?? 0;
+                            return DropdownMenuItem<String>(
+                              value: itemId,
                               child: Text(
-                                '${item['name']} (Stok: ${item['quantity']})',
+                                '${item['name']} (Stok: $qty)',
                                 style: TextStyle(
-                                  color:
-                                      (item['quantity'] as int) <= 0
-                                          ? Colors.red
-                                          : Colors.black,
+                                  color: qty <= 0 ? Colors.red : Colors.black,
                                 ),
                               ),
                             );

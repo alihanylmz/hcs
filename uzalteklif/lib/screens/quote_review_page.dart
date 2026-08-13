@@ -412,50 +412,12 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     String selectedSenderAccount = 'default'; // 'default', 'preparedBy', 'company', 'custom'
     final customSenderCtrl = TextEditingController();
 
-    final String quoteUrl;
-    if (_quote.publicShareSlug.startsWith('http://') || _quote.publicShareSlug.startsWith('https://')) {
-      quoteUrl = _quote.publicShareSlug;
-    } else if (_quote.publicShareSlug.isNotEmpty) {
-      final cleanSlug = _quote.publicShareSlug.startsWith('/') ? _quote.publicShareSlug : '/${_quote.publicShareSlug}';
-      quoteUrl = 'https://uzalteknikservis.info/#$cleanSlug';
-    } else if (_quote.publicToken.isNotEmpty) {
-      quoteUrl = 'https://uzalteknikservis.info/#/p/${_quote.publicToken}';
-    } else {
-      quoteUrl = 'https://uzalteknikservis.info/#/quote/${_quote.id}';
-    }
-
     final contactNameStr = _quote.customerName.trim().isNotEmpty ? _quote.customerName.trim() : "Yetkili";
     final subjectCtrl = TextEditingController(text: 'Teklif: ${_quote.code} - Uzal Teklif');
 
-    final itemsBuffer = StringBuffer();
-    if (_quote.items.isNotEmpty) {
-      final subtotal = _quote.items.fold<double>(0, (sum, i) => sum + i.totalTl);
-      final vatRate = _quote.documentProfile.vatRate > 0 ? _quote.documentProfile.vatRate : 20.0;
-      final vat = subtotal * (vatRate / 100);
-      final grandTotal = subtotal + vat;
-
-      itemsBuffer.writeln('----------------------------------------------------');
-      itemsBuffer.writeln('TEKLİF KALEMLERİ VE HİZMET DETAYLARI');
-      itemsBuffer.writeln('----------------------------------------------------');
-      for (var i = 0; i < _quote.items.length; i++) {
-        final item = _quote.items[i];
-        itemsBuffer.writeln('${i + 1}. ${item.description}');
-        itemsBuffer.writeln('   Miktar: ${item.quantity} ${item.unit} | Birim Fiyat: ${item.unitPriceTl.toStringAsFixed(2)} TL | Toplam: ${item.totalTl.toStringAsFixed(2)} TL');
-      }
-      itemsBuffer.writeln('----------------------------------------------------');
-      itemsBuffer.writeln('Ara Toplam  : ${subtotal.toStringAsFixed(2)} TL');
-      itemsBuffer.writeln('KDV Tutarı (%${vatRate.toStringAsFixed(0)}) : ${vat.toStringAsFixed(2)} TL');
-      itemsBuffer.writeln('GENEL TOPLAM: ${grandTotal.toStringAsFixed(2)} TL');
-      itemsBuffer.writeln('====================================================');
-    }
-
     final bodyCtrl = TextEditingController(
       text: 'Sayın $contactNameStr,\n\n'
-          '${_quote.code} kodlu teklif detayları aşağıda bilgilerinize sunulmuştur:\n\n'
-          '${itemsBuffer.isNotEmpty ? itemsBuffer.toString() : ""}\n'
-          '📄 Teklifi Çevrimiçi İncelemek & İndirmek İçin Bağlantı:\n'
-          '$quoteUrl\n\n'
-          'Teklif ile ilgili sorularınız veya revizyon talepleriniz için bu e-postaya yanıt verebilirsiniz.\n\n'
+          '${_quote.code} kodlu teklifimizi ekte bilgilerinize sunuyoruz.\n\n'
           'Bilgilerinize saygılarımızla,\n'
           'Uzal Teknik Servis',
     );

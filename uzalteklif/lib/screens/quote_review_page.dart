@@ -680,6 +680,9 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     if (result == null || !result.containsKey('toEmail')) return;
     final finalToEmail = result['toEmail']!;
     final selectedSender = result['senderEmail'] ?? '';
+    final quoteUrl = _quote.publicShareSlug.isNotEmpty 
+        ? _quote.publicShareSlug 
+        : 'https://uzalteknikservis.info/#/quote/${_quote.id}';
 
     // Standart Dart Uri yapisi - tum bosluk ve turkce karakterleri otomatik ve hatasiz encode eder
     final uri = Uri(
@@ -687,11 +690,14 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
       path: finalToEmail,
       queryParameters: {
         'cc': 'teklif@uzalteknik.com',
-        'subject': 'Teklif: ${_quote.code}',
+        'subject': 'Teklif: ${_quote.code} - Uzal Teklif',
         'body': 'Sayin ${_quote.customerName.trim().isNotEmpty ? _quote.customerName.trim() : "Yetkili"},\n\n'
             '${_quote.code} kodlu teklifimizi incelemenize sunuyoruz.\n\n'
-            '${_quote.publicToken.isNotEmpty ? "Cevrimici goruntuleme: ${_quote.publicShareSlug}" : ""}\n\n'
-            'Bilgilerinize saygilarimizla.',
+            '📄 Teklifi Çevrimiçi Görüntülemek ve PDF Olarak İndirmek İçin Bağlantıya Tıklayın:\n'
+            '$quoteUrl\n\n'
+            'Teklif ile ilgili sorularınız veya revizyon talepleriniz için bu e-postaya yanıt verebilirsiniz.\n\n'
+            'Bilgilerinize saygılarımızla,\n'
+            'Uzal Teknik Servis',
       },
     );
 
@@ -1450,10 +1456,31 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => _sendEmail(),
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: Text(
+                      'Tekrar E-posta Gönder (${_quote.emailSentTo.isNotEmpty ? _quote.emailSentTo : "Müşteriye"})',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF2B82C9),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ] else if (emails.isNotEmpty) ...[
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: emails
                   .map(
                     (e) => FilledButton.icon(

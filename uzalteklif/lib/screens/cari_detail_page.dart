@@ -383,17 +383,24 @@ class _CariDetailPageState extends State<CariDetailPage> {
     final finalToEmail = result['toEmail']!;
     final selectedSender = result['senderEmail'] ?? '';
 
+    final quoteUrl = q.publicShareSlug.isNotEmpty 
+        ? q.publicShareSlug 
+        : 'https://uzalteknikservis.info/#/quote/${q.id}';
+
     // Standart Dart Uri yapisi - tum bosluk ve turkce karakterleri otomatik ve hatasiz encode eder
     final uri = Uri(
       scheme: 'mailto',
       path: finalToEmail,
       queryParameters: {
         'cc': 'teklif@uzalteknik.com',
-        'subject': 'Teklif: ${q.code}',
+        'subject': 'Teklif: ${q.code} - Uzal Teklif',
         'body': 'Sayin ${_cari.contactName.trim().isNotEmpty ? _cari.contactName.trim() : "Yetkili"},\n\n'
             '${q.code} kodlu teklifimizi incelemenize sunuyoruz.\n\n'
-            '${q.publicToken.isNotEmpty ? "Cevrimici goruntuleme: ${q.publicShareSlug}" : ""}\n\n'
-            'Bilgilerinize saygilarimizla.',
+            '📄 Teklifi Çevrimiçi Görüntülemek ve PDF Olarak İndirmek İçin Bağlantıya Tıklayın:\n'
+            '$quoteUrl\n\n'
+            'Teklif ile ilgili sorularınız veya revizyon talepleriniz için bu e-postaya yanıt verebilirsiniz.\n\n'
+            'Bilgilerinize saygılarımızla,\n'
+            'Uzal Teknik Servis',
       },
     );
 

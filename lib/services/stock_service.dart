@@ -13,10 +13,22 @@ class StockService {
     );
     final rawName = (product['name'] ?? '').toString();
     final rawCode = (product['code'] ?? '').toString();
+    final category = (product['category'] ?? '').toString();
+    final brand = (product['brand'] ?? '').toString();
+    final model = (product['model'] ?? '').toString();
+
+    final formatted = formatProductName(
+      rawName: rawName,
+      code: rawCode,
+      category: category,
+      brand: brand,
+      model: model,
+    );
 
     return {
       ...product,
-      'displayName': formatProductName(rawName, rawCode),
+      'displayName': formatted['title'],
+      'displaySubtitle': formatted['subtitle'],
       'quantity': (product['stock_quantity'] as num?)?.toInt() ?? 0,
       'critical_level': (product['minimum_stock'] as num?)?.toInt() ?? 0,
       'stock_tracking_started': product['stock_tracking_started'] == true,
@@ -25,20 +37,43 @@ class StockService {
     };
   }
 
-  /// Ham katalog isimlerini temiz ve anlaşılır Türkçe isimlere dönüştürür.
-  static String formatProductName(String rawName, String code) {
+  /// Ham katalog isimlerini ve teknik özellikleri akıllı ve anlaşılır Türkçe isimlere dönüştürür.
+  static Map<String, String> formatProductName({
+    required String rawName,
+    required String code,
+    String? category,
+    String? brand,
+    String? model,
+  }) {
     var name = rawName.trim();
-    if (name.isEmpty) return code.isNotEmpty ? code : 'İsimsiz Ürün';
 
-    // Ürün adı ürün koduyla başlıyorsa temizle (Örn: "V5011N1040/U V5011N1040/U 2 Yollu Vana" -> "2 Yollu Vana")
+    // Ürün adı ürün koduyla başlıyorsa veya aynısıysa temizle
     if (code.isNotEmpty) {
       name = name.replaceAll(RegExp(RegExp.escape(code), caseSensitive: false), '').trim();
     }
-
-    // Başlangıçtaki veya sondaki tire/noktalama işaretlerini temizle
     name = name.replaceFirst(RegExp(r'^[-_\s:]+'), '').replaceFirst(RegExp(r'[-_\s:]+$'), '').trim();
 
-    return name.isNotEmpty ? name : (code.isNotEmpty ? code : 'İsimsiz Ürün');
+    // Eğer ürün adı ham teknik özellik listesiyse (Örn: "16UIO,4CHO,4Rel,RJ45...")
+    final isRawTechnicalSpecs = name.contains(RegExp(r'\d+UIO|\d+CHO|\d+Rel|RJ45|Sylk|230V|DN\d+|PN\d+', caseSensitive: false));
+
+    String title = '';
+    String subtitle = '';
+
+    if (isRawTechnicalSpecs || name.isEmpty) {
+      final b = (brand != null && brand.isNotEmpty) ? brand : '';
+      final c = (category != null && category.isNotEmpty && category != 'Diğer') ? category : 'Ürün / Cihaz';
+      final m = (model != null && model.isNotEmpty && model != code) ? model : '';
+      title = '$b $c $m'.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (title.isEmpty) title = code.isNotEmpty ? code : 'İsimsiz Ürün';
+      subtitle = name; // Ham özellikleri alt bilgiye koy
+    } else {
+      title = name;
+    }
+
+    return {
+      'title': title,
+      'subtitle': subtitle,
+    };
   }
 
   /// UI stok verilerini `products` veritabanı sütunlarına dönüştürür.
@@ -91,6 +126,7 @@ class StockService {
     'HMI',
     'Şalt',
     'Sensör',
+    'Zone Controllers',
     'Diğer',
   ];
 
@@ -179,8 +215,9 @@ class StockService {
       return products.where((p) {
         final code = (p['code'] ?? '').toString().toLowerCase();
         final name = (p['name'] ?? '').toString().toLowerCase();
+        final displayName = (p['displayName'] ?? '').toString().toLowerCase();
         final brand = (p['brand'] ?? '').toString().toLowerCase();
-        return code.contains(q) || name.contains(q) || brand.contains(q);
+        return code.contains(q) || name.contains(q) || displayName.contains(q) || brand.contains(q);
       }).toList();
     }
 
@@ -289,6 +326,21 @@ class StockService {
         .order('created_at', ascending: false);
 
     return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// Aktif iş emirlerini (İş Kodu + Müşteri Adı + Başlık) getirir.
+  Future<List<Map<String, dynamic>>> getActiveTicketsList() async {
+    try {
+      final response = await _supabase
+          .from('tickets')
+          .select('id, job_code, title, customers(name)')
+          .order('created_at', ascending: false)
+          .limit(100);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Aktif iş emirleri çekme hatası: $e');
+      return [];
+    }
   }
 
   /// Sıfırdan özel ürün stok kaydı oluşturur ve stok takibini başlatır.
@@ -460,18 +512,99 @@ class StockService {
     required String productId,
     required String personnelId,
     required int quantity,
+    String? jobCode,
     String? note,
   }) async {
     if (quantity <= 0) throw Exception('Miktar 0\'dan büyük olmalıdır.');
+    
+    final noteText = [
+      if (jobCode != null && jobCode.isNotEmpty) '[İş Kodu: $jobCode]',
+      if (note != null && note.isNotEmpty) note,
+    ].join(' ').trim();
+
     await _supabase.rpc(
       'register_product_stock_loan',
       params: {
         'p_product_id': productId,
         'p_personnel_id': personnelId,
         'p_quantity': quantity,
-        'p_note': note,
+        'p_note': noteText.isNotEmpty ? noteText : null,
       },
     );
+  }
+
+  /// Personel zimmetini esnek sarf (tüketim) ve iade miktarları ile işler/kapatır.
+  Future<void> processPersonnelLoanResolution({
+    required int loanId,
+    required String productId,
+    required String personnelName,
+    required int totalLoanQty,
+    required int consumedQty,
+    required int returnedQty,
+    String? jobCode,
+    String? note,
+  }) async {
+    if (consumedQty + returnedQty <= 0) {
+      throw Exception('Lütfen en az 1 adet sarf veya iade miktarı giriniz.');
+    }
+    if (consumedQty + returnedQty > totalLoanQty) {
+      throw Exception('Sarf ($consumedQty) + İade ($returnedQty) toplam zimmetli miktardan ($totalLoanQty) fazla olamaz.');
+    }
+
+    final remainingQty = totalLoanQty - (consumedQty + returnedQty);
+
+    // 1. İade Edilen Miktar -> Depo stokuna tekrar giriş yapılır
+    if (returnedQty > 0) {
+      final current = await _supabase
+          .from(_table)
+          .select('stock_quantity')
+          .eq('id', productId)
+          .single();
+      final curQty = (current['stock_quantity'] as num?)?.toInt() ?? 0;
+      await updateQuantity(productId, curQty + returnedQty);
+
+      await registerStockMovement(
+        productId: productId,
+        movementType: 'in',
+        quantity: returnedQty,
+        reason: 'Personelden depoya iade alındı',
+        destination: personnelName,
+        note: note,
+      );
+    }
+
+    // 2. Sarf Edilen Miktar -> İş koduna sarf / çıkış hareketi kaydedilir
+    if (consumedQty > 0) {
+      final jobDesc = (jobCode != null && jobCode.isNotEmpty) ? 'İş Kodu: $jobCode' : 'Personel Sarfı';
+      await registerStockMovement(
+        productId: productId,
+        movementType: 'out',
+        quantity: consumedQty,
+        reason: 'Zimmetten sarf edildi ($jobDesc)',
+        destination: jobCode ?? personnelName,
+        note: note,
+      );
+    }
+
+    // 3. Zimmet Kaydını Güncelle veya Kapat
+    if (remainingQty <= 0) {
+      final resolution = consumedQty > 0 && returnedQty == 0 ? 'consumed' : 'returned';
+      await _supabase
+          .from('product_stock_loans')
+          .update({
+            'status': resolution,
+            'closed_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', loanId);
+    } else {
+      await _supabase
+          .from('product_stock_loans')
+          .update({
+            'quantity': remainingQty,
+            'note': '[Kısmi İade: $returnedQty / Sarf: $consumedQty] ${note ?? ''}'.trim(),
+          })
+          .eq('id', loanId);
+    }
   }
 
   Future<void> closePersonnelLoan({

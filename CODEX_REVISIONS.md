@@ -4,6 +4,30 @@ Bu dosya, yapay zeka ajanları (Antigravity, Codex vb.) tarafından yapılan tü
 
 ---
 
+## [REV-007] - 2026-08-13 (12:44 +03:00)
+
+### 📌 Başlık
+Yüksek Kontrastlı Tablo Tasarımı, Esnek Zimmet Sarf/İade Yönetimi ve Akıllı Katalog İsimlendirmesi
+
+### 🎯 Değişiklik & İşlem Özeti
+1. **Esnek Zimmet Sarf / İade ve İş Kodu Bağlantısı (`lib/services/stock_service.dart`, `lib/pages/stock_overview_page.dart`):**
+   - **Kısmi Sarf / İade Mantığı:** Personeldeki zimmet kapatılırken veya işlenirken sarf edilen (projede kullanılan) miktar ile depoya iade edilen miktar ayrı ayrı girilebilir (Örn: 10 adet zimmetten 5'i sarf edildi, 5'i depoya iade alındı).
+   - **İş Kodu Dropdown:** Zimmet verirken veya sarf işlerken serbest not yerine doğrudan aktif **İş Kodu (Ticket)** seçimi zorunlu/isteğe bağlı dropdown olarak bağlandı.
+
+2. **Akıllı Katalog Ürün İsimlendirmesi:**
+   - Katalogdaki ham teknik özellik dizileri (`16UIO,4CHO,4Rel...`) ana ürün adı yerine alt özellik rozetine çekildi. Ürün Kodu, Marka ve Kategori harmanlanarak temiz kurumsal başlıklar (`Honeywell Zone Controllers`) gösterildi.
+
+3. **Yüksek Kontrastlı ERP Tablo Tasarımı:**
+   - Kullanıcı ekran görüntüsü analiz edilerek sönük gri metinler, hizalaması kayan sayfalama çubuğu ve koyu gri buton uyuşmazlıkları düzeltildi.
+   - Tablo hücrelerinde tam koyu slate metinler (`#0F172A`, `#1E293B`), belirgin kenarlıklar ve kart altıyla hizalı temiz sayfalama çubuğu sağlandı.
+
+### 📁 Etkilenen Dosyalar
+- `[MODIFY] lib/services/stock_service.dart`
+- `[MODIFY] lib/pages/stock_overview_page.dart`
+- `[MODIFY] CODEX_REVISIONS.md`
+
+---
+
 ## [REV-006] - 2026-08-13 (12:31 +03:00)
 
 ### 📌 Başlık
@@ -23,32 +47,6 @@ DataGrid Sayfalama (Pagination) ile Kasma/Donma Çözümü ve Kurumsal Renk Pale
      - Durum Rozetleri (Badges): Muted pastel tonlar (Stokta Var: Soft Emerald `#DCFCE7`, Kritik: Soft Amber `#FEF3C7`, Tükendi: Soft Rose `#FEE2E2`).
 
 ### 📁 Etkilenen Dosyalar
-- `[MODIFY] lib/pages/stock_overview_page.dart`
-- `[MODIFY] CODEX_REVISIONS.md`
-
----
-
-## [REV-005] - 2026-08-13 (12:15 +03:00)
-
-### 📌 Başlık
-Güvenli Soft-Untracking (Katalog Koruma), Sanal Katalog Temizliği ve Akıllı İsim Formatlama
-
-### 🎯 Değişiklik & İşlem Özeti
-1. **Güvenli Soft-Untracking Mantığı (`lib/services/stock_service.dart`):**
-   - **Katalog Koruma Garantisi:** Fiyat teklifi kataloğundaki (`uzalteklif`) 2.000+ ürünün veritabanından Asla silinmemesi için `stopStockTracking()` ve `deleteStock()` fonksiyonları **soft-untrack** (`stock_tracking_started = false`, `stock_quantity = 0`) mantığına geçirildi.
-   - Bir ürün depodan çıkarıldığında Fiyat Teklifleri Kataloğunda fiyatı, para birimi ve teknik özellikleriyle **eksiksiz kalmaya devam eder**, sadece fiziksel depo listesinden gizlenir.
-
-2. **Sanal Katalog Stoklarını Sıfırlama Butonu (`resetCatalogStockTracking`):**
-   - Üst menüye eklenen *"Sanal Katalog Stoklarını Temizle"* aksiyonu ile veritabanındaki sanal katalog takipleri tek tıkla temizlenebilir. Kullanıcı sadece kendi depoya eklediği 5-10 gerçek fiziksel ürünü listede tutar.
-
-3. **Akıllı Ürün İsmi Formatlama (`formatProductName`):**
-   - Katalog aktarımlarından gelen karmaşık metinler temizlendi. Ürün Kodu ve Sade Ürün Adı ayrı DataGrid sütunlarında gösterildi.
-
-4. **Sürüm Yükseltme & PWA Önbellek Yenilenmesi:**
-   - Uygulama sürümü `1.1.11+16` olarak yükseltilerek tarayıcı ve Plesk FTP önbelleğinin yenilenmesi garanti altına alındı.
-
-### 📁 Etkilenen Dosyalar
-- `[MODIFY] lib/services/stock_service.dart`
 - `[MODIFY] lib/pages/stock_overview_page.dart`
 - `[MODIFY] CODEX_REVISIONS.md`
 

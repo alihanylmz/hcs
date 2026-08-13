@@ -481,6 +481,7 @@ class StockService {
           .from('product_stock_loans')
           .update({
             'status': 'returned',
+            'quantity': 0,
             'closed_at': DateTime.now().toUtc().toIso8601String(),
           })
           .eq('status', 'borrowed')
@@ -657,6 +658,7 @@ class StockService {
           .from('product_stock_loans')
           .update({
             'status': resolution,
+            'quantity': 0,
             'closed_at': DateTime.now().toUtc().toIso8601String(),
           })
           .eq('id', loanId);

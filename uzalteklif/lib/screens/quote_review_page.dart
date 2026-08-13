@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -407,9 +408,16 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     String selectedToEmail = emailList.isNotEmpty ? emailList.first : '';
     final customEmailCtrl = TextEditingController();
 
+    final authUserEmail = Supabase.instance.client.auth.currentUser?.email?.trim() ?? '';
     final companyEmail = _quote.documentProfile.companyEmail.trim();
-    final preparedByEmail = _quote.documentProfile.preparedByEmail.trim();
-    String selectedSenderAccount = 'default'; // 'default', 'preparedBy', 'company', 'custom'
+
+    // Hazirlayan e-postasi bossa veya varsayilansa canli giris yapmis kullanicinin e-postasini al
+    String preparedByEmail = _quote.documentProfile.preparedByEmail.trim();
+    if (preparedByEmail.isEmpty && authUserEmail.isNotEmpty) {
+      preparedByEmail = authUserEmail;
+    }
+
+    String selectedSenderAccount = preparedByEmail.isNotEmpty ? 'preparedBy' : 'default';
     final customSenderCtrl = TextEditingController();
 
     final contactNameStr = _quote.customerName.trim().isNotEmpty ? _quote.customerName.trim() : "Yetkili";

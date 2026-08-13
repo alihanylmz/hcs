@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -109,9 +110,16 @@ class _CariDetailPageState extends State<CariDetailPage> {
     String selectedToEmail = emailList.isNotEmpty ? emailList.first : '';
     final customEmailCtrl = TextEditingController();
 
+    final authUserEmail = Supabase.instance.client.auth.currentUser?.email?.trim() ?? '';
     final companyEmail = q.documentProfile.companyEmail.trim();
-    final preparedByEmail = q.documentProfile.preparedByEmail.trim();
-    String selectedSenderAccount = 'default'; // 'default', 'preparedBy', 'company', 'custom'
+
+    // Hazirlayan e-postasi bossa veya varsayilansa canli giris yapmis kullanicinin e-postasini al
+    String preparedByEmail = q.documentProfile.preparedByEmail.trim();
+    if (preparedByEmail.isEmpty && authUserEmail.isNotEmpty) {
+      preparedByEmail = authUserEmail;
+    }
+
+    String selectedSenderAccount = preparedByEmail.isNotEmpty ? 'preparedBy' : 'default';
     final customSenderCtrl = TextEditingController();
 
     final contactNameStr = _cari.contactName.trim().isNotEmpty ? _cari.contactName.trim() : "Yetkili";

@@ -63,7 +63,7 @@ class QuoteRepository {
         preparedByName: 'Ali Han',
         preparedByTitle: 'Satis Muhendisi',
         preparedByPhone: '+90 555 100 10 10',
-        preparedByEmail: 'alihan@uzalteknik.com',
+        preparedByEmail: 'teklif@uzalteknik.com',
         customerContactTitle: 'Satinalma Muduru',
         customerPhone: '+90 532 400 20 20',
         customerEmail: 'satinalma@marmaraendustri.com',

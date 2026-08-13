@@ -654,11 +654,14 @@ class StockService {
       final resolution = consumedQty > 0 && returnedQty == 0 && defectiveQty == 0
           ? 'consumed'
           : 'returned';
+      // quantity güncellemesi yapılmıyor: tabloda check (quantity > 0) kısıtı var,
+      // migration ile >= 0 yapılana kadar 0 yazmak constraint ihlali oluşturuyordu.
+      // getOpenPersonnelLoans() zaten .gt('quantity', 0) filtresi uyguluyor,
+      // bu nedenle status=returned/consumed olan kayıtlar listede zaten görünmez.
       await _supabase
           .from('product_stock_loans')
           .update({
             'status': resolution,
-            'quantity': 0,
             'closed_at': DateTime.now().toUtc().toIso8601String(),
           })
           .eq('id', loanId);

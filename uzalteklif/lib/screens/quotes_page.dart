@@ -16,6 +16,7 @@ import '../services/product_repository.dart';
 import '../services/quote_repository.dart';
 import '../services/user_profile_repository.dart';
 import '../widgets/workspace_background.dart';
+import 'my_workspace_page.dart';
 import 'quote_editor_page.dart';
 import 'quote_review_page.dart';
 
@@ -258,6 +259,24 @@ class _QuotesPageState extends State<QuotesPage> {
     await _reload();
   }
 
+  Future<void> _openMyWorkspace() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => MyWorkspacePage(
+          quoteRepository: widget.quoteRepository,
+          productRepository: widget.productRepository,
+          marketRateService: widget.marketRateService,
+          userProfileRepository: widget.userProfileRepository,
+          cariRepository: widget.cariRepository,
+          ownCompanyRepository: widget.ownCompanyRepository,
+          priceAdjustmentRuleRepository: widget.priceAdjustmentRuleRepository,
+          isManager: widget.isManager,
+        ),
+      ),
+    );
+    await _reload();
+  }
+
   Future<void> _openQuote(Quote quote) async {
     await Navigator.of(context).push<Quote>(
       MaterialPageRoute(
@@ -325,6 +344,18 @@ class _QuotesPageState extends State<QuotesPage> {
           ],
         ),
         actions: [
+          FilledButton.icon(
+            onPressed: _isLoading ? null : _openMyWorkspace,
+            icon: const Icon(Icons.badge_rounded, size: 18),
+            label: Text(compact ? 'Masam' : 'Çalışma Masam'),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF254B75),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
+          const SizedBox(width: 6),
           IconButton(
             tooltip: 'Yenile',
             onPressed: _isLoading ? null : _reload,

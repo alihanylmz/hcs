@@ -3682,7 +3682,7 @@ class _DevicePointCard extends StatelessWidget {
                             point: device.points[index],
                             product: _findProduct(
                               products,
-                              device.points[index].productId,
+                              device.points[index],
                             ),
                             onPressed: () => onSelectProduct(index),
                           ),
@@ -3717,12 +3717,14 @@ class _DevicePointCard extends StatelessWidget {
     );
   }
 
-  Product? _findProduct(List<Product> products, String productId) {
-    if (productId.isEmpty) return null;
-    for (final product in products) {
-      if (product.id == productId) return product;
+  Product? _findProduct(List<Product> products, DiscoveryPoint point) {
+    if (point.productId.isNotEmpty) {
+      for (final product in products) {
+        if (product.id == point.productId) return product;
+      }
     }
-    return null;
+    // Eger urun ID secilmemisse katalogdan otomatik varsayilan populer urunu bul (Honeywell vs.)
+    return findDefaultProductForPoint(point, products);
   }
 }
 
@@ -3739,26 +3741,49 @@ class _PointProductButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasSelection = point.productId.isNotEmpty;
+    final isExplicitlySelected = point.productId.isNotEmpty;
     final selectedProduct = product;
+    final isAutoMatched = !isExplicitlySelected && selectedProduct != null;
+
     return SizedBox(
       width: 310,
       child: OutlinedButton.icon(
         onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(
+            color: isExplicitlySelected
+                ? const Color(0xFF29956F)
+                : (isAutoMatched ? const Color(0xFF2B82C9) : const Color(0xFFD7DEE6)),
+            width: isAutoMatched || isExplicitlySelected ? 1.5 : 1,
+          ),
+          backgroundColor: isAutoMatched
+              ? const Color(0xFF2B82C9).withValues(alpha: 0.06)
+              : (isExplicitlySelected ? const Color(0xFF29956F).withValues(alpha: 0.06) : null),
+        ),
         icon: Icon(
-          hasSelection
+          isExplicitlySelected
               ? Icons.check_circle_rounded
-              : Icons.add_shopping_cart_rounded,
+              : (isAutoMatched ? Icons.auto_awesome_rounded : Icons.add_shopping_cart_rounded),
           size: 18,
+          color: isExplicitlySelected
+              ? const Color(0xFF29956F)
+              : (isAutoMatched ? const Color(0xFF2B82C9) : null),
         ),
         label: Align(
           alignment: Alignment.centerLeft,
           child: Text(
             selectedProduct == null
-                ? (hasSelection ? 'Ürün kaydı bulunamadı' : 'Ürün Seç')
-                : '${selectedProduct.code} · ${selectedProduct.name}',
+                ? 'Ürün Seç'
+                : '${isAutoMatched ? "⚡ Otomatik: " : ""}${selectedProduct.code} · ${selectedProduct.name}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isAutoMatched || isExplicitlySelected ? FontWeight.w800 : FontWeight.w600,
+              color: isAutoMatched
+                  ? const Color(0xFF2B82C9)
+                  : (isExplicitlySelected ? const Color(0xFF29956F) : null),
+            ),
           ),
         ),
       ),

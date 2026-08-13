@@ -116,11 +116,45 @@ DiscoveryProductRecommendation recommendationForDiscoveryPoint(
       reason: 'Çıkış noktası için saha ekipmanları öneriliyor.',
     ),
     _ => const DiscoveryProductRecommendation(
-      mainCategory: '',
+      mainCategory: 'Sensörler',
       subcategories: {},
-      reason: 'Bu nokta için kesin bir ürün kategorisi belirlenemedi.',
+      reason: 'Dijital veya genel nokta için sensör ve presostat öneriliyor.',
     ),
   };
+}
+
+/// Nokta turune veya adina gore stok katalogundan en uygun varsayilan urunu otomatik secer.
+/// Ornek: Sicaklik sensoru noktasi icin Honeywell/VF20 sicaklik sensoru urununu otomatik bulur.
+Product? findDefaultProductForPoint(DiscoveryPoint point, List<Product> products) {
+  if (products.isEmpty) return null;
+  final rec = recommendationForDiscoveryPoint(point);
+
+  // 1. Once kategori ve alt kategoriye tam uyan ilk aktif stoklu urunu ara
+  final exactMatches = products.where((p) => p.isActive && rec.matches(p)).toList();
+  if (exactMatches.isNotEmpty) {
+    // Stokta var olan urunleri onceliklendir
+    final inStock = exactMatches.where((p) => p.stockQuantity > 0).toList();
+    return inStock.isNotEmpty ? inStock.first : exactMatches.first;
+  }
+
+  // 2. Nokta turune gore genel kategori aramasi yap
+  final categoryMatches = products.where((p) {
+    if (!p.isActive) return false;
+    final main = productMainCategoryTurkishLabel(p).toLowerCase();
+    if (point.name.toLowerCase().contains('sicaklik') || point.name.toLowerCase().contains('sıcaklık')) {
+      return p.name.toLowerCase().contains('sıcaklık') || p.name.toLowerCase().contains('sicaklik') || p.name.toLowerCase().contains('sensor');
+    }
+    if (point.name.toLowerCase().contains('damper') || point.name.toLowerCase().contains('vana')) {
+      return main.contains('aktüatör') || main.contains('vana');
+    }
+    return rec.mainCategory.isNotEmpty && main.contains(rec.mainCategory.toLowerCase());
+  }).toList();
+
+  if (categoryMatches.isNotEmpty) {
+    return categoryMatches.first;
+  }
+
+  return null;
 }
 
 bool _containsAny(String source, List<String> values) =>

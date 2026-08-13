@@ -4,6 +4,25 @@ Bu dosya, yapay zeka ajanları (Antigravity, Codex vb.) tarafından yapılan tü
 
 ---
 
+## [REV-013] - 2026-08-13 (14:34 +03:00)
+
+### 📌 Başlık
+Personel Zimmet Ekstresi Modalının Genişletilmesi, Kolon Aralıklarının Mükemmelleştirilmesi ve Kesilme Sorununun Çözülmesi
+
+### 🎯 Değişiklik & İşlem Özeti
+1. **Modal Genişliği & Kolon Aralıkları (`lib/pages/stock_overview_page.dart`):**
+   - Modal diyaloğun maksimum genişliği ekranın %95'ine (1400px) çıkarıldı.
+   - `DataTable` varsayılan 56px kolon aralıkları yerine `columnSpacing: 14` ve `horizontalMargin: 12` olarak optimize edildi. Böylece 6 kolon ve tüm aksiyon butonları sağdan kesilmeden tam sığdı.
+
+2. **Kompakt Aksiyon Butonları:**
+   - Döküm ekranı aksiyon butonları yer kaplamayacak şık kompakt etiketli butonlara (`[Zimmeti İşle]`, `[Sarf]`, `[Arızalı]`, `[İade]`) dönüştürüldü.
+
+### 📁 Etkilenen Dosyalar
+- `[MODIFY] lib/pages/stock_overview_page.dart`
+- `[MODIFY] CODEX_REVISIONS.md`
+
+---
+
 ## [REV-012] - 2026-08-13 (14:22 +03:00)
 
 ### 📌 Başlık
@@ -21,32 +40,6 @@ Stok Girişi, Stok Çıkışı, Zimmetle ve Çoklu Seçim Modu Butonlarının Be
 
 3. **Çoklu Seçim Modu Butonu:**
    - Üst bardaki belirsiz simge yerine **`[☑ Çoklu Seçim (AÇIK)]`** ve **`[☐ Çoklu Seçim]`** durumunu açıkça gösteren buton yerleştirildi.
-
-### 📁 Etkilenen Dosyalar
-- `[MODIFY] lib/pages/stock_overview_page.dart`
-- `[MODIFY] CODEX_REVISIONS.md`
-
----
-
-## [REV-011] - 2026-08-13 (14:20 +03:00)
-
-### 📌 Başlık
-Personel Zimmet Ekstre Penceresinin Tam Genişlik Yapılması, Başlık İyileştirmesi ve Hızlı Sarf / Arızalı / İade Aksiyon Butonları
-
-### 🎯 Değişiklik & İşlem Özeti
-1. **Başlık İyileştirmesi (`lib/pages/stock_overview_page.dart`):**
-   - Tablo başlığındaki `(Cari Hesap)` ifadesi kaldırıldı, sade `Teknik Personel` olarak güncellendi.
-
-2. **Duyarlı ve Geniş Ekstre Penceresi:**
-   - Personel zimmet detay modalının genişliği ekranın %90'ına (max 1200px) çıkarıldı.
-   - Modal içerisindeki DataGrid `LayoutBuilder` + `ConstrainedBox(minWidth: constraints.maxWidth)` ile tamamen kaplayacak biçimde esnetildi. Kesilme/yarım görünme sorunu tamamen giderildi.
-
-3. **Hızlı Zimmet İşlem Butonları (Sarf Edildi / Arızalıya Ayır / İade):**
-   - Zimmet döküm tablosunda her ürün satırına doğrudan hızlı işlem butonları eklendi:
-     - ⚡ **`Sarf Et`**: Zimmetli miktarı doğrudan projede kullanıldı olarak sarf eder.
-     - 🛠️ **`Arızalı`**: Ürünü doğrudan arızalı stoğa (RMA) kaydırır.
-     - ↩️ **`İade`**: Ürünü depodaki sağlam stoğa iade eder.
-     - ⚙️ **`Zimmeti İşle / Kapat`**: Özelleştirilebilir miktar girişi modallarını açar.
 
 ### 📁 Etkilenen Dosyalar
 - `[MODIFY] lib/pages/stock_overview_page.dart`

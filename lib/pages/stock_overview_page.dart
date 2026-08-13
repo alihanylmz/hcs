@@ -2266,7 +2266,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
   void _showPersonnelDetailModal(String personnelName, String personnelId, List<Map<String, dynamic>> loans) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final dialogWidth = (screenWidth * 0.90).clamp(800.0, 1200.0);
+    final dialogWidth = (screenWidth * 0.95).clamp(900.0, 1400.0);
 
     showDialog(
       context: context,
@@ -2287,7 +2287,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceAccent,
                     borderRadius: BorderRadius.circular(8),
@@ -2337,8 +2337,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                           child: DataTable(
                             headingRowColor: WidgetStateProperty.all(AppColors.ink),
                             headingRowHeight: 40,
-                            dataRowMinHeight: 52,
-                            dataRowMaxHeight: 64,
+                            dataRowMinHeight: 50,
+                            dataRowMaxHeight: 60,
+                            columnSpacing: 14,
+                            horizontalMargin: 12,
                             columns: const [
                               DataColumn(label: Text('Ürün Kodu', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
                               DataColumn(label: Text('Ürün Adı', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
@@ -2360,13 +2362,13 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                                   DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.ink, fontSize: 13))),
                                   DataCell(
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(color: AppColors.sand, borderRadius: BorderRadius.circular(6), border: Border.all(color: AppColors.mist)),
                                       child: Text('$qty $unit', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 13)),
                                     ),
                                   ),
-                                  DataCell(Text(_formatDate(loan['borrowed_at']), style: const TextStyle(color: AppColors.ink, fontSize: 13))),
-                                  DataCell(Text((loan['note'] ?? '-').toString(), style: const TextStyle(color: AppColors.ink, fontSize: 13))),
+                                  DataCell(Text(_formatDate(loan['borrowed_at']), style: const TextStyle(color: AppColors.ink, fontSize: 12))),
+                                  DataCell(Text((loan['note'] ?? '-').toString(), style: const TextStyle(color: AppColors.ink, fontSize: 12))),
                                   DataCell(
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -2375,60 +2377,64 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: AppColors.ink,
                                             foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                           ),
                                           icon: const Icon(Icons.tune_outlined, size: 14),
-                                          label: const Text('Zimmeti İşle / Kapat', style: TextStyle(fontSize: 12)),
+                                          label: const Text('Zimmeti İşle', style: TextStyle(fontSize: 12)),
                                           onPressed: () {
                                             Navigator.pop(ctx);
                                             _showCloseLoanModal(loan);
                                           },
                                         ),
-                                        const SizedBox(width: 6),
+                                        const SizedBox(width: 4),
                                         Tooltip(
                                           message: 'Tümünü Sarf Et (Projede Kullanıldı)',
                                           child: OutlinedButton.icon(
                                             style: OutlinedButton.styleFrom(
                                               foregroundColor: AppColors.mint,
-                                              side: const BorderSide(color: AppColors.mint),
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              side: const BorderSide(color: AppColors.mint, width: 1.2),
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                             ),
                                             icon: const Icon(Icons.check_circle_outline, size: 14),
-                                            label: const Text('Sarf Et', style: TextStyle(fontSize: 11)),
+                                            label: const Text('Sarf', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                                             onPressed: () {
                                               Navigator.pop(ctx);
                                               _showCloseLoanModal(loan, defaultAction: 'consumed');
                                             },
                                           ),
                                         ),
-                                        const SizedBox(width: 6),
+                                        const SizedBox(width: 4),
                                         Tooltip(
                                           message: 'Arızaya Ayrıldı (RMA / Bozuk)',
                                           child: OutlinedButton.icon(
                                             style: OutlinedButton.styleFrom(
                                               foregroundColor: AppColors.corporateRed,
-                                              side: const BorderSide(color: AppColors.corporateRed),
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              side: const BorderSide(color: AppColors.corporateRed, width: 1.2),
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                             ),
                                             icon: const Icon(Icons.build_circle_outlined, size: 14),
-                                            label: const Text('Arızalı', style: TextStyle(fontSize: 11)),
+                                            label: const Text('Arızalı', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                                             onPressed: () {
                                               Navigator.pop(ctx);
                                               _showCloseLoanModal(loan, defaultAction: 'defective');
                                             },
                                           ),
                                         ),
-                                        const SizedBox(width: 6),
+                                        const SizedBox(width: 4),
                                         Tooltip(
                                           message: 'Sağlam Şekilde Depoya İade Et',
                                           child: OutlinedButton.icon(
                                             style: OutlinedButton.styleFrom(
                                               foregroundColor: AppColors.ink,
-                                              side: const BorderSide(color: AppColors.mist),
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              side: const BorderSide(color: AppColors.mist, width: 1.2),
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                             ),
                                             icon: const Icon(Icons.replay, size: 14),
-                                            label: const Text('İade', style: TextStyle(fontSize: 11)),
+                                            label: const Text('İade', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                                             onPressed: () {
                                               Navigator.pop(ctx);
                                               _showCloseLoanModal(loan, defaultAction: 'returned');

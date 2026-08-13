@@ -4,6 +4,29 @@ Bu dosya, yapay zeka ajanları (Antigravity, Codex vb.) tarafından yapılan tü
 
 ---
 
+## [REV-005] - 2026-08-13 (12:15 +03:00)
+
+### 📌 Başlık
+Güvenli Soft-Untracking (Katalog Koruma), Sanal Katalog Temizliği ve Akıllı İsim Formatlama
+
+### 🎯 Değişiklik & İşlem Özeti
+1. **Güvenli Soft-Untracking Mantığı (`lib/services/stock_service.dart`):**
+   - **Katalog Koruma Garantisi:** Fiyat teklifi kataloğundaki (`uzalteklif`) 2.000+ ürünün veritabanından Asla silinmemesi için `stopStockTracking()` ve `deleteStock()` fonksiyonları **soft-untrack** (`stock_tracking_started = false`, `stock_quantity = 0`) mantığına geçirildi.
+   - Bir ürün depodan çıkarıldığında Fiyat Teklifleri Kataloğunda fiyatı, para birimi ve teknik özellikleriyle **eksiksiz kalmaya devam eder**, sadece fiziksel depo listesinden gizlenir.
+
+2. **Sanal Katalog Stoklarını Sıfırlama Butonu (`resetCatalogStockTracking`):**
+   - Üst menüye eklenen *"Sanal Katalog Stoklarını Temizle"* aksiyonu ile veritabanındaki sanal katalog takipleri tek tıkla temizlenebilir. Kullanıcı sadece kendi depoya eklediği 5-10 gerçek fiziksel ürünü listede tutar.
+
+3. **Akıllı Ürün İsmi Formatlama (`formatProductName`):**
+   - Katalog aktarımlarından gelen karmaşık ve tekrarlayan isim metinleri (Örn: `V5011N1040/U V5011N1040/U 2 Yollu Vana DN15...`) temizlendi. Ürün Kodu ve Sade Türkçe Ürün Adı ayrı DataGrid sütunlarında net ve okunabilir hale getirildi.
+
+### 📁 Etkilenen Dosyalar
+- `[MODIFY] lib/services/stock_service.dart`
+- `[MODIFY] lib/pages/stock_overview_page.dart`
+- `[MODIFY] CODEX_REVISIONS.md`
+
+---
+
 ## [REV-004] - 2026-08-13 (12:04 +03:00)
 
 ### 📌 Başlık

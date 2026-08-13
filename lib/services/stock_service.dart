@@ -11,16 +11,34 @@ class StockService {
     final specifications = Map<String, dynamic>.from(
       product['specifications'] as Map? ?? const <String, dynamic>{},
     );
+    final rawName = (product['name'] ?? '').toString();
+    final rawCode = (product['code'] ?? '').toString();
+
     return {
       ...product,
+      'displayName': formatProductName(rawName, rawCode),
       'quantity': (product['stock_quantity'] as num?)?.toInt() ?? 0,
       'critical_level': (product['minimum_stock'] as num?)?.toInt() ?? 0,
-      'stock_tracking_started':
-          product['stock_tracking_started'] == true ||
-          ((product['stock_quantity'] as num?) ?? 0) > 0,
+      'stock_tracking_started': product['stock_tracking_started'] == true,
       'barcode': specifications['barcode'] ?? product['code'] ?? '',
       'shelf_location': specifications['shelf_location'] ?? '',
     };
+  }
+
+  /// Ham katalog isimlerini temiz ve anlaşılır Türkçe isimlere dönüştürür.
+  static String formatProductName(String rawName, String code) {
+    var name = rawName.trim();
+    if (name.isEmpty) return code.isNotEmpty ? code : 'İsimsiz Ürün';
+
+    // Ürün adı ürün koduyla başlıyorsa temizle (Örn: "V5011N1040/U V5011N1040/U 2 Yollu Vana" -> "2 Yollu Vana")
+    if (code.isNotEmpty) {
+      name = name.replaceAll(RegExp(RegExp.escape(code), caseSensitive: false), '').trim();
+    }
+
+    // Başlangıçtaki veya sondaki tire/noktalama işaretlerini temizle
+    name = name.replaceFirst(RegExp(r'^[-_\s:]+'), '').replaceFirst(RegExp(r'[-_\s:]+$'), '').trim();
+
+    return name.isNotEmpty ? name : (code.isNotEmpty ? code : 'İsimsiz Ürün');
   }
 
   /// UI stok verilerini `products` veritabanı sütunlarına dönüştürür.
@@ -118,7 +136,7 @@ class StockService {
   }
 
   /// Stok ürünlerini çeker.
-  /// [onlyTracked] true (varsayılan) ise yalnızca fiziksel olarak takibi başlatılmış (stock_tracking_started = true veya quantity > 0) depo ürünlerini getirir.
+  /// [onlyTracked] true (varsayılan) ise yalnızca fiziksel olarak depoya alınan (stock_tracking_started = true) ürünleri getirir.
   Future<List<Map<String, dynamic>>> getStocks({
     bool onlyTracked = true,
   }) async {
@@ -129,7 +147,7 @@ class StockService {
       var query = _supabase.from(_table).select();
 
       if (onlyTracked) {
-        query = query.or('stock_tracking_started.eq.true,stock_quantity.gt.0');
+        query = query.eq('stock_tracking_started', true);
       }
 
       final response = await query
@@ -144,7 +162,7 @@ class StockService {
     return stocks;
   }
 
-  /// Katalogdaki ürünleri aramak için kullanılır (Stok takibi başlamış ya da başlamamış tüm ürünler).
+  /// Katalogdaki ürünleri aramak için kullanılır (Fiyat teklifi kataloğu).
   Future<List<Map<String, dynamic>>> getCatalogProducts({
     String? search,
     String? category,
@@ -169,7 +187,7 @@ class StockService {
     return products;
   }
 
-  /// Katalogdaki bir ürün için stok takibini başlatır ve depoya giriş hareketi kaydeder.
+  /// Katalogdaki bir ürün için stok takibini başlatır ve depoya giriş hareketi kaydeder (Katalog ürünü değişmez).
   Future<void> startStockTracking({
     required String productId,
     required int initialQuantity,
@@ -210,6 +228,29 @@ class StockService {
         reason: 'Stok takibi başlatıldı / İlk depo girişi',
       );
     }
+  }
+
+  /// Stok takibini kapatır ve ürünü depodan çıkarır (GÜVENLİ: Fiyat teklifleri kataloğundaki ürün asla silinmez!).
+  Future<void> stopStockTracking(String productId) async {
+    await _supabase.from(_table).update({
+      'stock_tracking_started': false,
+      'stock_quantity': 0,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', productId);
+  }
+
+  /// Stok takibini durdurur (deleteStock geriye uyumluluk adapter'ı - Soft untrack).
+  Future<void> deleteStock(String id) async {
+    await stopStockTracking(id);
+  }
+
+  /// Veritabanındaki tüm sanal katalog stoklarını temizler ve depoyu sıfırlar. (Katalog ürünleri silinmez, sadece stok takibi kapatılır!).
+  Future<void> resetCatalogStockTracking() async {
+    await _supabase.from(_table).update({
+      'stock_tracking_started': false,
+      'stock_quantity': 0,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('stock_tracking_started', true);
   }
 
   /// Barkod veya ürün koduna göre tek ürün getirir.
@@ -309,11 +350,6 @@ class StockService {
         .from(_table)
         .update({'specifications': specifications})
         .eq('id', id);
-  }
-
-  /// Stok takibini durdurur veya siler.
-  Future<void> deleteStock(String id) async {
-    await _supabase.from(_table).delete().eq('id', id);
   }
 
   /// Stok miktarını günceller.

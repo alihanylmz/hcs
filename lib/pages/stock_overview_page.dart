@@ -80,7 +80,6 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   Future<void> _loadStocks() async {
     if (mounted) setState(() => _isLoading = true);
     try {
-      // activeTab == 2 ise tüm kataloğu çeker, aksi halde sadece fiziksel stokları getirir
       final fetchOnlyTracked = _activeTab != 2 && _onlyTracked;
       final data = await _stockService.getStocks(onlyTracked: fetchOnlyTracked);
       if (mounted) {
@@ -139,12 +138,14 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       if (query.isEmpty) return true;
       final code = (item['code'] ?? '').toString().toLowerCase();
       final name = (item['name'] ?? '').toString().toLowerCase();
+      final displayName = (item['displayName'] ?? '').toString().toLowerCase();
       final brand = (item['brand'] ?? '').toString().toLowerCase();
       final model = (item['model'] ?? '').toString().toLowerCase();
       final barcode = (item['barcode'] ?? '').toString().toLowerCase();
       final shelf = (item['shelf_location'] ?? '').toString().toLowerCase();
       return code.contains(query) ||
           name.contains(query) ||
+          displayName.contains(query) ||
           brand.contains(query) ||
           model.contains(query) ||
           barcode.contains(query) ||
@@ -169,6 +170,105 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     return '$day.$month.$year $hour:$min';
   }
 
+  void _showResetCatalogTrackingConfirmDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.cleaning_services, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Sanal Katalog Stoklarını Temizle'),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Veritabanındaki sanal katalog stok takipleri temizlenecektir.\n',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              '• GÜVENLİ İŞLEM: Fiyat teklifleri kataloğunuzdaki 2.000+ ürün ASLA SİLİNMEZ.\n'
+              '• Sadece stok sayfasındaki sanal gösterimler temizlenir.\n'
+              '• Fiziksel depodaki ürünlerinizi "Stoğa Al" butonu ile ekleyebilirsiniz.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.check, color: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            label: const Text('Depo Listesini Temizle'),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _stockService.resetCatalogStockTracking();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Sanal katalog stokları temizlendi. Ürün kataloğunuz aynen korunuyor.'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              _loadStocks();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showStopTrackingConfirmDialog(Map<String, dynamic> stock) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Stok Takibini Durdur (Depodan Çıkar)'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Ürün: ${stock['displayName'] ?? stock['name']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Bu işlem ürünü Fiyat Teklifleri Kataloğundan SİLMES. Ürün teklif verirken hazır bulunur, sadece depodaki stok listesinden çıkarılır.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _stockService.stopStockTracking(stock['id'].toString());
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Ürün stok takibinden çıkarıldı. Katalogda korunuyor.'), backgroundColor: Colors.orange),
+              );
+              _loadStocks();
+            },
+            child: const Text('Depodan Çıkar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // --- YENİLENMİŞ STOK KAYIT / KATALOGDAN STOĞA ALMA MODALI ---
 
   void _showAddOrTrackStockModal([Map<String, dynamic>? editItem]) {
@@ -188,7 +288,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   }
 
   void _showEditStockDialog(Map<String, dynamic> stock) {
-    final nameCtrl = TextEditingController(text: stock['name'] ?? '');
+    final nameCtrl = TextEditingController(text: stock['displayName'] ?? stock['name'] ?? '');
     final brandCtrl = TextEditingController(text: stock['brand'] ?? '');
     final modelCtrl = TextEditingController(text: stock['model'] ?? '');
     final unitCtrl = TextEditingController(text: stock['unit'] ?? 'Adet');
@@ -368,7 +468,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
           children: [
             const Icon(Icons.add_shopping_cart, color: Colors.blue),
             const SizedBox(width: 8),
-            Expanded(child: Text('Stoğa Al: ${catalogItem['name']}')),
+            Expanded(child: Text('Stoğa Al: ${catalogItem['displayName'] ?? catalogItem['name']}')),
           ],
         ),
         content: Container(
@@ -378,7 +478,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Ürün Kod: ${catalogItem['code'] ?? '-'}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('Ürün Kodu: ${catalogItem['code'] ?? '-'}', style: const TextStyle(fontWeight: FontWeight.bold)),
               Text('Kategori: ${catalogItem['category'] ?? '-'} | Marka: ${catalogItem['brand'] ?? '-'}'),
               const SizedBox(height: 16),
               Row(
@@ -496,7 +596,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Ürün: ${stock['name']} (${stock['code']})', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('Ürün: ${stock['displayName'] ?? stock['name']} (${stock['code']})', style: const TextStyle(fontWeight: FontWeight.bold)),
               Text('Mevcut Stok: ${stock['quantity']} ${stock['unit'] ?? 'Adet'}'),
               const SizedBox(height: 16),
               TextField(
@@ -604,7 +704,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Ürün: ${stock['name']} (${stock['code']})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text('Ürün: ${stock['displayName'] ?? stock['name']} (${stock['code']})', style: const TextStyle(fontWeight: FontWeight.bold)),
                   Text('Mevcut Stok: ${stock['quantity']} ${stock['unit'] ?? 'Adet'}'),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
@@ -672,7 +772,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       builder: (ctx) => AlertDialog(
         title: const Text('Zimmeti Kapat / Durum Seç'),
         content: Text(
-          '${loan['personnel_name']} üzerindeki ${loan['quantity']} adet ${loan['inventory']?['name'] ?? 'ürün'} zimmeti için işlem seçiniz:',
+          '${loan['personnel_name']} üzerindeki ${loan['quantity']} adet ${loan['inventory']?['displayName'] ?? loan['inventory']?['name'] ?? 'ürün'} zimmeti için işlem seçiniz:',
         ),
         actions: [
           OutlinedButton.icon(
@@ -741,7 +841,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                             _activeTab = 0;
                           });
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Eşleşen Ürün Bulundu: ${match['name']}'), backgroundColor: Colors.green),
+                            SnackBar(content: Text('Eşleşen Ürün Bulundu: ${match['displayName'] ?? match['name']}'), backgroundColor: Colors.green),
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -842,6 +942,26 @@ class _StockOverviewPageState extends State<StockOverviewPage>
               });
             },
           ),
+          if (_canManageStock)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              tooltip: 'Seçenekler',
+              onSelected: (val) {
+                if (val == 'reset_catalog') _showResetCatalogTrackingConfirmDialog();
+              },
+              itemBuilder: (ctx) => [
+                const PopupMenuItem(
+                  value: 'reset_catalog',
+                  child: Row(
+                    children: [
+                      Icon(Icons.cleaning_services, color: Colors.orange, size: 20),
+                      SizedBox(width: 8),
+                      Text('Sanal Katalog Stoklarını Temizle'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Yenile',
@@ -1067,10 +1187,23 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
   Widget _buildStockDataGrid(List<Map<String, dynamic>> stocks, {required bool showTrackButton}) {
     if (stocks.isEmpty) {
-      return const Card(
+      return Card(
         child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Center(child: Text('Kriterlere uygun stok veya katalog ürünü bulunamadı.')),
+          padding: const EdgeInsets.all(32),
+          child: Center(
+            child: Column(
+              children: [
+                const Text('Fiziksel depoda henüz ürün kaydı bulunmuyor.'),
+                const SizedBox(height: 12),
+                if (_canManageStock && !showTrackButton)
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.add_shopping_cart),
+                    label: const Text('Katalogdan Ürün Stoğa Al'),
+                    onPressed: () => _showAddOrTrackStockModal(),
+                  ),
+              ],
+            ),
+          ),
         ),
       );
     }
@@ -1083,7 +1216,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
           headingRowColor: WidgetStateProperty.all(Colors.grey.shade100),
           columns: [
             if (_isSelectionMode) const DataColumn(label: Text('Seç')),
-            const DataColumn(label: Text('Kod / ID')),
+            const DataColumn(label: Text('Ürün Kodu')),
             const DataColumn(label: Text('Ürün Adı')),
             const DataColumn(label: Text('Kategori')),
             const DataColumn(label: Text('Marka / Model')),
@@ -1098,9 +1231,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
             final isSelected = _selectedProductIds.contains(id);
             final qty = _asInt(item['quantity']);
             final min = _asInt(item['critical_level']);
-            final isTracked = item['stock_tracking_started'] == true || qty > 0;
+            final isTracked = item['stock_tracking_started'] == true;
             final isLow = isTracked && qty <= min;
             final isOut = isTracked && qty == 0;
+            final nameDisplay = item['displayName'] ?? item['name'] ?? '-';
 
             return DataRow(
               selected: isSelected,
@@ -1131,10 +1265,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                       },
                     ),
                   ),
-                DataCell(Text(item['code'] ?? item['id'] ?? '-')),
+                DataCell(Text(item['code'] ?? item['id'] ?? '-', style: const TextStyle(fontWeight: FontWeight.w600))),
                 DataCell(
                   Text(
-                    item['name'] ?? '-',
+                    nameDisplay,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -1164,7 +1298,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                             ),
                           ),
                         )
-                      : const Text('Takip Yok', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+                      : const Text('Depoda Yok', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
                 ),
                 DataCell(Text('$min ${item['unit'] ?? 'Adet'}')),
                 DataCell(Text(item['shelf_location'] ?? '-')),
@@ -1204,14 +1338,14 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                           PopupMenuButton<String>(
                             onSelected: (val) {
                               if (val == 'edit') _showAddOrTrackStockModal(item);
-                              if (val == 'delete') {
-                                _stockService.deleteStock(item['id']);
-                                _loadStocks();
-                              }
+                              if (val == 'untrack') _showStopTrackingConfirmDialog(item);
                             },
                             itemBuilder: (ctx) => [
                               const PopupMenuItem(value: 'edit', child: Text('Düzenle')),
-                              const PopupMenuItem(value: 'delete', child: Text('Sil', style: TextStyle(color: Colors.red))),
+                              const PopupMenuItem(
+                                value: 'untrack',
+                                child: Text('Depodan Çıkar (Katalogda Sakla)', style: TextStyle(color: Colors.red)),
+                              ),
                             ],
                           ),
                         ],
@@ -1255,7 +1389,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
             return DataRow(
               cells: [
                 DataCell(Text(loan['personnel_name'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold))),
-                DataCell(Text('${product['name'] ?? 'Bilinmeyen'} (${product['code'] ?? ''})')),
+                DataCell(Text('${product['displayName'] ?? product['name'] ?? 'Bilinmeyen'} (${product['code'] ?? ''})')),
                 DataCell(Text('${loan['quantity']} ${product['unit'] ?? 'Adet'}')),
                 DataCell(Text(_formatDate(loan['borrowed_at']))),
                 DataCell(Text(loan['note'] ?? '-')),
@@ -1305,7 +1439,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
             return DataRow(
               cells: [
                 DataCell(Text(_formatDate(mov['created_at']))),
-                DataCell(Text(product['name'] ?? '-')),
+                DataCell(Text(product['displayName'] ?? product['name'] ?? '-')),
                 DataCell(
                   Chip(
                     avatar: Icon(isIn ? Icons.arrow_downward : Icons.arrow_upward, size: 14, color: Colors.white),
@@ -1538,7 +1672,7 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
                   dense: true,
                   selected: isSelected,
                   selectedTileColor: Colors.blue.shade50,
-                  title: Text(item['name'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  title: Text(item['displayName'] ?? item['name'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text('Kod: ${item['code']} | Kat: ${item['category']} | Marka: ${item['brand']}'),
                   onTap: () {
                     setState(() {
@@ -1563,7 +1697,7 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Seçilen Ürün: ${_selectedCatalogProduct!['name']}',
+                    'Seçilen Ürün: ${_selectedCatalogProduct!['displayName'] ?? _selectedCatalogProduct!['name']}',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),

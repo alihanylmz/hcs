@@ -128,10 +128,34 @@ class _CariDetailPageState extends State<CariDetailPage> {
 
     final contactNameStr = _cari.contactName.trim().isNotEmpty ? _cari.contactName.trim() : "Yetkili";
     final subjectCtrl = TextEditingController(text: 'Teklif: ${q.code} - Uzal Teklif');
+
+    final itemsBuffer = StringBuffer();
+    if (q.items.isNotEmpty) {
+      final subtotal = q.items.fold<double>(0, (sum, i) => sum + i.totalTl);
+      final vatRate = q.documentProfile.vatRate > 0 ? q.documentProfile.vatRate : 20.0;
+      final vat = subtotal * (vatRate / 100);
+      final grandTotal = subtotal + vat;
+
+      itemsBuffer.writeln('----------------------------------------------------');
+      itemsBuffer.writeln('TEKLİF KALEMLERİ VE HİZMET DETAYLARI');
+      itemsBuffer.writeln('----------------------------------------------------');
+      for (var i = 0; i < q.items.length; i++) {
+        final item = q.items[i];
+        itemsBuffer.writeln('${i + 1}. ${item.description}');
+        itemsBuffer.writeln('   Miktar: ${item.quantity} ${item.unit} | Birim Fiyat: ${item.unitPriceTl.toStringAsFixed(2)} TL | Toplam: ${item.totalTl.toStringAsFixed(2)} TL');
+      }
+      itemsBuffer.writeln('----------------------------------------------------');
+      itemsBuffer.writeln('Ara Toplam  : ${subtotal.toStringAsFixed(2)} TL');
+      itemsBuffer.writeln('KDV Tutarı (%${vatRate.toStringAsFixed(0)}) : ${vat.toStringAsFixed(2)} TL');
+      itemsBuffer.writeln('GENEL TOPLAM: ${grandTotal.toStringAsFixed(2)} TL');
+      itemsBuffer.writeln('====================================================');
+    }
+
     final bodyCtrl = TextEditingController(
       text: 'Sayın $contactNameStr,\n\n'
-          '${q.code} kodlu teklifimizi incelemenize sunuyoruz.\n\n'
-          '📄 Teklifi Çevrimiçi Görüntülemek ve PDF Olarak İndirmek İçin Bağlantıya Tıklayın:\n'
+          '${q.code} kodlu teklif detayları aşağıda bilgilerinize sunulmuştur:\n\n'
+          '${itemsBuffer.isNotEmpty ? itemsBuffer.toString() : ""}\n'
+          '📄 Teklifi Çevrimiçi İncelemek & İndirmek İçin Bağlantı:\n'
           '$quoteUrl\n\n'
           'Teklif ile ilgili sorularınız veya revizyon talepleriniz için bu e-postaya yanıt verebilirsiniz.\n\n'
           'Bilgilerinize saygılarımızla,\n'

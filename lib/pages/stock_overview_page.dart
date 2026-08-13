@@ -168,6 +168,9 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       final model = (item['model'] ?? '').toString().toLowerCase();
       final barcode = (item['barcode'] ?? '').toString().toLowerCase();
       final shelf = (item['shelf_location'] ?? '').toString().toLowerCase();
+      final specs = (item['specifications'] ?? '').toString().toLowerCase();
+      final note = (item['note'] ?? item['notes'] ?? '').toString().toLowerCase();
+
       return code.contains(query) ||
           name.contains(query) ||
           displayName.contains(query) ||
@@ -175,12 +178,84 @@ class _StockOverviewPageState extends State<StockOverviewPage>
           brand.contains(query) ||
           model.contains(query) ||
           barcode.contains(query) ||
-          shelf.contains(query);
+          shelf.contains(query) ||
+          specs.contains(query) ||
+          note.contains(query);
     }).toList();
   }
 
   List<Map<String, dynamic>> _getCriticalStocks() {
     return _getFilteredStocks().where(_isLowStock).toList();
+  }
+
+  // --- AKTİF SEKMEYİ KAPSAYAN DİNAMİK PDF RAPORU ---
+  void _exportCurrentTabPdf() {
+    final filtered = _getFilteredStocks();
+    final critical = _getCriticalStocks();
+
+    switch (_activeTab) {
+      case 0:
+        _openPdfViewer(
+          'DEPO STOK RAPORU',
+          'depo_stok_raporu.pdf',
+          () => StockPdfService.generateWarehouseStockPdfBytesFromList(filtered, title: 'DEPO FİZİKSEL STOK RAPORU'),
+        );
+        break;
+      case 1:
+        _openPdfViewer(
+          'KRİTİK STOK RAPORU',
+          'kritik_stok_raporu.pdf',
+          () => StockPdfService.generateWarehouseStockPdfBytesFromList(critical, title: 'KRİTİK DEPO STOK RAPORU'),
+        );
+        break;
+      case 2:
+        _openPdfViewer(
+          'ÜRÜN KATALOĞU RAPORU',
+          'urun_katalogu_raporu.pdf',
+          () => StockPdfService.generateWarehouseStockPdfBytesFromList(filtered, title: 'TÜM ÜRÜN KATALOĞU RAPORU'),
+        );
+        break;
+      case 3:
+        _openPdfViewer(
+          'PERSONEL ZİMMET RAPORU',
+          'personel_zimmet_raporu.pdf',
+          () => StockPdfService.generatePersonnelLoansPdfBytes(_personnelLoans),
+        );
+        break;
+      case 6:
+        _openPdfViewer(
+          'ARIZALI ÜRÜN (RMA) RAPORU',
+          'arizali_urunler_raporu.pdf',
+          () => StockPdfService.generateDefectiveProductsPdfBytes(_defectiveProducts),
+        );
+        break;
+      case 4:
+        _openPdfViewer(
+          'STOK HAREKET LOGLARI RAPORU',
+          'stok_hareket_loglari.pdf',
+          () => StockPdfService.generateStockMovementsPdfBytes(_stockMovements),
+        );
+        break;
+      default:
+        _openPdfViewer(
+          'DEPO STOK RAPORU',
+          'depo_stok_raporu.pdf',
+          () => StockPdfService.generateWarehouseStockPdfBytesFromList(filtered),
+        );
+    }
+  }
+
+  void _openPdfViewer(String title, String filename, Future<Uint8List> Function() generator) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PdfViewerPage(
+          title: title,
+          pdfFileName: filename,
+          pdfGenerator: generator,
+        ),
+      ),
+    );
   }
 
   String _formatDate(dynamic value) {
@@ -1449,8 +1524,8 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                         style: const TextStyle(color: AppColors.ink, fontSize: 14),
                         decoration: InputDecoration(
                           hintText: _activeTab == 2
-                              ? 'Katalogda Ürün Kodu, İsim veya Marka Ara...'
-                              : 'Depoda Ürün Kodu, İsim, Barkod veya Raf Ara...',
+                              ? 'Katalogda Ürün Kodu, İsim, Seri No veya Marka Ara...'
+                              : 'Depoda Ürün Kodu, İsim, Barkod, Seri No veya Not Ara...',
                           hintStyle: const TextStyle(color: Color(0xFF8A9BAE)),
                           prefixIcon: const Icon(Icons.search, color: AppColors.ink),
                           filled: true,
@@ -1492,6 +1567,19 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                           _currentPage = 0;
                         }),
                       ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.ink,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                      onPressed: _exportCurrentTabPdf,
+                      icon: const Icon(Icons.picture_as_pdf, size: 18, color: Colors.white),
+                      label: const Text('PDF Rapor Al', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
                   ],
                 ),

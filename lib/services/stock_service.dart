@@ -671,13 +671,18 @@ class StockService {
 
   // --- ARIZALI ÜRÜN VE RMA TAKİBİ (DEFECTIVE PRODUCTS) ---
 
-  /// Tüm arızalı ürün kayıtlarını çeker.
-  Future<List<Map<String, dynamic>>> getDefectiveProducts() async {
+  /// Arızalı ürün kayıtlarını çeker (varsayılan: sadece aktif takiptedekiler).
+  Future<List<Map<String, dynamic>>> getDefectiveProducts({bool onlyActive = true}) async {
     try {
-      final response = await _supabase
+      var query = _supabase
           .from('defective_products')
-          .select('*, products:product_id(id, code, name, category, brand, model, unit, stock_quantity, specifications)')
-          .order('created_at', ascending: false);
+          .select('*, products:product_id(id, code, name, category, brand, model, unit, stock_quantity, specifications)');
+
+      if (onlyActive) {
+        query = query.inFilter('status', ['in_faulty_stock', 'shipped_to_supplier']);
+      }
+
+      final response = await query.order('created_at', ascending: false);
 
       return List<Map<String, dynamic>>.from(response).map((def) {
         final product = def['products'];

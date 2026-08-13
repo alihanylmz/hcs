@@ -4,6 +4,26 @@ Bu dosya, yapay zeka ajanları (Antigravity, Codex vb.) tarafından yapılan tü
 
 ---
 
+## [REV-010] - 2026-08-13 (14:10 +03:00)
+
+### 📌 Başlık
+Personel Bazlı Zimmet Yönetimi (Cari Hesap Mantığı & Ekstre Dökümü)
+
+### 🎯 Değişiklik & İşlem Özeti
+1. **Personel Bazlı Zimmet Mimarisi ("Cari Mantığı"):**
+   - Zimmetler tablosu ham satır bazlı görünümden çıkartılıp **Personel Cari Hesap Kartları** mantığına dönüştürüldü.
+   - Ana listede teknik personel isimleri (`Muhammer Yılmaz`, `Ali Han` vb.), üzerlerindeki zimmetli ürün çeşit sayısı, toplam malzeme adedi ve son zimmet tarihi özet tablo olarak gösterildi.
+
+2. **Personel Zimmet Ekstresi & Detay Modalı:**
+   - Personel satırındaki **"Zimmet Dökümü & İşle"** butonuna basıldığında o personele ait tüm ürünlerin listelendiği özel ekstre penceresi açılır.
+   - Ekstre içerisinden kalem kalem zimmet kapatılabilir/sarf/arızalı işlenebilir veya doğrudan o personel için yeni zimmet kaydı açılabilir.
+
+### 📁 Etkilenen Dosyalar
+- `[MODIFY] lib/pages/stock_overview_page.dart`
+- `[MODIFY] CODEX_REVISIONS.md`
+
+---
+
 ## [REV-009] - 2026-08-13 (14:04 +03:00)
 
 ### 📌 Başlık
@@ -28,32 +48,6 @@ Arızalı Ürün Yönetimi (RMA & Servis Takibi) ve Zimmetten Arızalı Ayrışt
 ### 📁 Etkilenen Dosyalar
 - `[NEW] uzalteklif/supabase/migrations/20260813_defective_products.sql`
 - `[MODIFY] lib/services/stock_service.dart`
-- `[MODIFY] lib/pages/stock_overview_page.dart`
-- `[MODIFY] CODEX_REVISIONS.md`
-
----
-
-## [REV-008] - 2026-08-13 (13:28 +03:00)
-
-### 📌 Başlık
-UzalTeklif Birebir Renk Teması Entegrasyonu ve %100 Ekran Genişliğine Yayılan (Full-Width Stretch) DataGrid Tablosu
-
-### 🎯 Değişiklik & İşlem Özeti
-1. **UzalTeklif Premium Renk Paleti Entegrasyonu (`lib/theme/app_colors.dart`, `lib/pages/stock_overview_page.dart`):**
-   - Birebir `uzalteklif` renk paleti tüm stok modülüne uygulandı:
-     - Arka Plan Zemin: `AppColors.sand` (`#F4EFE7` Warm Sand - Teklif zemin rengi).
-     - Kartlar & Tablo Yüzeyi: `AppColors.paper` (`#FFFFFCF7` Paper White & `#E4E8ED` Mist Border).
-     - Ana Başlıklar & Butonlar: `AppColors.ink` (`#15304A` Deep Navy / Ink).
-     - Vurgu & İkincil Aksiyonlar: `AppColors.brass` (`#C98E4B` Warm Gold / Brass Accent).
-     - Başarılı / Giriş İşlemleri: `AppColors.mint` (`#4E907A` Sage Mint).
-
-2. **%100 Ekran Genişliğine Yayılan (Full-Width Stretch) DataGrid Tablo Tasarımı:**
-   - Tablonun sağ tarafta yarım kalması (`DataTable` genişlik kısıtı) `LayoutBuilder` + `ConstrainedBox(minWidth: constraints.maxWidth)` ile tamamen çözüldü.
-   - Tablolar artık ekran ne kadar geniş olursa olsun kartın tüm genişliğini kaplayacak şekilde esner (`width: double.infinity`).
-   - Tablo başlığı `AppColors.ink` (`#15304A`) zemin üstüne net beyaz metinlerle kurumsal ERP görünümüne kavuşturuldu.
-
-### 📁 Etkilenen Dosyalar
-- `[MODIFY] lib/theme/app_colors.dart`
 - `[MODIFY] lib/pages/stock_overview_page.dart`
 - `[MODIFY] CODEX_REVISIONS.md`
 

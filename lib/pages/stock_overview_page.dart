@@ -699,7 +699,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
   // --- PERSONELE ZİMMET VERME MODALI ---
 
-  void _showPersonnelLoanModal(Map<String, dynamic> stock) async {
+  void _showPersonnelLoanModal([Map<String, dynamic>? preselectedStock, String? preselectedPersonnelId]) async {
     if (!_canManageStock) return;
     final personnelList = await _stockService.listStockPersonnel();
     if (!mounted) return;
@@ -711,7 +711,8 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       return;
     }
 
-    String? selectedPersonnelId = personnelList.first['id']?.toString();
+    String? selectedPersonnelId = preselectedPersonnelId ?? personnelList.first['id']?.toString();
+    Map<String, dynamic>? selectedStock = preselectedStock;
     String? selectedJobCode;
     final qtyCtrl = TextEditingController(text: '1');
     final noteCtrl = TextEditingController();
@@ -728,53 +729,76 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 Text('Personele Zimmet Ver'),
               ],
             ),
-            content: Container(
-              width: 450,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Ürün: ${stock['displayName'] ?? stock['name']} (${stock['code']})', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  Text('Mevcut Depo Stok: ${stock['quantity']} ${stock['unit'] ?? 'Adet'}'),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: selectedPersonnelId,
-                    decoration: const InputDecoration(labelText: 'Teknik Personel *', border: OutlineInputBorder()),
-                    items: personnelList
-                        .map((p) => DropdownMenuItem(value: p['id'].toString(), child: Text(p['full_name'] ?? p['email'] ?? p['id'])))
-                        .toList(),
-                    onChanged: (val) => setModalState(() => selectedPersonnelId = val),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: selectedJobCode,
-                    decoration: const InputDecoration(labelText: 'İlişkili İş Kodu / Proje (İsteğe Bağlı)', border: OutlineInputBorder()),
-                    items: [
-                      const DropdownMenuItem<String>(value: null, child: Text('Seçilmedi (İş Kodsuz)')),
-                      ..._activeTickets.map((t) {
-                        final code = t['job_code'] ?? t['id'];
-                        final cust = t['customers'] is Map ? (t['customers']['name'] ?? '') : '';
-                        return DropdownMenuItem<String>(
-                          value: code.toString(),
-                          child: Text('$code - $cust (${t['title'] ?? ''})', overflow: TextOverflow.ellipsis),
-                        );
-                      }),
+            content: SingleChildScrollView(
+              child: Container(
+                width: 480,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (selectedStock != null) ...[
+                      Text('Ürün: ${selectedStock!['displayName'] ?? selectedStock!['name']} (${selectedStock!['code']})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text('Mevcut Depo Stok: ${selectedStock!['quantity']} ${selectedStock!['unit'] ?? 'Adet'}', style: const TextStyle(color: AppColors.ink)),
+                    ] else ...[
+                      DropdownButtonFormField<String>(
+                        value: selectedStock?['id']?.toString(),
+                        decoration: const InputDecoration(labelText: 'Zimmet Edilecek Depo Ürünü *', border: OutlineInputBorder()),
+                        items: _allStocks.where((s) => (s['quantity'] as num? ?? 0) > 0).map((s) {
+                          return DropdownMenuItem<String>(
+                            value: s['id'].toString(),
+                            child: Text('${s['displayName'] ?? s['name']} (${s['quantity']} ${s['unit'] ?? 'Adet'})', overflow: TextOverflow.ellipsis),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          final found = _allStocks.firstWhere((s) => s['id'].toString() == val, orElse: () => {});
+                          setModalState(() => selectedStock = found);
+                        },
+                      ),
                     ],
-                    onChanged: (val) => setModalState(() => selectedJobCode = val),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: qtyCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Zimmet Edilecek Miktar *', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: noteCtrl,
-                    decoration: const InputDecoration(labelText: 'Zimmet Açıklaması / Not', border: OutlineInputBorder()),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+
+                    DropdownButtonFormField<String>(
+                      value: selectedPersonnelId,
+                      decoration: const InputDecoration(labelText: 'Teknik Personel *', border: OutlineInputBorder()),
+                      items: personnelList
+                          .map((p) => DropdownMenuItem(value: p['id'].toString(), child: Text(p['full_name'] ?? p['email'] ?? p['id'])))
+                          .toList(),
+                      onChanged: (val) => setModalState(() => selectedPersonnelId = val),
+                    ),
+                    const SizedBox(height: 12),
+
+                    DropdownButtonFormField<String>(
+                      value: selectedJobCode,
+                      decoration: const InputDecoration(labelText: 'İlişkili İş Kodu / Proje (İsteğe Bağlı)', border: OutlineInputBorder()),
+                      items: [
+                        const DropdownMenuItem<String>(value: null, child: Text('Seçilmedi (İş Kodsuz)')),
+                        ..._activeTickets.map((t) {
+                          final code = t['job_code'] ?? t['id'];
+                          final cust = t['customers'] is Map ? (t['customers']['name'] ?? '') : '';
+                          return DropdownMenuItem<String>(
+                            value: code.toString(),
+                            child: Text('$code - $cust (${t['title'] ?? ''})', overflow: TextOverflow.ellipsis),
+                          );
+                        }),
+                      ],
+                      onChanged: (val) => setModalState(() => selectedJobCode = val),
+                    ),
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: qtyCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Zimmet Edilecek Miktar *', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: noteCtrl,
+                      decoration: const InputDecoration(labelText: 'Zimmet Açıklaması / Not', border: OutlineInputBorder()),
+                    ),
+                  ],
+                ),
               ),
             ),
             actions: [
@@ -782,13 +806,13 @@ class _StockOverviewPageState extends State<StockOverviewPage>
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
                 onPressed: () async {
-                  if (selectedPersonnelId == null) return;
+                  if (selectedPersonnelId == null || selectedStock == null) return;
                   final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
                   if (qty <= 0) return;
                   Navigator.pop(ctx);
                   try {
                     await _stockService.registerPersonnelLoan(
-                      productId: stock['id'],
+                      productId: selectedStock!['id'].toString(),
                       personnelId: selectedPersonnelId!,
                       quantity: qty,
                       jobCode: selectedJobCode,
@@ -814,7 +838,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     );
   }
 
-  // --- ZİMMET İŞLEME & KAPATMA MODALI (ESNEK SARF / İADE / ARIZALI) ---
+  // --- ZİMMET İŞLEME & KAPATMA MODALI ---
 
   void _showCloseLoanModal(Map<String, dynamic> loan) {
     if (!_canManageStock) return;
@@ -1024,7 +1048,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     );
   }
 
-  // --- ARIZALI ÜRÜN DURUM GÜNCELLEME MODALI (KARGO / SERVİS / TAMİR) ---
+  // --- ARIZALI ÜRÜN DURUM GÜNCELLEME MODALI ---
 
   void _showUpdateDefectiveStatusModal(Map<String, dynamic> defItem) {
     if (!_canManageStock) return;
@@ -1370,8 +1394,8 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildKpiCard(
-                      title: 'Aktif Zimmetler',
-                      value: '${_personnelLoans.length} Kayıt',
+                      title: 'Zimmetli Personel',
+                      value: '${_getGroupedLoansMap().length} Personel',
                       icon: Icons.badge_outlined,
                       color: AppColors.mint,
                     ),
@@ -1468,7 +1492,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                     const SizedBox(width: 8),
                     _buildTabChip(2, 'Tüm Ürün Kataloğu', Icons.menu_book),
                     const SizedBox(width: 8),
-                    _buildTabChip(3, 'Personel Zimmetleri (${_personnelLoans.length})', Icons.badge),
+                    _buildTabChip(3, 'Personel Zimmetleri (${_getGroupedLoansMap().length} Personel)', Icons.badge),
                     const SizedBox(width: 8),
                     _buildTabChip(6, 'Arızalı Ürünler (RMA) (${_defectiveProducts.length})', Icons.build_circle),
                     const SizedBox(width: 8),
@@ -1967,12 +1991,12 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: status == 'in_faulty_stock'
-                                ? const Color(0xFFFEF3C7) // Amber
+                                ? const Color(0xFFFEF3C7)
                                 : status == 'shipped_to_supplier'
-                                    ? AppColors.surfaceAccent // Blue Soft
+                                    ? AppColors.surfaceAccent
                                     : status == 'repaired_returned' || status == 'replaced'
-                                        ? const Color(0xFFDCFCE7) // Mint Emerald
-                                        : const Color(0xFFFEE2E2), // Red Scrapped
+                                        ? const Color(0xFFDCFCE7)
+                                        : const Color(0xFFFEE2E2),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
@@ -2019,8 +2043,41 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     );
   }
 
+  // --- PERSONEL BAZLI ZİMMET YÖNETİMİ (CARİ MANTIĞI) ---
+
+  Map<String, Map<String, dynamic>> _getGroupedLoansMap() {
+    final Map<String, Map<String, dynamic>> grouped = {};
+
+    for (final loan in _personnelLoans) {
+      final pName = (loan['personnel_name'] ?? 'Bilinmeyen Personel').toString().trim();
+      final pId = (loan['personnel_id'] ?? pName).toString();
+      final qty = _asInt(loan['quantity']);
+
+      if (!grouped.containsKey(pName)) {
+        grouped[pName] = {
+          'personnel_id': pId,
+          'personnel_name': pName,
+          'total_quantity': 0,
+          'item_count': 0,
+          'latest_date': loan['borrowed_at'],
+          'loans': <Map<String, dynamic>>[],
+        };
+      }
+
+      final group = grouped[pName]!;
+      group['total_quantity'] = (group['total_quantity'] as int) + qty;
+      final loanList = group['loans'] as List<Map<String, dynamic>>;
+      loanList.add(loan);
+      group['item_count'] = loanList.length;
+    }
+
+    return grouped;
+  }
+
   Widget _buildPersonnelLoansTable() {
-    if (_personnelLoans.isEmpty) {
+    final groupedMap = _getGroupedLoansMap();
+
+    if (groupedMap.isEmpty) {
       return Container(
         decoration: BoxDecoration(
           color: AppColors.paper,
@@ -2028,9 +2085,25 @@ class _StockOverviewPageState extends State<StockOverviewPage>
           border: Border.all(color: AppColors.mist),
         ),
         padding: const EdgeInsets.all(32),
-        child: const Center(child: Text('Aktif personel zimmeti bulunmuyor.', style: TextStyle(color: Color(0xFF5A6E82)))),
+        child: Center(
+          child: Column(
+            children: [
+              const Text('Aktif personel zimmeti bulunmuyor.', style: TextStyle(color: Color(0xFF5A6E82))),
+              const SizedBox(height: 12),
+              if (_canManageStock)
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
+                  icon: const Icon(Icons.badge_outlined),
+                  label: const Text('Personele Yeni Zimmet Ver'),
+                  onPressed: () => _showPersonnelLoanModal(),
+                ),
+            ],
+          ),
+        ),
       );
     }
+
+    final groupedList = groupedMap.values.toList();
 
     return Container(
       width: double.infinity,
@@ -2040,53 +2113,200 @@ class _StockOverviewPageState extends State<StockOverviewPage>
         border: Border.all(color: AppColors.mist),
       ),
       clipBehavior: Clip.antiAlias,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minWidth: constraints.maxWidth),
-              child: DataTable(
-                headingRowColor: WidgetStateProperty.all(AppColors.ink),
-                headingRowHeight: 44,
-                columns: const [
-                  DataColumn(label: Text('Zimmetli Personel', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Ürün Adı / Kod', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Zimmet Miktarı', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Veriliş Tarihi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Zimmet Notu / İş Kodu', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('İşlem', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                ],
-                rows: _personnelLoans.map((loan) {
-                  final product = loan['inventory'] ?? {};
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(loan['personnel_name'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
-                      DataCell(Text('${product['displayName'] ?? product['name'] ?? 'Bilinmeyen'} (${product['code'] ?? ''})', style: const TextStyle(color: AppColors.ink))),
-                      DataCell(
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: AppColors.sand, borderRadius: BorderRadius.circular(6)),
-                          child: Text('${loan['quantity']} ${product['unit'] ?? 'Adet'}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink)),
-                        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: DataTable(
+                    headingRowColor: WidgetStateProperty.all(AppColors.ink),
+                    headingRowHeight: 44,
+                    dataRowMinHeight: 52,
+                    dataRowMaxHeight: 64,
+                    columns: const [
+                      DataColumn(label: Text('Teknik Personel (Cari Hesap)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                      DataColumn(label: Text('Zimmetli Kalem Çeşidi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                      DataColumn(label: Text('Toplam Ürün Adedi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                      DataColumn(label: Text('Son Zimmet Tarihi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                      DataColumn(label: Text('Zimmet İşlemleri', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                    ],
+                    rows: groupedList.map((group) {
+                      final pName = group['personnel_name'].toString();
+                      final pId = group['personnel_id'].toString();
+                      final itemCount = group['item_count'] as int;
+                      final totalQty = group['total_quantity'] as int;
+                      final latestDate = group['latest_date'];
+                      final loans = group['loans'] as List<Map<String, dynamic>>;
+
+                      return DataRow(
+                        cells: [
+                          DataCell(
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: AppColors.brass.withOpacity(0.2),
+                                  child: Text(
+                                    pName.isNotEmpty ? pName[0].toUpperCase() : 'P',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 13),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Text(pName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.ink)),
+                              ],
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(color: AppColors.sand, borderRadius: BorderRadius.circular(6)),
+                              child: Text('$itemCount Çeşit Ürün', style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.ink, fontSize: 13)),
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(color: AppColors.surfaceAccent, borderRadius: BorderRadius.circular(6)),
+                              child: Text('$totalQty Adet', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 13)),
+                            ),
+                          ),
+                          DataCell(Text(_formatDate(latestDate), style: const TextStyle(color: AppColors.ink))),
+                          DataCell(
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
+                                  icon: const Icon(Icons.receipt_long, size: 16),
+                                  label: Text('Zimmet Dökümü & İşle ($itemCount)'),
+                                  onPressed: () => _showPersonnelDetailModal(pName, pId, loans),
+                                ),
+                                const SizedBox(width: 8),
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.ink,
+                                    side: const BorderSide(color: AppColors.mist),
+                                    backgroundColor: Colors.white,
+                                  ),
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text('Zimmet Ekle'),
+                                  onPressed: () => _showPersonnelLoanModal(null, pId),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- PERSONEL ZİMMET DETAY & EKSTRE MODALI (CARİ DÖKÜMÜ) ---
+
+  void _showPersonnelDetailModal(String personnelName, String personnelId, List<Map<String, dynamic>> loans) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.badge, color: AppColors.ink),
+            const SizedBox(width: 8),
+            Expanded(child: Text('$personnelName - Zimmetli Ürün Dökümü')),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Container(
+            width: 750,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: AppColors.surfaceAccent, borderRadius: BorderRadius.circular(8)),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Toplam ${loans.length} Kalem / ${loans.fold<int>(0, (sum, l) => sum + _asInt(l['quantity']))} Adet Zimmetli Ürün Var',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 14),
                       ),
-                      DataCell(Text(_formatDate(loan['borrowed_at']), style: const TextStyle(color: AppColors.ink))),
-                      DataCell(Text(loan['note'] ?? '-', style: const TextStyle(color: AppColors.ink))),
-                      DataCell(
+                      if (_canManageStock)
                         ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
-                          icon: const Icon(Icons.assignment_turned_in, size: 16),
-                          label: const Text('Zimmeti İşle / Kapat'),
-                          onPressed: () => _showCloseLoanModal(loan),
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('+ Bu Personel İçin Yeni Zimmet Ver'),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _showPersonnelLoanModal(null, personnelId);
+                          },
                         ),
-                      ),
                     ],
-                  );
-                }).toList(),
-              ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    headingRowColor: WidgetStateProperty.all(AppColors.sand),
+                    headingRowHeight: 38,
+                    columns: const [
+                      DataColumn(label: Text('Ürün Adı / Kod', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
+                      DataColumn(label: Text('Miktar', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
+                      DataColumn(label: Text('Veriliş Tarihi', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
+                      DataColumn(label: Text('Zimmet Notu / İş Kodu', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
+                      DataColumn(label: Text('İşlem', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
+                    ],
+                    rows: loans.map((loan) {
+                      final product = loan['inventory'] ?? {};
+                      return DataRow(
+                        cells: [
+                          DataCell(Text('${product['displayName'] ?? product['name'] ?? 'Bilinmeyen'} (${product['code'] ?? ''})', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(color: AppColors.brass.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+                              child: Text('${loan['quantity']} ${product['unit'] ?? 'Adet'}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink)),
+                            ),
+                          ),
+                          DataCell(Text(_formatDate(loan['borrowed_at']), style: const TextStyle(color: AppColors.ink))),
+                          DataCell(Text(loan['note'] ?? '-', style: const TextStyle(color: AppColors.ink))),
+                          DataCell(
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+                              icon: const Icon(Icons.assignment_turned_in, size: 14),
+                              label: const Text('Zimmeti İşle / Kapat', style: TextStyle(fontSize: 12)),
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _showCloseLoanModal(loan);
+                              },
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
             ),
-          );
-        },
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Kapat')),
+        ],
       ),
     );
   }

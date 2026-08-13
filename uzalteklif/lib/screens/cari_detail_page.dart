@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/cari_account.dart';
 import '../models/market_rate.dart';
@@ -85,6 +86,46 @@ class _CariDetailPageState extends State<CariDetailPage> {
       _rates = rates;
       _loading = false;
     });
+  }
+
+  /// E-posta ile teklif gonder (url_launcher ile sistem e-posta istemcisi acar).
+  /// Gonderim sonrasi email_sent_at ve email_sent_to guncellenir.
+  Future<void> _sendQuoteEmail(Quote q, String toEmail) async {
+    final subject = Uri.encodeComponent('Teklif: ${q.code}');
+    final body = Uri.encodeComponent(
+      'Sayin ${_cari.contactName.trim().isNotEmpty ? _cari.contactName.trim() : "Yetkili"},\n\n'
+      '${q.code} kodlu teklifimizi incelemenize sunuyoruz.\n\n'
+      '${q.publicToken.isNotEmpty ? "Cevrimici goruntuleme: ${q.publicShareSlug}" : ""}\n\n'
+      'Bilgilerinize saygilarimizla.',
+    );
+    final uri = Uri.parse('mailto:$toEmail?subject=$subject&body=$body');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+      await widget.quoteRepository.markEmailSent(q.id, toEmail);
+      await _reload();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('E-posta istemcisi acildi. Gonderim kaydedildi: $toEmail'),
+            backgroundColor: const Color(0xFF29956F),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('E-posta istemcisi acilamadi.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateQuoteResponse(
+    Quote q,
+    CustomerResponse response,
+  ) async {
+    await widget.quoteRepository.updateCustomerResponse(q.id, response);
+    await _reload();
   }
 
   Future<void> _openQuote(Quote q) async {
@@ -226,6 +267,10 @@ class _CariDetailPageState extends State<CariDetailPage> {
                     const SizedBox(height: 12),
                     _buildCariMetrics(context),
                     const SizedBox(height: 12),
+                    _buildEmailActionPanel(context),
+                    const SizedBox(height: 12),
+                    _buildYetkililerCard(context),
+                    const SizedBox(height: 12),
                     Card(
                       elevation: 0,
                       shape: RoundedRectangleBorder(
@@ -257,7 +302,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
                             const Divider(height: 22),
                             _cariRow(
                               context,
-                              'Yetkili',
+                              'Ana Yetkili',
                               [
                                 c.contactName.trim(),
                                 c.contactTitle.trim(),
@@ -396,9 +441,11 @@ class _CariDetailPageState extends State<CariDetailPage> {
                               color: const Color(0xFFF6F8FA),
                               child: const Row(
                                 children: [
-                                  Expanded(flex: 2, child: _Th('Teklif')),
+                                  Expanded(flex: 3, child: _Th('Teklif')),
+                                  Expanded(flex: 2, child: _Th('Hazırlayan')),
                                   Expanded(flex: 2, child: _Th('Tarih')),
                                   Expanded(flex: 2, child: _Th('Durum')),
+                                  Expanded(flex: 2, child: _Th('İletişim')),
                                   Expanded(
                                     flex: 2,
                                     child: _Th('Tutar', align: TextAlign.end),
@@ -414,7 +461,10 @@ class _CariDetailPageState extends State<CariDetailPage> {
                               if (i > 0) const Divider(height: 1),
                               _QuoteDataRow(
                                 quote: _filteredQuotes[i],
+                                cariContacts: _cari.contacts,
                                 onTap: () => _openQuote(_filteredQuotes[i]),
+                                onSendEmail: (email) => _sendQuoteEmail(_filteredQuotes[i], email),
+                                onUpdateResponse: (r) => _updateQuoteResponse(_filteredQuotes[i], r),
                               ),
                             ],
                           ],
@@ -425,6 +475,386 @@ class _CariDetailPageState extends State<CariDetailPage> {
         ),
       ),
     );
+  }
+
+  Widget _buildYetkililerCard(BuildContext context) {
+    final contacts = _cari.contacts;
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: Color(0xFFD7DEE6)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Kayıtlı Yetkililer',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: _kInk,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F4F8),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '${contacts.length} kişi',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: _kSlate,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => _showAddEditContactDialog(),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Yetkili Ekle'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (contacts.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'Bu cariye henüz kayıtlı yetkili eklenmedi. '
+                  'Teklif oluştururken yazılan yetkililer buraya otomatik eklenecektir.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: _kSlate,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              )
+            else
+              Column(
+                children: [
+                  for (var i = 0; i < contacts.length; i++) ...[
+                    if (i > 0) const Divider(height: 16),
+                    _buildContactTile(context, contacts[i], i),
+                  ],
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContactTile(
+    BuildContext context,
+    CariContact contact,
+    int index,
+  ) {
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 18,
+          backgroundColor: contact.isPrimary
+              ? const Color(0xFFC98E4B).withValues(alpha: 0.18)
+              : const Color(0xFFEBF0F5),
+          child: Icon(
+            contact.isPrimary
+                ? Icons.star_rounded
+                : Icons.person_outline_rounded,
+            color: contact.isPrimary ? const Color(0xFFC98E4B) : _kSlate,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      contact.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        color: _kInk,
+                      ),
+                    ),
+                  ),
+                  if (contact.isPrimary) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFC98E4B).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'Ana Yetkili',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFFC98E4B),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              if (contact.title.isNotEmpty ||
+                  contact.phone.isNotEmpty ||
+                  contact.email.isNotEmpty)
+                Text(
+                  [
+                    if (contact.title.isNotEmpty) contact.title,
+                    if (contact.phone.isNotEmpty) contact.phone,
+                    if (contact.email.isNotEmpty) contact.email,
+                  ].join(' · '),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: _kSlate,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        IconButton(
+          tooltip: contact.isPrimary ? 'Ana yetkili' : 'Ana yetkili yap',
+          onPressed: contact.isPrimary ? null : () => _setPrimaryContact(index),
+          icon: Icon(
+            contact.isPrimary ? Icons.star_rounded : Icons.star_outline_rounded,
+            color: contact.isPrimary ? const Color(0xFFC98E4B) : _kSlate,
+            size: 20,
+          ),
+        ),
+        IconButton(
+          tooltip: 'Düzenle',
+          onPressed: () =>
+              _showAddEditContactDialog(existing: contact, index: index),
+          icon: const Icon(Icons.edit_outlined, color: _kSlate, size: 20),
+        ),
+        IconButton(
+          tooltip: 'Sil',
+          onPressed: () => _deleteContact(index),
+          icon: const Icon(
+            Icons.delete_outline_rounded,
+            color: Colors.redAccent,
+            size: 20,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _setPrimaryContact(int index) async {
+    final list = _cari.contacts
+        .map((c) => c.copyWith(isPrimary: false))
+        .toList();
+    list[index] = list[index].copyWith(isPrimary: true);
+    final updated = _cari.copyWith(
+      contacts: list,
+      contactName: list[index].name,
+      contactTitle: list[index].title,
+      phone: list[index].phone,
+      email: list[index].email,
+      updatedAt: DateTime.now().toUtc(),
+    );
+    setState(() => _cari = updated);
+    await widget.cariRepository.save(updated);
+  }
+
+  Future<void> _deleteContact(int index) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Yetkiliyi Sil'),
+        content: Text(
+          '${_cari.contacts[index].name} kişisini silmek istediğinizden emin misiniz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('İptal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    final list = List<CariContact>.from(_cari.contacts)..removeAt(index);
+    if (list.isNotEmpty && !list.any((c) => c.isPrimary)) {
+      list[0] = list[0].copyWith(isPrimary: true);
+    }
+    final primary = list.firstWhere(
+      (c) => c.isPrimary,
+      orElse: () => list.isNotEmpty ? list.first : const CariContact(name: ''),
+    );
+    final updated = _cari.copyWith(
+      contacts: list,
+      contactName: primary.name,
+      contactTitle: primary.title,
+      phone: primary.phone,
+      email: primary.email,
+      updatedAt: DateTime.now().toUtc(),
+    );
+    setState(() => _cari = updated);
+    await widget.cariRepository.save(updated);
+  }
+
+  Future<void> _showAddEditContactDialog({
+    CariContact? existing,
+    int? index,
+  }) async {
+    final nameCtrl = TextEditingController(text: existing?.name ?? '');
+    final titleCtrl = TextEditingController(text: existing?.title ?? '');
+    final phoneCtrl = TextEditingController(text: existing?.phone ?? '');
+    final emailCtrl = TextEditingController(text: existing?.email ?? '');
+    bool isPrimary = existing?.isPrimary ?? (_cari.contacts.isEmpty);
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(existing == null ? 'Yeni Yetkili Ekle' : 'Yetkili Düzenle'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Yetkili Adı Soyadı *',
+                  hintText: 'Örn: Ahmet Yılmaz',
+                ),
+                autofocus: true,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Unvanı',
+                  hintText: 'Örn: Satın Alma Müdürü',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Telefon',
+                  hintText: '05xx xxx xx xx',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'E-posta',
+                  hintText: 'ornek@firma.com',
+                ),
+              ),
+              const SizedBox(height: 8),
+              StatefulBuilder(
+                builder: (context, setCheckState) => CheckboxListTile(
+                  title: const Text('Ana Yetkili Yap'),
+                  value: isPrimary,
+                  onChanged: (val) =>
+                      setCheckState(() => isPrimary = val ?? false),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameCtrl.text.trim().isEmpty) return;
+              Navigator.pop(ctx, true);
+            },
+            child: const Text('Kaydet'),
+          ),
+        ],
+      ),
+    );
+
+    if (saved != true || nameCtrl.text.trim().isEmpty) return;
+
+    final newContact = CariContact(
+      name: nameCtrl.text.trim(),
+      title: titleCtrl.text.trim(),
+      phone: phoneCtrl.text.trim(),
+      email: emailCtrl.text.trim(),
+      isPrimary: isPrimary,
+    );
+
+    List<CariContact> list = List<CariContact>.from(_cari.contacts);
+    if (index != null && index >= 0 && index < list.length) {
+      list[index] = newContact;
+    } else {
+      list.add(newContact);
+    }
+
+    if (isPrimary) {
+      list = list
+          .map(
+            (c) => c.name.toLowerCase() == newContact.name.toLowerCase()
+                ? c.copyWith(isPrimary: true)
+                : c.copyWith(isPrimary: false),
+          )
+          .toList();
+    }
+
+    final primary = list.firstWhere(
+      (c) => c.isPrimary,
+      orElse: () => list.first,
+    );
+    final updated = _cari.copyWith(
+      contacts: list,
+      contactName: primary.name,
+      contactTitle: primary.title,
+      phone: primary.phone,
+      email: primary.email,
+      updatedAt: DateTime.now().toUtc(),
+    );
+
+    setState(() => _cari = updated);
+    await widget.cariRepository.save(updated);
   }
 
   Widget _buildCari360Header(BuildContext context) {
@@ -635,6 +1065,65 @@ class _CariDetailPageState extends State<CariDetailPage> {
     );
   }
 
+  Widget _buildEmailActionPanel(BuildContext context) {
+    // Gonderilmemis veya cevap bekleyen teklifler — aksiyon gerektiren
+    final actionRequired = _quotes.where((q) {
+      final needsSend = q.status == QuoteStatus.approved &&
+          q.emailSentAt == null;
+      final needsResponse = q.status == QuoteStatus.approved &&
+          q.emailSentAt != null &&
+          q.customerResponse == CustomerResponse.pending;
+      return needsSend || needsResponse;
+    }).toList(growable: false);
+
+    if (actionRequired.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: Color(0xFFE8B76A), width: 1.2),
+      ),
+      color: const Color(0xFFFFFBF0),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.notifications_active_rounded,
+                  size: 18,
+                  color: Color(0xFFA07028),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Aksiyon Gerektiren (${actionRequired.length})',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                    color: Color(0xFF7A5018),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            for (final q in actionRequired) ...[
+              _ActionRequiredTile(
+                quote: q,
+                cariContacts: _cari.contacts,
+                onSendEmail: (email) => _sendQuoteEmail(q, email),
+                onUpdateResponse: (r) => _updateQuoteResponse(q, r),
+              ),
+              if (q != actionRequired.last) const Divider(height: 16),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _cariRow(BuildContext context, String label, String value) {
     final v = value.trim();
     if (v.isEmpty) return const SizedBox.shrink();
@@ -766,10 +1255,22 @@ class _Th extends StatelessWidget {
 }
 
 class _QuoteDataRow extends StatelessWidget {
-  const _QuoteDataRow({required this.quote, required this.onTap});
+  const _QuoteDataRow({
+    required this.quote,
+    required this.onTap,
+    this.cariContacts = const [],
+    this.onSendEmail,
+    this.onUpdateResponse,
+  });
 
   final Quote quote;
   final VoidCallback onTap;
+  final List<CariContact> cariContacts;
+  final void Function(String email)? onSendEmail;
+  final void Function(CustomerResponse response)? onUpdateResponse;
+
+  static const _kInk = Color(0xFF17304C);
+  static const _kSlate = Color(0xFF5B6F7F);
 
   @override
   Widget build(BuildContext context) {
@@ -785,33 +1286,124 @@ class _QuoteDataRow extends StatelessWidget {
     final effectiveDate =
         quote.acceptedAt ?? quote.approvedAt ?? quote.createdAt;
     final dateStr = DateFormat(
-      'dd.MM.yyyy HH:mm',
+      'dd.MM.yyyy',
       'tr_TR',
     ).format(effectiveDate);
-    final statusLabel = quote.acceptedTotalTl != null
-        ? 'Anlasildi'
-        : quote.status.displayLabel;
+    final emailSent = quote.emailSentAt != null;
+    final emailViewed = quote.emailViewedAt != null;
+    final response = quote.customerResponse;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
+              // Teklif kodu + baslik + revizyon rozeti
               Expanded(
-                flex: 2,
-                child: Text(
-                  quote.code,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    color: _kInk,
-                    fontSize: 13,
-                  ),
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            quote.code,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: _kInk,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        if (quote.revisionCount > 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF4E0),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFE3B86C)),
+                            ),
+                            child: Text(
+                              'Rev ${quote.revisionCount}',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Color(0xFF9D5C1D),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (quote.title.trim().isNotEmpty)
+                      Text(
+                        quote.title.trim(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: _kSlate,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
                 ),
               ),
+              // Hazırlayan / Sorumlu Yetkili
+              Expanded(
+                flex: 2,
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 10,
+                      backgroundColor: const Color(0xFFE3EAF2),
+                      child: Text(
+                        (quote.createdByName.trim().isNotEmpty
+                                ? quote.createdByName.trim()
+                                : quote.documentProfile.preparedByName.trim().isNotEmpty
+                                    ? quote.documentProfile.preparedByName.trim()
+                                    : 'S')
+                            .characters
+                            .first
+                            .toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF17304C),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        quote.createdByName.trim().isNotEmpty
+                            ? quote.createdByName.trim()
+                            : (quote.documentProfile.preparedByName.trim().isNotEmpty
+                                ? quote.documentProfile.preparedByName.trim()
+                                : 'Belirtilmedi'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: _kInk,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Tarih
               Expanded(
                 flex: 2,
                 child: Text(
@@ -823,17 +1415,35 @@ class _QuoteDataRow extends StatelessWidget {
                   ),
                 ),
               ),
+              // Durum rozeti
               Expanded(
                 flex: 2,
-                child: Text(
-                  statusLabel,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
-                    color: _kInk,
-                  ),
+                child: _StatusBadge(status: quote.status, hasDeal: quote.acceptedTotalTl != null),
+              ),
+              // İletisim durumu (e-posta + cevap)
+              Expanded(
+                flex: 2,
+                child: Row(
+                  children: [
+                    _EmailIcon(
+                      sent: emailSent,
+                      viewed: emailViewed,
+                      sentTo: quote.emailSentTo,
+                      sentAt: quote.emailSentAt,
+                      contacts: cariContacts,
+                      primaryEmail: quote.documentProfile.customerEmail,
+                      onSendEmail: onSendEmail,
+                    ),
+                    const SizedBox(width: 4),
+                    if (emailSent)
+                      _ResponseIcon(
+                        response: response,
+                        onUpdateResponse: onUpdateResponse,
+                      ),
+                  ],
                 ),
               ),
+              // Tutar
               Expanded(
                 flex: 2,
                 child: Text(
@@ -850,6 +1460,266 @@ class _QuoteDataRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Teklif durum rozeti.
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.status, required this.hasDeal});
+  final QuoteStatus status;
+  final bool hasDeal;
+
+  @override
+  Widget build(BuildContext context) {
+    if (hasDeal) {
+      return _badge('Anlasildi', const Color(0xFF29956F), const Color(0xFFE5F5EE));
+    }
+    return switch (status) {
+      QuoteStatus.draft => _badge('Taslak', const Color(0xFF5B6F7F), const Color(0xFFF1F4F8)),
+      QuoteStatus.pending => _badge('Hazir', const Color(0xFF8B5918), const Color(0xFFFFF4E0)),
+      QuoteStatus.approved => _badge('Gonderildi', const Color(0xFF2B82C9), const Color(0xFFE6F2FB)),
+      QuoteStatus.accepted => _badge('Kazanildi', const Color(0xFF29956F), const Color(0xFFE5F5EE)),
+      QuoteStatus.rejected => _badge('Kaybedildi', const Color(0xFF9D2C2C), const Color(0xFFFBE8E8)),
+      QuoteStatus.cancelled => _badge('Iptal', const Color(0xFF5B6F7F), const Color(0xFFF1F4F8)),
+    };
+  }
+
+  Widget _badge(String label, Color fg, Color bg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: fg,
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
+  }
+}
+
+/// E-posta gonderim ikonu + menu.
+class _EmailIcon extends StatelessWidget {
+  const _EmailIcon({
+    required this.sent,
+    required this.viewed,
+    required this.sentTo,
+    required this.contacts,
+    required this.primaryEmail,
+    this.sentAt,
+    this.onSendEmail,
+  });
+
+  final bool sent;
+  final bool viewed;
+  final String sentTo;
+  final DateTime? sentAt;
+  final List<CariContact> contacts;
+  final String primaryEmail;
+  final void Function(String email)? onSendEmail;
+
+  @override
+  Widget build(BuildContext context) {
+    if (sent) {
+      // Gonderildi rozeti
+      final tooltip = viewed
+          ? 'Goruntulendi · $sentTo'
+          : 'Gonderildi · $sentTo';
+      return Tooltip(
+        message: tooltip,
+        child: Icon(
+          viewed ? Icons.mark_email_read_rounded : Icons.email_rounded,
+          size: 18,
+          color: viewed ? const Color(0xFF29956F) : const Color(0xFF2B82C9),
+        ),
+      );
+    }
+
+    // Gonderilmedi — butonu goster
+    if (onSendEmail == null) return const SizedBox.shrink();
+
+    // E-posta adresi adaylari: contacts + documentProfile
+    final emailOptions = <String>{};
+    for (final c in contacts) {
+      if (c.email.trim().isNotEmpty) emailOptions.add(c.email.trim());
+    }
+    if (primaryEmail.trim().isNotEmpty) emailOptions.add(primaryEmail.trim());
+
+    if (emailOptions.isEmpty) {
+      return Tooltip(
+        message: 'E-posta adresi yok',
+        child: Icon(
+          Icons.email_outlined,
+          size: 18,
+          color: Colors.grey.shade400,
+        ),
+      );
+    }
+
+    if (emailOptions.length == 1) {
+      return Tooltip(
+        message: 'E-posta ile gonder: ${emailOptions.first}',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
+          onTap: () => onSendEmail!(emailOptions.first),
+          child: const Icon(
+            Icons.send_rounded,
+            size: 18,
+            color: Color(0xFF8B5918),
+          ),
+        ),
+      );
+    }
+
+    return PopupMenuButton<String>(
+      tooltip: 'E-posta ile gonder',
+      icon: const Icon(Icons.send_rounded, size: 18, color: Color(0xFF8B5918)),
+      iconSize: 18,
+      padding: EdgeInsets.zero,
+      itemBuilder: (ctx) => emailOptions
+          .map(
+            (e) => PopupMenuItem<String>(
+              value: e,
+              child: Text(e),
+            ),
+          )
+          .toList(),
+      onSelected: (email) => onSendEmail!(email),
+    );
+  }
+}
+
+/// Musteri cevap durumu ikonu.
+class _ResponseIcon extends StatelessWidget {
+  const _ResponseIcon({required this.response, this.onUpdateResponse});
+
+  final CustomerResponse response;
+  final void Function(CustomerResponse)? onUpdateResponse;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color, tip) = switch (response) {
+      CustomerResponse.pending => (
+        Icons.hourglass_top_rounded,
+        const Color(0xFF8B5918),
+        'Cevap bekleniyor',
+      ),
+      CustomerResponse.accepted => (
+        Icons.thumb_up_rounded,
+        const Color(0xFF29956F),
+        'Musteri kabul etti',
+      ),
+      CustomerResponse.rejected => (
+        Icons.thumb_down_rounded,
+        const Color(0xFF9D2C2C),
+        'Musteri reddetti',
+      ),
+      CustomerResponse.noResponse => (
+        Icons.do_not_disturb_alt_rounded,
+        const Color(0xFF5B6F7F),
+        'Cevap yok',
+      ),
+    };
+
+    if (onUpdateResponse == null) {
+      return Tooltip(message: tip, child: Icon(icon, size: 17, color: color));
+    }
+
+    return PopupMenuButton<CustomerResponse>(
+      tooltip: tip,
+      icon: Icon(icon, size: 17, color: color),
+      iconSize: 17,
+      padding: EdgeInsets.zero,
+      itemBuilder: (ctx) => CustomerResponse.values
+          .map(
+            (r) => PopupMenuItem<CustomerResponse>(
+              value: r,
+              child: Text(r.displayLabel),
+            ),
+          )
+          .toList(),
+      onSelected: (r) => onUpdateResponse!(r),
+    );
+  }
+}
+
+/// Aksiyon gerektiren teklif satiri (E-posta Aksiyon Paneli icin).
+class _ActionRequiredTile extends StatelessWidget {
+  const _ActionRequiredTile({
+    required this.quote,
+    required this.cariContacts,
+    required this.onSendEmail,
+    required this.onUpdateResponse,
+  });
+
+  final Quote quote;
+  final List<CariContact> cariContacts;
+  final void Function(String email) onSendEmail;
+  final void Function(CustomerResponse r) onUpdateResponse;
+
+  @override
+  Widget build(BuildContext context) {
+    final needsSend = quote.emailSentAt == null;
+    final dateStr = DateFormat('dd.MM.yyyy', 'tr_TR').format(quote.createdAt);
+
+    return Row(
+      children: [
+        Icon(
+          needsSend ? Icons.forward_to_inbox_rounded : Icons.schedule_rounded,
+          size: 18,
+          color: const Color(0xFFA07028),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                quote.code,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  color: Color(0xFF17304C),
+                ),
+              ),
+              Text(
+                needsSend
+                    ? 'Onaylandi ama e-posta gonderilmedi ($dateStr)'
+                    : 'E-posta gonderildi, musteri cevabi bekleniyor',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF7A5018),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        if (needsSend)
+          _EmailIcon(
+            sent: false,
+            viewed: false,
+            sentTo: '',
+            contacts: cariContacts,
+            primaryEmail: quote.documentProfile.customerEmail,
+            onSendEmail: onSendEmail,
+          )
+        else
+          _ResponseIcon(
+            response: quote.customerResponse,
+            onUpdateResponse: onUpdateResponse,
+          ),
+      ],
     );
   }
 }

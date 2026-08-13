@@ -1282,6 +1282,29 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       return null;
     }
 
+    final contactNameInput = _customerNameController.text.trim();
+    if (_selectedCariId.isNotEmpty && contactNameInput.isNotEmpty) {
+      final matches = _cariler.where((c) => c.id == _selectedCariId);
+      if (matches.isNotEmpty) {
+        try {
+          final updatedCari = await widget.cariRepository.ensureContactExists(
+            matches.first,
+            contactNameInput,
+            title: _customerTitleController.text.trim(),
+            phone: _customerPhoneController.text.trim(),
+            email: _customerEmailController.text.trim(),
+          );
+          _cariler = _cariler
+              .map((c) => c.id == updatedCari.id ? updatedCari : c)
+              .toList();
+        } catch (_) {}
+      }
+    }
+
+    if (!mounted) {
+      return null;
+    }
+
     final knownSectionIds = _sections.map((s) => s.id).toSet();
     final items = _items
         .map((draft) {
@@ -2137,16 +2160,73 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
           value == null || value.trim().isEmpty ? 'Zorunlu alan' : null,
       onChanged: (_) => setState(() {}),
     );
-    Widget contactField() => TextFormField(
-      controller: _customerNameController,
-      decoration: const InputDecoration(
-        labelText: 'Yetkili',
-        prefixIcon: Icon(Icons.person_outline_rounded),
-        isDense: true,
-      ),
-      validator: (value) =>
-          value == null || value.trim().isEmpty ? 'Zorunlu alan' : null,
-    );
+    Widget contactField() {
+      final currentCariMatches = _cariler.where((c) => c.id == _selectedCariId);
+      final currentCari = currentCariMatches.isNotEmpty
+          ? currentCariMatches.first
+          : null;
+      final contacts = currentCari?.contacts ?? const [];
+
+      return TextFormField(
+        controller: _customerNameController,
+        decoration: InputDecoration(
+          labelText: 'Yetkili',
+          prefixIcon: const Icon(Icons.person_outline_rounded),
+          isDense: true,
+          suffixIcon: contacts.isEmpty
+              ? null
+              : PopupMenuButton<CariContact>(
+                  icon: const Icon(
+                    Icons.arrow_drop_down_circle_outlined,
+                    size: 20,
+                  ),
+                  tooltip: 'Kayıtlı Yetkililerden Seç',
+                  onSelected: (contact) {
+                    setState(() {
+                      _customerNameController.text = contact.name;
+                      _customerTitleController.text = contact.title;
+                      _customerPhoneController.text = contact.phone;
+                      _customerEmailController.text = contact.email;
+                    });
+                  },
+                  itemBuilder: (ctx) => [
+                    for (final c in contacts)
+                      PopupMenuItem(
+                        value: c,
+                        child: Row(
+                          children: [
+                            Icon(
+                              c.isPrimary
+                                  ? Icons.star_rounded
+                                  : Icons.person_rounded,
+                              size: 16,
+                              color: c.isPrimary
+                                  ? const Color(0xFFC98E4B)
+                                  : Colors.grey,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                c.title.isNotEmpty
+                                    ? '${c.name} (${c.title})'
+                                    : c.name,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+        ),
+        validator: (value) =>
+            value == null || value.trim().isEmpty ? 'Zorunlu alan' : null,
+      );
+    }
+
     Widget topicField() => TextFormField(
       controller: _titleController,
       decoration: const InputDecoration(

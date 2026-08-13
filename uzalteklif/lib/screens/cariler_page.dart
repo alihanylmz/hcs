@@ -53,6 +53,9 @@ class _CarilerPageState extends State<CarilerPage> {
     final list = _list
         .where((cari) {
           if (query.isEmpty) return true;
+          final contactsStr = cari.contacts
+              .map((c) => '${c.name} ${c.title} ${c.phone} ${c.email}')
+              .join(' ');
           return [
             cari.companyName,
             cari.contactName,
@@ -62,6 +65,7 @@ class _CarilerPageState extends State<CarilerPage> {
             cari.taxOffice,
             cari.taxNumber,
             cari.address,
+            contactsStr,
           ].join(' ').toLowerCase().contains(query);
         })
         .toList(growable: false);

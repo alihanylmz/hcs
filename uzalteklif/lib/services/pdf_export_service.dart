@@ -7,7 +7,6 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-import '../config/app_config.dart';
 import '../models/quote.dart';
 import 'pdf_file_saver_stub.dart'
     if (dart.library.io) 'pdf_file_saver_io.dart'
@@ -405,8 +404,7 @@ class PdfExportService {
   // -------------------------------------------------------------------------
 
   pw.Widget _buildTitleBand(Quote quote) {
-    final shareCard = _buildShareCard(quote);
-    final titleColumn = pw.Column(
+    return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Container(
@@ -435,19 +433,6 @@ class PdfExportService {
             lineSpacing: 1.5,
           ),
         ),
-      ],
-    );
-
-    if (shareCard == null) {
-      return titleColumn;
-    }
-
-    return pw.Row(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Expanded(child: titleColumn),
-        pw.SizedBox(width: 14),
-        shareCard,
       ],
     );
   }
@@ -492,111 +477,6 @@ class PdfExportService {
     return quote.customerCompany.trim().isNotEmpty
         ? quote.customerCompany.trim()
         : quote.customerName.trim();
-  }
-
-  /// PDF'in sag ust koselerinde yer alan QR + kisa link kartini uretir.
-  /// Teklifin paylasim tokeni yoksa (eski kayitlar) null doner; bu durumda
-  /// baslik eski (yalniz sol) duzenini korur.
-  pw.Widget? _buildShareCard(Quote quote) {
-    final token = quote.publicToken.trim();
-    if (token.isEmpty) return null;
-
-    final baseUrl = AppConfig.normalizedPublicQuoteBaseUrl;
-    final shareUrl = quote.publicShareUrl(baseUrl);
-    if (shareUrl.isEmpty) return null;
-
-    final hostLabel = _extractHostLabel(baseUrl);
-    final slug = quote.publicShareSlug;
-
-    final qr = pw.Container(
-      width: 76,
-      height: 76,
-      padding: const pw.EdgeInsets.all(3),
-      decoration: pw.BoxDecoration(
-        color: _paper,
-        border: pw.Border.all(color: _hairline),
-        borderRadius: pw.BorderRadius.circular(3),
-      ),
-      child: pw.BarcodeWidget(
-        data: shareUrl,
-        barcode: pw.Barcode.qrCode(
-          errorCorrectLevel: pw.BarcodeQRCorrectionLevel.medium,
-        ),
-        color: _ink,
-        drawText: false,
-      ),
-    );
-
-    return pw.Container(
-      width: 170,
-      padding: const pw.EdgeInsets.all(8),
-      decoration: pw.BoxDecoration(
-        color: _paper,
-        border: pw.Border.all(color: _hairline),
-        borderRadius: pw.BorderRadius.circular(4),
-      ),
-      child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.center,
-        children: [
-          pw.UrlLink(destination: shareUrl, child: qr),
-          pw.SizedBox(width: 8),
-          pw.Expanded(
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              mainAxisAlignment: pw.MainAxisAlignment.center,
-              children: [
-                pw.Text(
-                  'ONLINE TEKLIF',
-                  style: pw.TextStyle(
-                    color: _accent,
-                    fontSize: 7,
-                    letterSpacing: 1.2,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-                pw.SizedBox(height: 2),
-                pw.Text(
-                  'Karekodu okutun',
-                  style: const pw.TextStyle(color: _slate, fontSize: 7.5),
-                ),
-                pw.SizedBox(height: 6),
-                if (hostLabel.isNotEmpty)
-                  pw.Text(
-                    hostLabel,
-                    style: pw.TextStyle(
-                      color: _ink,
-                      fontSize: 8,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                pw.UrlLink(
-                  destination: shareUrl,
-                  child: pw.Text(
-                    slug,
-                    style: pw.TextStyle(
-                      color: _ink,
-                      fontSize: 8,
-                      fontWeight: pw.FontWeight.bold,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// `https://uzalteknik.com/t` gibi bir URL'den yalnizca host kismini
-  /// ("uzalteknik.com") cikarir. Kullanici yanlis bir deger girdiyse ham
-  /// metni doner, bos ise bos string doner.
-  static String _extractHostLabel(String baseUrl) {
-    if (baseUrl.isEmpty) return '';
-    final uri = Uri.tryParse(baseUrl);
-    if (uri == null || uri.host.isEmpty) return baseUrl;
-    return uri.host;
   }
 
   pw.Widget _buildMetaRow(Quote quote, _PriceView price) {

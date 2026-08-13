@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/market_rate.dart';
 import '../models/product.dart';
@@ -392,6 +393,48 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     }
   }
 
+  /// Sistemin e-posta istemcisini acar, gonderim kaydeder.
+  Future<void> _sendEmail(String toEmail) async {
+    final subject = Uri.encodeComponent('Teklif: ${_quote.code}');
+    final body = Uri.encodeComponent(
+      'Sayin ${_quote.customerName.trim().isNotEmpty ? _quote.customerName.trim() : "Yetkili"},\n\n'
+      '${_quote.code} kodlu teklifimizi incelemenize sunuyoruz.\n\n'
+      '${_quote.publicToken.isNotEmpty ? "Cevrimici goruntuleme: ${_quote.publicShareSlug}" : ""}\n\n'
+      'Bilgilerinize saygilarimizla.',
+    );
+    final uri = Uri.parse('mailto:$toEmail?subject=$subject&body=$body');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+      await widget.quoteRepository.markEmailSent(_quote.id, toEmail);
+      final updated = _quote.copyWith(
+        emailSentAt: DateTime.now().toUtc(),
+        emailSentTo: toEmail,
+      );
+      if (!mounted) return;
+      setState(() => _quote = updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('E-posta istemcisi acildi. Gonderim kaydedildi: $toEmail'),
+          backgroundColor: const Color(0xFF29956F),
+        ),
+      );
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('E-posta istemcisi acilamadi.')),
+      );
+    }
+  }
+
+  Future<void> _markCustomerResponse(CustomerResponse response) async {
+    await widget.quoteRepository.updateCustomerResponse(_quote.id, response);
+    if (!mounted) return;
+    setState(() => _quote = _quote.copyWith(customerResponse: response));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Musteri karari guncellendi: ${response.displayLabel}')),
+    );
+  }
+
   Future<_AgreedDealResult?> _askAcceptedDeal() async {
     return showDialog<_AgreedDealResult>(
       context: context,
@@ -751,6 +794,40 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 color: const Color(0xFF2C6957),
               ),
             ],
+            // E-posta gonderim adimi
+            if (_quote.emailSentAt != null) ...[
+              _workflowConnector(),
+              _workflowStep(
+                title: 'E-posta gönderildi',
+                subtitle: '${_friendly(_quote.emailSentAt!)} — ${_quote.emailSentTo}',
+                icon: Icons.email_rounded,
+                color: const Color(0xFF2B82C9),
+              ),
+            ],
+            // Musteri cevap adimi
+            if (_quote.emailSentAt != null &&
+                _quote.customerResponse != CustomerResponse.pending) ...[
+              _workflowConnector(),
+              _workflowStep(
+                title: 'Müşteri kararı: ${_quote.customerResponse.displayLabel}',
+                subtitle: switch (_quote.customerResponse) {
+                  CustomerResponse.accepted => 'Müşteri kabul etti.',
+                  CustomerResponse.rejected => 'Müşteri reddetti.',
+                  CustomerResponse.noResponse => 'Cevap alınamadı.',
+                  CustomerResponse.pending => '',
+                },
+                icon: switch (_quote.customerResponse) {
+                  CustomerResponse.accepted => Icons.thumb_up_rounded,
+                  CustomerResponse.rejected => Icons.thumb_down_rounded,
+                  _ => Icons.do_not_disturb_alt_rounded,
+                },
+                color: switch (_quote.customerResponse) {
+                  CustomerResponse.accepted => const Color(0xFF29956F),
+                  CustomerResponse.rejected => const Color(0xFF9D2C2C),
+                  _ => const Color(0xFF5B6F7F),
+                },
+              ),
+            ],
             if (_quote.status == QuoteStatus.rejected &&
                 _quote.approvedAt != null) ...[
               _workflowConnector(),
@@ -779,6 +856,55 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 subtitle: _friendly(_quote.approvedAt!),
                 icon: Icons.cancel_schedule_send_outlined,
                 color: const Color(0xFF705C49),
+              ),
+            ],
+            // Revizyon / Yönetici Notu (Varsa)
+            if (_quote.approvalNote.trim().isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF9EE),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE8C88B)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.note_alt_outlined,
+                      size: 18,
+                      color: Color(0xFF9D5C1D),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Süreç / Revizyon Notu:',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF9D5C1D),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _quote.approvalNote.trim(),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF3D2C1D),
+                              height: 1.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ],
@@ -888,10 +1014,172 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                   ),
                 if (_quote.createdByName.trim().isNotEmpty)
                   _buildMiniChip('Teklif Sorumlusu', _quote.createdByName),
+                // E-posta takip chip'leri
+                if (_quote.emailSentAt != null)
+                  _buildMiniChip(
+                    'E-posta Gönderildi',
+                    '${_friendly(_quote.emailSentAt!)} — ${_quote.emailSentTo}',
+                  ),
+                if (_quote.emailSentAt != null)
+                  _buildMiniChip(
+                    'Müşteri Kararı',
+                    _quote.customerResponse.displayLabel,
+                  ),
               ],
             ),
+            // E-posta gonderim butonu (status approved ise)
+            if (_quote.status == QuoteStatus.approved) ...[
+              const SizedBox(height: 16),
+              _buildEmailSendRow(),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  /// Onayli tekliflerde e-posta gonderim ve musteri cevap satiri.
+  Widget _buildEmailSendRow() {
+    final emails = <String>{};
+    if (_quote.documentProfile.customerEmail.trim().isNotEmpty) {
+      emails.add(_quote.documentProfile.customerEmail.trim());
+    }
+    final alreadySent = _quote.emailSentAt != null;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F6FF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFB8D0ED)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                alreadySent
+                    ? Icons.mark_email_read_rounded
+                    : Icons.forward_to_inbox_rounded,
+                size: 18,
+                color: const Color(0xFF2B82C9),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                alreadySent ? 'E-posta Gönderildi' : 'E-posta ile Gönder',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  color: Color(0xFF1A4A7A),
+                ),
+              ),
+            ],
+          ),
+          if (alreadySent) ...[
+            const SizedBox(height: 6),
+            Text(
+              '${DateFormat('dd.MM.yyyy HH:mm', 'tr_TR').format(_quote.emailSentAt!)} — ${_quote.emailSentTo}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF2B82C9),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Text(
+                  'Müşteri kararı:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF17304C),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                PopupMenuButton<CustomerResponse>(
+                  tooltip: 'Karar güncelle',
+                  itemBuilder: (ctx) => CustomerResponse.values
+                      .map(
+                        (r) => PopupMenuItem<CustomerResponse>(
+                          value: r,
+                          child: Text(r.displayLabel),
+                        ),
+                      )
+                      .toList(),
+                  onSelected: _markCustomerResponse,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFB8D0ED)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _quote.customerResponse.displayLabel,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                            color: Color(0xFF17304C),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.arrow_drop_down_rounded,
+                          size: 18,
+                          color: Color(0xFF5B6F7F),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ] else if (emails.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: emails
+                  .map(
+                    (e) => FilledButton.icon(
+                      onPressed: () => _sendEmail(e),
+                      icon: const Icon(Icons.send_rounded, size: 16),
+                      label: Text(e),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF2B82C9),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ] else ...[
+            const SizedBox(height: 6),
+            const Text(
+              'Bu teklifte kayıtlı müşteri e-postası yok. '
+              'Teklif seçeneklerinden ekleyebilirsiniz.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF5B6F7F),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

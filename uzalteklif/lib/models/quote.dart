@@ -336,6 +336,51 @@ extension QuoteStatusX on QuoteStatus {
   }
 }
 
+/// Musterinin teklif kararini temsil eder. Supabase'de `customer_response`
+/// sutununda saklanir.
+enum CustomerResponse { pending, accepted, rejected, noResponse }
+
+extension CustomerResponseX on CustomerResponse {
+  String get storageKey {
+    switch (this) {
+      case CustomerResponse.pending:
+        return 'pending';
+      case CustomerResponse.accepted:
+        return 'accepted';
+      case CustomerResponse.rejected:
+        return 'rejected';
+      case CustomerResponse.noResponse:
+        return 'no_response';
+    }
+  }
+
+  String get displayLabel {
+    switch (this) {
+      case CustomerResponse.pending:
+        return 'Bekleniyor';
+      case CustomerResponse.accepted:
+        return 'Kabul Etti';
+      case CustomerResponse.rejected:
+        return 'Reddetti';
+      case CustomerResponse.noResponse:
+        return 'Cevap Yok';
+    }
+  }
+
+  static CustomerResponse fromStorageKey(String? raw) {
+    switch (raw) {
+      case 'accepted':
+        return CustomerResponse.accepted;
+      case 'rejected':
+        return CustomerResponse.rejected;
+      case 'no_response':
+        return CustomerResponse.noResponse;
+      default:
+        return CustomerResponse.pending;
+    }
+  }
+}
+
 /// Teklifin odeme yontemini yapilandirilmis sekilde tutar. `paymentTerms`
 /// free-text alani hala korunur (geriye donuk uyumluluk ve ozel notlar icin)
 /// ancak PDF ve linkler bu enum'a gore davranir.
@@ -415,6 +460,10 @@ class Quote {
     this.createdBy,
     this.createdByName = '',
     this.archivedAt,
+    this.emailSentAt,
+    this.emailSentTo = '',
+    this.emailViewedAt,
+    this.customerResponse = CustomerResponse.pending,
   });
 
   final String id;
@@ -515,6 +564,18 @@ class Quote {
 
   /// Dolu ise teklif arsivlenmistir; aktif listelerde gosterilmez.
   final DateTime? archivedAt;
+
+  /// Teklifin musteri e-postasina gonderildigi tarih (UTC). Null ise henuz gonderilmemistir.
+  final DateTime? emailSentAt;
+
+  /// Teklifin gonderildigi e-posta adresi. Bos ise henuz gonderilmemistir.
+  final String emailSentTo;
+
+  /// Musterinin public teklif linkini ilk actigi tarih (UTC).
+  final DateTime? emailViewedAt;
+
+  /// Musterinin teklif karari.
+  final CustomerResponse customerResponse;
 
   /// Kalemleri kategori sirasina gore gruplandirir. Bir kategoriye ait hic
   /// kalem yoksa grup listeye eklenmez. Son olarak hicbir `sections` icindeki
@@ -672,6 +733,12 @@ class Quote {
     String? createdByName,
     DateTime? archivedAt,
     bool clearArchivedAt = false,
+    DateTime? emailSentAt,
+    bool clearEmailSentAt = false,
+    String? emailSentTo,
+    DateTime? emailViewedAt,
+    bool clearEmailViewedAt = false,
+    CustomerResponse? customerResponse,
   }) {
     return Quote(
       id: id,
@@ -710,6 +777,10 @@ class Quote {
       createdBy: createdBy ?? this.createdBy,
       createdByName: createdByName ?? this.createdByName,
       archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
+      emailSentAt: clearEmailSentAt ? null : (emailSentAt ?? this.emailSentAt),
+      emailSentTo: emailSentTo ?? this.emailSentTo,
+      emailViewedAt: clearEmailViewedAt ? null : (emailViewedAt ?? this.emailViewedAt),
+      customerResponse: customerResponse ?? this.customerResponse,
     );
   }
 
@@ -751,6 +822,10 @@ class Quote {
     'created_by': createdBy,
     'created_by_name': createdByName,
     'archived_at': archivedAt?.toIso8601String(),
+    'email_sent_at': emailSentAt?.toIso8601String(),
+    'email_sent_to': emailSentTo,
+    'email_viewed_at': emailViewedAt?.toIso8601String(),
+    'customer_response': customerResponse.storageKey,
   };
 
   factory Quote.fromJson(Map<String, dynamic> json) {
@@ -808,6 +883,12 @@ class Quote {
       createdBy: _parseOptionalUuid(json['created_by']),
       createdByName: (json['created_by_name'] as String?)?.trim() ?? '',
       archivedAt: _parseDateTime(json['archived_at']),
+      emailSentAt: _parseDateTime(json['email_sent_at']),
+      emailSentTo: (json['email_sent_to'] as String?)?.trim() ?? '',
+      emailViewedAt: _parseDateTime(json['email_viewed_at']),
+      customerResponse: CustomerResponseX.fromStorageKey(
+        json['customer_response'] as String?,
+      ),
     );
   }
 

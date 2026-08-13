@@ -136,4 +136,40 @@ class QuoteRepository {
     }
     _memoryQuotes[index] = quote;
   }
+
+  /// Teklifin e-posta gonderim bilgisini gunceller.
+  /// Memory modunda sadece local listeyi degistirir.
+  Future<void> markEmailSent(String quoteId, String sentTo) async {
+    final now = DateTime.now().toUtc();
+    final index = _memoryQuotes.indexWhere((q) => q.id == quoteId);
+    if (index != -1) {
+      _memoryQuotes[index] = _memoryQuotes[index].copyWith(
+        emailSentAt: now,
+        emailSentTo: sentTo,
+      );
+    }
+    if (_client == null) return;
+    await _client.from('quotes').update({
+      'email_sent_at': now.toIso8601String(),
+      'email_sent_to': sentTo,
+    }).eq('id', quoteId);
+  }
+
+  /// Musterinin teklif kararini gunceller.
+  Future<void> updateCustomerResponse(
+    String quoteId,
+    CustomerResponse response,
+  ) async {
+    final index = _memoryQuotes.indexWhere((q) => q.id == quoteId);
+    if (index != -1) {
+      _memoryQuotes[index] = _memoryQuotes[index].copyWith(
+        customerResponse: response,
+      );
+    }
+    if (_client == null) return;
+    await _client.from('quotes').update({
+      'customer_response': response.storageKey,
+    }).eq('id', quoteId);
+  }
 }
+

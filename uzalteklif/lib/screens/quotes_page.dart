@@ -1780,19 +1780,47 @@ class _QuoteSummaryCard extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              if (quote.createdByName.trim().isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text(
-                  'Teklif sorumlusu: ${quote.createdByName}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF657888),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 9,
+                    backgroundColor: const Color(0xFFE3EAF2),
+                    child: Text(
+                      (quote.createdByName.trim().isNotEmpty
+                              ? quote.createdByName.trim()
+                              : quote.documentProfile.preparedByName.trim().isNotEmpty
+                                  ? quote.documentProfile.preparedByName.trim()
+                                  : 'S')
+                          .characters
+                          .first
+                          .toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF17304C),
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      quote.createdByName.trim().isNotEmpty
+                          ? 'Sorumlu: ${quote.createdByName.trim()}'
+                          : (quote.documentProfile.preparedByName.trim().isNotEmpty
+                              ? 'Hazırlayan: ${quote.documentProfile.preparedByName.trim()}'
+                              : 'Sorumlu Belirtilmedi'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF4A6072),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               if (archived != null) ...[
                 const SizedBox(height: 2),
                 Text(

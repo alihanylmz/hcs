@@ -121,8 +121,7 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
     setState(() => _submitting = true);
 
     try {
-      final Uint8List? signatureBytes =
-          await _signatureController.toPngBytes();
+      final Uint8List? signatureBytes = await _signatureController.toPngBytes();
       if (signatureBytes == null) throw Exception('İmza alınamadı.');
 
       final checkedIndices = <int>[];
@@ -147,10 +146,7 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
       if (mounted) {
         setState(() => _submitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -207,9 +203,10 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
 
   Widget _buildSuccessView() {
     final signedAt = _form?.signedAt;
-    final formatted = signedAt != null
-        ? DateFormat('dd MMMM yyyy, HH:mm', 'tr_TR').format(signedAt)
-        : null;
+    final formatted =
+        signedAt != null
+            ? DateFormat('dd MMMM yyyy, HH:mm', 'tr_TR').format(signedAt)
+            : null;
 
     return Center(
       child: SingleChildScrollView(
@@ -224,8 +221,11 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
                 color: Colors.green.shade100,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check_circle,
-                  color: Colors.green, size: 48),
+              child: const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 48,
+              ),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -247,7 +247,9 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
               const SizedBox(height: 20),
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 12),
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.green.shade50,
                   borderRadius: BorderRadius.circular(12),
@@ -259,13 +261,18 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
                   spacing: 8,
                   runSpacing: 4,
                   children: [
-                    const Icon(Icons.access_time,
-                        color: Colors.green, size: 16),
+                    const Icon(
+                      Icons.access_time,
+                      color: Colors.green,
+                      size: 16,
+                    ),
                     Text(
                       'İmzalanma: $formatted',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                          color: Colors.green, fontWeight: FontWeight.w600),
+                        color: Colors.green,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -289,35 +296,31 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
     if (template == null) return const SizedBox();
 
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // --- LOGO / BAŞLIK ---
-            _buildHeader(template),
-            const SizedBox(height: 20),
-
-            // --- BİLGİLENDİRME METNİ ---
-            _buildInfoTextCard(template),
-            const SizedBox(height: 16),
-
-            // --- ONAY KUTUCUKları ---
-            _buildCheckboxesCard(template),
-            const SizedBox(height: 16),
-
-            // --- MÜŞTERİ ADI ---
-            _buildNameCard(),
-            const SizedBox(height: 16),
-
-            // --- İMZA ALANI ---
-            _buildSignatureCard(),
-            const SizedBox(height: 24),
-
-            // --- ONAYLA BUTONU ---
-            _buildSubmitButton(),
-            const SizedBox(height: 40),
-          ],
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildHeader(template),
+                const SizedBox(height: 14),
+                _buildSummaryStrip(template),
+                const SizedBox(height: 14),
+                _buildInfoTextCard(template),
+                const SizedBox(height: 14),
+                _buildCheckboxesCard(template),
+                const SizedBox(height: 14),
+                _buildNameCard(),
+                const SizedBox(height: 14),
+                _buildSignatureCard(),
+                const SizedBox(height: 22),
+                _buildSubmitButton(),
+                const SizedBox(height: 32),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -325,57 +328,114 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
 
   Widget _buildHeader(ServiceFormTemplate template) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
       decoration: BoxDecoration(
-        color: AppColors.corporateNavy,
-        borderRadius: BorderRadius.circular(16),
+        color: const Color(0xFF0F2742),
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Column(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.assignment_outlined, color: Colors.white, size: 36),
-          const SizedBox(height: 10),
-          Text(
-            template.name,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.engineering_outlined,
               color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+              size: 26,
             ),
           ),
-          if (template.description != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              template.description!,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
-                fontSize: 13,
-              ),
-            ),
-          ],
-          const SizedBox(height: 10),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.orange.shade400,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.lock_clock, color: Colors.white, size: 14),
-                SizedBox(width: 6),
-                Text(
-                  'İmza Zorunludur',
+                const Text(
+                  'SERVİS ONAY FORMU',
                   style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFB7C7D8),
                     fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1,
                   ),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  template.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    height: 1.15,
+                  ),
+                ),
+                if ((template.description ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    template.description!.trim(),
+                    style: const TextStyle(
+                      color: Color(0xFFE5EDF5),
+                      fontSize: 14,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryStrip(ServiceFormTemplate template) {
+    final requiredCount = template.checkboxes.where((e) => e.required).length;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD8E0EA)),
+      ),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          _summaryItem(Icons.verified_user_outlined, 'Online onay'),
+          _summaryItem(
+            Icons.fact_check_outlined,
+            '$requiredCount zorunlu madde',
+          ),
+          _summaryItem(Icons.draw_outlined, 'Dijital imza'),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryItem(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F7FA),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: AppColors.corporateBlue),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF1F344A),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -385,21 +445,21 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
 
   Widget _buildInfoTextCard(ServiceFormTemplate template) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD8E0EA)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Row(
             children: [
-              Icon(Icons.info_outline, color: AppColors.corporateBlue),
+              Icon(Icons.description_outlined, color: AppColors.corporateBlue),
               SizedBox(width: 8),
               Text(
-                'Bilgilendirme',
+                'Form İçeriği',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
@@ -408,7 +468,7 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
               ),
             ],
           ),
-          const Divider(height: 24),
+          const SizedBox(height: 14),
           Text(
             template.contentText,
             style: TextStyle(
@@ -424,11 +484,11 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
 
   Widget _buildCheckboxesCard(ServiceFormTemplate template) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD8E0EA)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -449,60 +509,78 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            '* işaretli maddeler zorunludur.',
+            'Devam etmek için zorunlu maddeleri onaylayın.',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
           ),
-          const Divider(height: 20),
+          const SizedBox(height: 14),
           ...List.generate(template.checkboxes.length, (i) {
             final item = template.checkboxes[i];
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: Checkbox(
-                      value: _checkboxStates[i],
-                      onChanged: (v) {
-                        setState(() => _checkboxStates[i] = v ?? false);
-                      },
-                      activeColor: AppColors.corporateBlue,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4)),
-                    ),
+            return InkWell(
+              onTap: () {
+                setState(() => _checkboxStates[i] = !_checkboxStates[i]);
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.fromLTRB(10, 9, 12, 9),
+                decoration: BoxDecoration(
+                  color:
+                      _checkboxStates[i]
+                          ? const Color(0xFFEFF8F4)
+                          : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color:
+                        _checkboxStates[i]
+                            ? const Color(0xFF96D4B3)
+                            : const Color(0xFFE2E8F0),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(
-                            () => _checkboxStates[i] = !_checkboxStates[i]);
-                      },
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: Checkbox(
+                        value: _checkboxStates[i],
+                        onChanged: (v) {
+                          setState(() => _checkboxStates[i] = v ?? false);
+                        },
+                        activeColor: AppColors.corporateBlue,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: RichText(
-                          text: TextSpan(
+                        padding: const EdgeInsets.only(top: 3),
+                        child: Text.rich(
+                          TextSpan(
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey.shade800,
-                              height: 1.5,
+                              height: 1.45,
                             ),
                             children: [
                               TextSpan(text: item.label),
                               if (item.required)
                                 const TextSpan(
                                   text: ' *',
-                                  style: TextStyle(color: Colors.red),
+                                  style: TextStyle(
+                                    color: Color(0xFFB42318),
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                             ],
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           }),
@@ -513,11 +591,11 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
 
   Widget _buildNameCard() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD8E0EA)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -527,7 +605,7 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
               Icon(Icons.person_outline, color: AppColors.corporateBlue),
               SizedBox(width: 8),
               Text(
-                'Ad Soyad',
+                'Yetkili Bilgisi',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
@@ -541,11 +619,14 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
             controller: _nameController,
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              hintText: 'Adınızı ve soyadınızı giriniz',
+              labelText: 'Ad Soyad',
+              hintText: 'İmzalayan yetkilinin adı ve soyadı',
               filled: true,
               fillColor: const Color(0xFFF8FAFC),
               contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 14),
+                horizontal: 16,
+                vertical: 14,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
@@ -557,7 +638,9 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: const BorderSide(
-                    color: AppColors.corporateBlue, width: 2),
+                  color: AppColors.corporateBlue,
+                  width: 2,
+                ),
               ),
             ),
           ),
@@ -568,11 +651,11 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
 
   Widget _buildSignatureCard() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD8E0EA)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -593,30 +676,30 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Lütfen aşağıya parmağınızla imza atınız.',
+            'Parmağınızla veya fareyle imzanızı atın.',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
           ),
           const SizedBox(height: 16),
-          // İmza Kutusu
           Container(
-            height: 200,
+            height: 190,
             decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(12),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: _signatureController.isEmpty
-                    ? Colors.orange.shade300
-                    : Colors.green.shade400,
+                color:
+                    _signatureController.isEmpty
+                        ? const Color(0xFFCBD5E1)
+                        : const Color(0xFF3FB980),
                 width: 2,
               ),
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(6),
               child: GestureDetector(
                 onPanDown: (_) => FocusScope.of(context).unfocus(),
                 child: Signature(
                   controller: _signatureController,
-                  backgroundColor: Colors.grey.shade50,
+                  backgroundColor: Colors.white,
                 ),
               ),
             ),
@@ -659,42 +742,42 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
           ),
           elevation: canSubmit ? 4 : 0,
         ),
-        child: _submitting
-            ? const Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 12,
-                runSpacing: 6,
-                children: [
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2),
-                  ),
-                  Text(
-                    'Gönderiliyor...',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                ],
-              )
-            : const Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 10,
-                runSpacing: 6,
-                children: [
-                  Icon(Icons.check_circle_outline, size: 22),
-                  Text(
-                    'Kabul Ediyorum ve Servis Çağırıyorum',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+        child:
+            _submitting
+                ? const Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 6,
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                    Text('Gönderiliyor...', style: TextStyle(fontSize: 16)),
+                  ],
+                )
+                : const Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 10,
+                  runSpacing: 6,
+                  children: [
+                    Icon(Icons.check_circle_outline, size: 22),
+                    Text(
+                      'Kabul Ediyorum ve Servis Çağırıyorum',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
       ),
     );
   }

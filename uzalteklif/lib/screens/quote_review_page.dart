@@ -657,7 +657,16 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                     ? customEmailCtrl.text.trim()
                     : selectedToEmail;
                 if (target.isEmpty) return;
-                Navigator.pop(ctx, {'toEmail': target});
+
+                String senderAddr = '';
+                if (selectedSenderAccount == 'preparedBy') senderAddr = preparedByEmail;
+                if (selectedSenderAccount == 'company') senderAddr = companyEmail;
+                if (selectedSenderAccount == 'custom') senderAddr = customSenderCtrl.text.trim();
+
+                Navigator.pop(ctx, {
+                  'toEmail': target,
+                  'senderEmail': senderAddr,
+                });
               },
               icon: const Icon(Icons.send_rounded, size: 16),
               label: const Text('E-posta Gönder'),
@@ -670,36 +679,58 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
 
     if (result == null || !result.containsKey('toEmail')) return;
     final finalToEmail = result['toEmail']!;
+    final selectedSender = result['senderEmail'] ?? '';
 
-    final ccEmail = Uri.encodeComponent('teklif@uzalteknik.com');
-    final subject = Uri.encodeComponent('Teklif: ${_quote.code}');
-    final body = Uri.encodeComponent(
-      'Sayin ${_quote.customerName.trim().isNotEmpty ? _quote.customerName.trim() : "Yetkili"},\n\n'
-      '${_quote.code} kodlu teklifimizi incelemenize sunuyoruz.\n\n'
-      '${_quote.publicToken.isNotEmpty ? "Cevrimici goruntuleme: ${_quote.publicShareSlug}" : ""}\n\n'
-      'Bilgilerinize saygilarimizla.',
+    // Standart Dart Uri yapisi - tum bosluk ve turkce karakterleri otomatik ve hatasiz encode eder
+    final uri = Uri(
+      scheme: 'mailto',
+      path: finalToEmail,
+      queryParameters: {
+        'cc': 'teklif@uzalteknik.com',
+        'subject': 'Teklif: ${_quote.code}',
+        'body': 'Sayin ${_quote.customerName.trim().isNotEmpty ? _quote.customerName.trim() : "Yetkili"},\n\n'
+            '${_quote.code} kodlu teklifimizi incelemenize sunuyoruz.\n\n'
+            '${_quote.publicToken.isNotEmpty ? "Cevrimici goruntuleme: ${_quote.publicShareSlug}" : ""}\n\n'
+            'Bilgilerinize saygilarimizla.',
+      },
     );
-    final uri = Uri.parse('mailto:$finalToEmail?cc=$ccEmail&subject=$subject&body=$body');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-      await widget.quoteRepository.markEmailSent(_quote.id, finalToEmail);
-      final updated = _quote.copyWith(
-        emailSentAt: DateTime.now().toUtc(),
-        emailSentTo: finalToEmail,
-      );
-      if (!mounted) return;
-      setState(() => _quote = updated);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('E-posta istemcisi acildi. Gonderim kaydedildi: $finalToEmail'),
-          backgroundColor: const Color(0xFF29956F),
-        ),
-      );
-    } else {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('E-posta istemcisi acilamadi.')),
-      );
+
+    try {
+      bool launched = false;
+      try {
+        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        launched = await launchUrl(uri);
+      }
+
+      if (launched) {
+        await widget.quoteRepository.markEmailSent(_quote.id, finalToEmail);
+        final updated = _quote.copyWith(
+          emailSentAt: DateTime.now().toUtc(),
+          emailSentTo: finalToEmail,
+        );
+        if (!mounted) return;
+        setState(() => _quote = updated);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'E-posta istemcisi açıldı.${selectedSender.isNotEmpty ? " (Gönderen: $selectedSender)" : ""} Alıcı: $finalToEmail',
+            ),
+            backgroundColor: const Color(0xFF29956F),
+          ),
+        );
+      } else {
+        throw Exception('Launch failed');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('E-posta istemcisi açılamadı ($finalToEmail). Lütfen cihazınızda aktif mail istemcisi tanımlı olduğundan emin olun.'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
     }
   }
 

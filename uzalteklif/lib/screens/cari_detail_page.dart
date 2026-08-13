@@ -359,7 +359,16 @@ class _CariDetailPageState extends State<CariDetailPage> {
                     ? customEmailCtrl.text.trim()
                     : selectedToEmail;
                 if (target.isEmpty) return;
-                Navigator.pop(ctx, {'toEmail': target});
+
+                String senderAddr = '';
+                if (selectedSenderAccount == 'preparedBy') senderAddr = preparedByEmail;
+                if (selectedSenderAccount == 'company') senderAddr = companyEmail;
+                if (selectedSenderAccount == 'custom') senderAddr = customSenderCtrl.text.trim();
+
+                Navigator.pop(ctx, {
+                  'toEmail': target,
+                  'senderEmail': senderAddr,
+                });
               },
               icon: const Icon(Icons.send_rounded, size: 16),
               label: const Text('E-posta Gönder'),
@@ -372,32 +381,53 @@ class _CariDetailPageState extends State<CariDetailPage> {
 
     if (result == null || !result.containsKey('toEmail')) return;
     final finalToEmail = result['toEmail']!;
+    final selectedSender = result['senderEmail'] ?? '';
 
-    final ccEmail = Uri.encodeComponent('teklif@uzalteknik.com');
-    final subject = Uri.encodeComponent('Teklif: ${q.code}');
-    final body = Uri.encodeComponent(
-      'Sayin ${_cari.contactName.trim().isNotEmpty ? _cari.contactName.trim() : "Yetkili"},\n\n'
-      '${q.code} kodlu teklifimizi incelemenize sunuyoruz.\n\n'
-      '${q.publicToken.isNotEmpty ? "Cevrimici goruntuleme: ${q.publicShareSlug}" : ""}\n\n'
-      'Bilgilerinize saygilarimizla.',
+    // Standart Dart Uri yapisi - tum bosluk ve turkce karakterleri otomatik ve hatasiz encode eder
+    final uri = Uri(
+      scheme: 'mailto',
+      path: finalToEmail,
+      queryParameters: {
+        'cc': 'teklif@uzalteknik.com',
+        'subject': 'Teklif: ${q.code}',
+        'body': 'Sayin ${_cari.contactName.trim().isNotEmpty ? _cari.contactName.trim() : "Yetkili"},\n\n'
+            '${q.code} kodlu teklifimizi incelemenize sunuyoruz.\n\n'
+            '${q.publicToken.isNotEmpty ? "Cevrimici goruntuleme: ${q.publicShareSlug}" : ""}\n\n'
+            'Bilgilerinize saygilarimizla.',
+      },
     );
-    final uri = Uri.parse('mailto:$finalToEmail?cc=$ccEmail&subject=$subject&body=$body');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-      await widget.quoteRepository.markEmailSent(q.id, finalToEmail);
-      await _reload();
+
+    try {
+      bool launched = false;
+      try {
+        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        launched = await launchUrl(uri);
+      }
+
+      if (launched) {
+        await widget.quoteRepository.markEmailSent(q.id, finalToEmail);
+        await _reload();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'E-posta istemcisi açıldı.${selectedSender.isNotEmpty ? " (Gönderen: $selectedSender)" : ""} Alıcı: $finalToEmail',
+              ),
+              backgroundColor: const Color(0xFF29956F),
+            ),
+          );
+        }
+      } else {
+        throw Exception('Launch failed');
+      }
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('E-posta istemcisi acildi. Gonderim kaydedildi: $finalToEmail'),
-            backgroundColor: const Color(0xFF29956F),
+            content: Text('E-posta istemcisi açılamadı ($finalToEmail). Lütfen cihazınızda aktif mail istemcisi tanımlı olduğundan emin olun.'),
+            backgroundColor: Colors.red.shade700,
           ),
-        );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('E-posta istemcisi acilamadi.')),
         );
       }
     }

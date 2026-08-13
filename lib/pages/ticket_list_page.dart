@@ -434,52 +434,63 @@ class _TicketListPageState extends State<TicketListPage> {
     final title = (ticket['title'] as String? ?? 'Is emri').trim();
     final customerName = (customer['name'] as String? ?? '').trim();
     final plannedDate = ticket['planned_date'] as String?;
-    final dueDate =
-        plannedDate == null || plannedDate.isEmpty
-            ? null
-            : DateTime.tryParse(plannedDate);
+    final DateTime? dueDate = (plannedDate == null || plannedDate.isEmpty)
+        ? null
+        : DateTime.tryParse(plannedDate);
 
-    final cardTitle =
-        'Atolye - ${jobCode.isEmpty ? title : '$jobCode / $title'}';
-    final description = [
-      '[ATOLYE] Uretim recetesi',
-      if (customerName.isNotEmpty) 'Musteri: $customerName',
-      'Kaynak is emri: ${jobCode.isEmpty ? ticketId : jobCode}',
-      '',
-      'Uretim hedefi:',
-      '- Pano/proje dosyalarina gore atolye imalatini hazirla.',
-      '',
-      'Kontrol listesi:',
-      '- Proje PDF kontrol edildi',
-      '- Nokta listesi kontrol edildi',
-      '- Malzeme listesi kontrol edildi',
-      '- Klemens/etiket/kanal yerlesimi kontrol edildi',
-      '- Test ve sevk oncesi son kontrol yapildi',
-      '',
-      'Proje PDF, nokta listesi ve teknik dosyalar bagli is emrinin Evrak/Dosyalar bolumunden takip edilir.',
-    ].join('\n');
+    final dispatchResult = await showDialog<_WorkshopDispatchData>(
+      context: context,
+      builder: (ctx) => _WorkshopDispatchDialog(
+        initialTitle: jobCode.isEmpty ? title : '$jobCode / $title',
+        customerName: customerName,
+      ),
+    );
+
+    if (dispatchResult == null) return;
+
+    final cardTitle = 'Atölye - ${dispatchResult.title}';
+    final descriptionBuffer = StringBuffer();
+    descriptionBuffer.writeln('[ATOLYE] Uretim recetesi');
+    if (customerName.isNotEmpty) descriptionBuffer.writeln('Müşteri: $customerName');
+    if (jobCode.isNotEmpty) descriptionBuffer.writeln('İş Kodu: $jobCode');
+    descriptionBuffer.writeln('İşlem Türü: ${dispatchResult.jobType}');
+    if (dispatchResult.assignedMaster.isNotEmpty) {
+      descriptionBuffer.writeln('Atölye Sorumlusu: ${dispatchResult.assignedMaster}');
+    }
+    if (dispatchResult.technicalSpecs.isNotEmpty) {
+      descriptionBuffer.writeln('\nTeknik Özellikler:\n${dispatchResult.technicalSpecs}');
+    }
+    if (dispatchResult.masterNotes.isNotEmpty) {
+      descriptionBuffer.writeln('\nUsta İmalat Notları:\n${dispatchResult.masterNotes}');
+    }
+
+    descriptionBuffer.writeln('\nKontrol Listesi (Yapılacaklar):');
+    for (final item in dispatchResult.checklist) {
+      descriptionBuffer.writeln('- [ ] $item');
+    }
 
     try {
       await _cardService.createCard(
         teamId: selectedTeam.id,
         boardId: boards.first.id,
         title: cardTitle,
-        description: description,
+        description: descriptionBuffer.toString(),
         linkedTicketId: ticketId,
         priority: CardPriority.fromDb(ticket['priority'] as String?),
-        dueDate: dueDate,
+        dueDate: dispatchResult.dueDate ?? dueDate,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Is emri atolye imalat takibine gonderildi.'),
+          content: Text('İş emri detaylı Atölye İmalat Kartı olarak atölyeye gönderildi.'),
+          backgroundColor: Color(0xFF29956F),
         ),
       );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Atolyeye gonderilemedi: $error')));
+      ).showSnackBar(SnackBar(content: Text('Atölyeye gönderilemedi: $error')));
     }
   }
 
@@ -3117,6 +3128,199 @@ class _TicketListPageState extends State<TicketListPage> {
           },
         ),
       ),
+    );
+  }
+}
+
+class _WorkshopDispatchData {
+  const _WorkshopDispatchData({
+    required this.title,
+    required this.jobType,
+    required this.assignedMaster,
+    required this.technicalSpecs,
+    required this.masterNotes,
+    required this.checklist,
+    this.dueDate,
+  });
+
+  final String title;
+  final String jobType;
+  final String assignedMaster;
+  final String technicalSpecs;
+  final String masterNotes;
+  final List<String> checklist;
+  final DateTime? dueDate;
+}
+
+class _WorkshopDispatchDialog extends StatefulWidget {
+  const _WorkshopDispatchDialog({
+    required this.initialTitle,
+    required this.customerName,
+  });
+
+  final String initialTitle;
+  final String customerName;
+
+  @override
+  State<_WorkshopDispatchDialog> createState() => _WorkshopDispatchDialogState();
+}
+
+class _WorkshopDispatchDialogState extends State<_WorkshopDispatchDialog> {
+  late final TextEditingController _titleCtrl;
+  late final TextEditingController _masterCtrl;
+  late final TextEditingController _specsCtrl;
+  late final TextEditingController _notesCtrl;
+
+  String _jobType = '🏭 Pano İmalatı';
+  DateTime? _selectedDueDate;
+
+  final List<String> _checklistItems = [
+    'Proje PDF ve Şemalar Kontrol Edildi',
+    'Saha Nokta ve Ekipman Listesi Doğrulandı',
+    'Şalter, Klemens ve Kanal Yerleşimi Yapıldı',
+    'Kablaj ve Sarı Etiketleme Tamamlandı',
+    'Soğuk Test ve Sinyal Kalibrasyonu Yapıldı',
+    'Sevk Öncesi Son Kalite Kontrolü Onaylandı',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _titleCtrl = TextEditingController(text: widget.initialTitle);
+    _masterCtrl = TextEditingController();
+    _specsCtrl = TextEditingController(text: '• Güç: 37 kW / 400V\n• Kabin: IP65 Pano\n• Sürücü: Inverter Modüllü');
+    _notesCtrl = TextEditingController(text: 'Klemenslerde sarı kodlama etiketi kullanılacaktır.');
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _masterCtrl.dispose();
+    _specsCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.precision_manufacturing_rounded, color: Color(0xFF2B82C9)),
+          SizedBox(width: 8),
+          Text('Atölye İmalat İş Emri Oluştur'),
+        ],
+      ),
+      content: SizedBox(
+        width: 580,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _titleCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'İş Emri / Pano Başlığı',
+                  hintText: 'Örn: AHU-01 Klima Santralı Pano İmalatı',
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _jobType,
+                      decoration: const InputDecoration(labelText: 'İşlem Türü'),
+                      items: const [
+                        DropdownMenuItem(value: '🏭 Pano İmalatı', child: Text('🏭 Pano İmalatı')),
+                        DropdownMenuItem(value: '🔧 Revizyon & Tamir', child: Text('🔧 Revizyon & Tamir')),
+                        DropdownMenuItem(value: '🧪 Test & Kalibrasyon', child: Text('🧪 Test & Kalibrasyon')),
+                        DropdownMenuItem(value: '📦 Saha Hazırlığı', child: Text('📦 Saha Hazırlığı')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _jobType = v);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _masterCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Atölye Ustası / Sorumlusu',
+                        hintText: 'Örn: Ali Usta',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _specsCtrl,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Teknik Özellikler & Ölçüler',
+                  hintText: 'Pano boyutları, güç, şalter tipleri...',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _notesCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Usta İçin Özel İmalat Notları',
+                  hintText: 'Klemens, kablaj ve montaj uyarıları...',
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'ATÖLYE KONTROL LİSTESİ (ÇEKAL):',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF2B82C9)),
+              ),
+              const SizedBox(height: 6),
+              Column(
+                children: _checklistItems.map((item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_box_outlined, size: 16, color: Color(0xFF29956F)),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(item, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                    ],
+                  ),
+                )).toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const Text('Vazgeç'),
+        ),
+        FilledButton.icon(
+          onPressed: () {
+            if (_titleCtrl.text.trim().isEmpty) return;
+            Navigator.pop(
+              context,
+              _WorkshopDispatchData(
+                title: _titleCtrl.text.trim(),
+                jobType: _jobType,
+                assignedMaster: _masterCtrl.text.trim(),
+                technicalSpecs: _specsCtrl.text.trim(),
+                masterNotes: _notesCtrl.text.trim(),
+                checklist: _checklistItems,
+                dueDate: _selectedDueDate,
+              ),
+            );
+          },
+          icon: const Icon(Icons.send_rounded, size: 18),
+          label: const Text('Atölyeye İş Emrini Gönder'),
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF2B82C9)),
+        ),
+      ],
     );
   }
 }

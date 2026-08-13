@@ -4577,11 +4577,13 @@ class _PointDialogState extends State<_PointDialog> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.existing?.name ?? '');
+    _nameController = TextEditingController(
+      text: widget.existing?.name ?? 'Sıcaklık Sensörü',
+    );
     _quantityController = TextEditingController(
       text: '${widget.existing?.quantity ?? 1}',
     );
-    _type = widget.existing?.type ?? DiscoveryPointType.di;
+    _type = widget.existing?.type ?? DiscoveryPointType.aiPassive;
     _analogSignal =
         widget.existing?.analogSignal ?? DiscoveryAnalogSignal.unspecified;
   }
@@ -4602,12 +4604,81 @@ class _PointDialogState extends State<_PointDialog> {
         width: 520,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text(
+              'EN ÇOK SEÇİLEN HAZIR ŞABLONLAR (TEK TIKLA DOLDUR)',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF2B82C9)),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                ActionChip(
+                  avatar: const Icon(Icons.thermostat_rounded, size: 16, color: Color(0xFF2B82C9)),
+                  label: const Text('Sıcaklık Sensörü (AI)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  onPressed: () {
+                    setState(() {
+                      _nameController.text = 'Sıcaklık Sensörü';
+                      _type = DiscoveryPointType.aiPassive;
+                      _quantityController.text = '1';
+                    });
+                  },
+                ),
+                ActionChip(
+                  avatar: const Icon(Icons.power_rounded, size: 16, color: Color(0xFF29956F)),
+                  label: const Text('Fan / Pompa Çalıştı Durum (DI)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  onPressed: () {
+                    setState(() {
+                      _nameController.text = 'Çalıştı Durum Bilgisi';
+                      _type = DiscoveryPointType.di;
+                      _quantityController.text = '1';
+                    });
+                  },
+                ),
+                ActionChip(
+                  avatar: const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFC95A2B)),
+                  label: const Text('Arıza / Alarm Bilgisi (DI)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  onPressed: () {
+                    setState(() {
+                      _nameController.text = 'Arıza Alarm Bilgisi';
+                      _type = DiscoveryPointType.di;
+                      _quantityController.text = '1';
+                    });
+                  },
+                ),
+                ActionChip(
+                  avatar: const Icon(Icons.speed_rounded, size: 16, color: Color(0xFF8B5CC7)),
+                  label: const Text('Hız Kontrolü / Inverter (AO)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  onPressed: () {
+                    setState(() {
+                      _nameController.text = 'Frekans Sürücü Hız Kontrolü';
+                      _type = DiscoveryPointType.ao;
+                      _quantityController.text = '1';
+                    });
+                  },
+                ),
+                ActionChip(
+                  avatar: const Icon(Icons.settings_input_component_rounded, size: 16, color: Color(0xFF17304C)),
+                  label: const Text('Damper / Vana Kumanda (DO)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  onPressed: () {
+                    setState(() {
+                      _nameController.text = 'Damper Motoru Otomatik Kumanda';
+                      _type = DiscoveryPointType.doOutput;
+                      _quantityController.text = '1';
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
             TextField(
               controller: _nameController,
-              autofocus: true,
+              autofocus: !editing,
               decoration: const InputDecoration(
                 labelText: 'Kontrol noktası adı',
+                hintText: 'Örn: Sıcaklık Sensörü, Fan Arıza...',
               ),
             ),
             const SizedBox(height: 12),

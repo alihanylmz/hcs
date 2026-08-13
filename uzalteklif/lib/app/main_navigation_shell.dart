@@ -6,6 +6,7 @@ import '../screens/admin_panel_page.dart';
 import '../screens/cariler_page.dart';
 import '../screens/discovery_projects_page.dart';
 import '../screens/home_page.dart';
+import '../screens/my_workspace_page.dart';
 import '../screens/profile_settings_page.dart';
 import '../screens/quotes_page.dart';
 import 'bootstrap.dart';
@@ -68,9 +69,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
               onDestinationSelected: _selectDestination,
               destinations: [
                 const NavigationDestination(
-                  icon: Icon(Icons.inventory_2_outlined),
-                  selectedIcon: Icon(Icons.inventory_2_rounded),
-                  label: 'Stok',
+                  icon: Icon(Icons.space_dashboard_outlined),
+                  selectedIcon: Icon(Icons.space_dashboard_rounded),
+                  label: 'Masam',
                 ),
                 const NavigationDestination(
                   icon: Icon(Icons.request_quote_outlined),
@@ -123,9 +124,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                 ),
                 destinations: [
                   const NavigationRailDestination(
-                    icon: Icon(Icons.inventory_2_outlined),
-                    selectedIcon: Icon(Icons.inventory_2_rounded),
-                    label: Text('Stok'),
+                    icon: Icon(Icons.space_dashboard_outlined),
+                    selectedIcon: Icon(Icons.space_dashboard_rounded),
+                    label: Text('Masam'),
                   ),
                   const NavigationRailDestination(
                     icon: Icon(Icons.request_quote_outlined),
@@ -136,6 +137,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                     icon: Icon(Icons.business_outlined),
                     selectedIcon: Icon(Icons.business_rounded),
                     label: Text('Cariler'),
+                  ),
+                  const NavigationRailDestination(
+                    icon: Icon(Icons.inventory_2_outlined),
+                    selectedIcon: Icon(Icons.inventory_2_rounded),
+                    label: Text('Stok'),
                   ),
                   const NavigationRailDestination(
                     icon: Icon(Icons.account_tree_outlined),
@@ -174,11 +180,16 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   Widget _pageForIndex(int i) {
     switch (i) {
       case 0:
-        return HomePage(
+        return MyWorkspacePage(
+          quoteRepository: widget.bootstrap.quoteRepository,
           productRepository: widget.bootstrap.productRepository,
           marketRateService: widget.bootstrap.marketRateService,
+          userProfileRepository: widget.bootstrap.userProfileRepository,
+          cariRepository: widget.bootstrap.cariRepository,
+          ownCompanyRepository: widget.bootstrap.ownCompanyRepository,
           priceAdjustmentRuleRepository:
               widget.bootstrap.priceAdjustmentRuleRepository,
+          isManager: _isManager,
         );
       case 1:
         return QuotesPage(
@@ -205,6 +216,13 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           isManager: _isManager,
         );
       case 3:
+        return HomePage(
+          productRepository: widget.bootstrap.productRepository,
+          marketRateService: widget.bootstrap.marketRateService,
+          priceAdjustmentRuleRepository:
+              widget.bootstrap.priceAdjustmentRuleRepository,
+        );
+      case 4:
         return DiscoveryProjectsPage(
           repository: widget.bootstrap.discoveryRepository,
           hardwareRepository: widget.bootstrap.controlHardwareRepository,
@@ -217,14 +235,14 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           priceAdjustmentRuleRepository:
               widget.bootstrap.priceAdjustmentRuleRepository,
         );
-      case 4:
+      case 5:
         return ProfileSettingsPage(
           repository: widget.bootstrap.userProfileRepository,
           themePreferenceService: widget.bootstrap.themePreferenceService,
           ownCompanyRepository: widget.bootstrap.ownCompanyRepository,
           onSignOut: widget.onSignOut,
         );
-      case 5:
+      case 6:
         if (_canManageSystem) {
           return AdminPanelPage(
             userProfileRepository: widget.bootstrap.userProfileRepository,

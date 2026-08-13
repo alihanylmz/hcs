@@ -90,7 +90,180 @@ class _CariDetailPageState extends State<CariDetailPage> {
 
   /// E-posta ile teklif gonder (url_launcher ile sistem e-posta istemcisi acar).
   /// Gonderim sonrasi email_sent_at ve email_sent_to guncellenir.
-  Future<void> _sendQuoteEmail(Quote q, String toEmail) async {
+  /// E-posta ile teklif gonder dialogu (Alici yetkili & Gonderen hesap secimi)
+  Future<void> _sendQuoteEmail(Quote q, [String? initialEmail]) async {
+    // Cari yetkili e-postalari
+    final availableEmails = <String>{};
+    if (initialEmail != null && initialEmail.trim().isNotEmpty) {
+      availableEmails.add(initialEmail.trim());
+    }
+    for (final c in _cari.contacts) {
+      if (c.email.trim().isNotEmpty) availableEmails.add(c.email.trim());
+    }
+    if (_cari.email.trim().isNotEmpty) availableEmails.add(_cari.email.trim());
+    if (q.documentProfile.customerEmail.trim().isNotEmpty) {
+      availableEmails.add(q.documentProfile.customerEmail.trim());
+    }
+
+    final emailList = availableEmails.toList();
+    String selectedToEmail = emailList.isNotEmpty ? emailList.first : '';
+    final customEmailCtrl = TextEditingController();
+
+    // Sirket kurumsal e-postasi ve Hazirlayan e-postasi
+    final companyEmail = q.documentProfile.companyEmail.trim();
+    final preparedByEmail = q.documentProfile.preparedByEmail.trim();
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.mark_email_read_rounded, color: Color(0xFF2B82C9)),
+              const SizedBox(width: 8),
+              Text('Teklif E-postası Gönder (${q.code})'),
+            ],
+          ),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'ALICI E-POSTA ADRESİ (MÜŞTERİ)',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                ),
+                const SizedBox(height: 6),
+                if (emailList.isNotEmpty) ...[
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: emailList.map((e) {
+                      final isSelected = selectedToEmail == e;
+                      return ChoiceChip(
+                        label: Text(e, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                        selected: isSelected,
+                        selectedColor: const Color(0xFF2B82C9).withValues(alpha: 0.18),
+                        onSelected: (val) {
+                          if (val) setDlgState(() => selectedToEmail = e);
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                TextField(
+                  controller: customEmailCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Veya Farklı E-posta Yazın',
+                    hintText: 'ornek@musteri.com',
+                    prefixIcon: Icon(Icons.alternate_email_rounded, size: 18),
+                  ),
+                  onChanged: (val) {
+                    if (val.trim().isNotEmpty) {
+                      setDlgState(() => selectedToEmail = val.trim());
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'GÖNDEREN E-POSTA YÖNTEMİ / HESABI',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF6F8FA),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFD7DEE6)),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.devices_rounded, size: 18, color: Color(0xFF17304C)),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Varsayılan İstemci (Outlook/Mail)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
+                                Text('Cihazınızda tanımlı aktif e-posta hesabınız kullanılır.', style: TextStyle(fontSize: 10, color: Color(0xFF5B6F7F))),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.check_circle_rounded, size: 18, color: const Color(0xFF29956F)),
+                        ],
+                      ),
+                      if (preparedByEmail.isNotEmpty) ...[
+                        const Divider(height: 14),
+                        Row(
+                          children: [
+                            const Icon(Icons.person_rounded, size: 18, color: Color(0xFF9D5C1D)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Hazırlayan Personel E-postası', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
+                                  Text(preparedByEmail, style: const TextStyle(fontSize: 10, color: Color(0xFF9D5C1D), fontWeight: FontWeight.w700)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (companyEmail.isNotEmpty) ...[
+                        const Divider(height: 14),
+                        Row(
+                          children: [
+                            const Icon(Icons.business_rounded, size: 18, color: Color(0xFF2B82C9)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Kurumsal Firma Hesabı', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
+                                  Text(companyEmail, style: const TextStyle(fontSize: 10, color: Color(0xFF2B82C9), fontWeight: FontWeight.w700)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('Vazgeç'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                final target = customEmailCtrl.text.trim().isNotEmpty
+                    ? customEmailCtrl.text.trim()
+                    : selectedToEmail;
+                if (target.isEmpty) return;
+                Navigator.pop(ctx, {'toEmail': target});
+              },
+              icon: const Icon(Icons.send_rounded, size: 16),
+              label: const Text('E-posta Gönder'),
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF2B82C9)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == null || !result.containsKey('toEmail')) return;
+    final finalToEmail = result['toEmail']!;
+
     final subject = Uri.encodeComponent('Teklif: ${q.code}');
     final body = Uri.encodeComponent(
       'Sayin ${_cari.contactName.trim().isNotEmpty ? _cari.contactName.trim() : "Yetkili"},\n\n'
@@ -98,15 +271,15 @@ class _CariDetailPageState extends State<CariDetailPage> {
       '${q.publicToken.isNotEmpty ? "Cevrimici goruntuleme: ${q.publicShareSlug}" : ""}\n\n'
       'Bilgilerinize saygilarimizla.',
     );
-    final uri = Uri.parse('mailto:$toEmail?subject=$subject&body=$body');
+    final uri = Uri.parse('mailto:$finalToEmail?subject=$subject&body=$body');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
-      await widget.quoteRepository.markEmailSent(q.id, toEmail);
+      await widget.quoteRepository.markEmailSent(q.id, finalToEmail);
       await _reload();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('E-posta istemcisi acildi. Gonderim kaydedildi: $toEmail'),
+            content: Text('E-posta istemcisi acildi. Gonderim kaydedildi: $finalToEmail'),
             backgroundColor: const Color(0xFF29956F),
           ),
         );

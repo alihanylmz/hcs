@@ -4,6 +4,25 @@ Bu dosya, yapay zeka ajanları (Antigravity, Codex vb.) tarafından yapılan tü
 
 ---
 
+## [REV-015] - 2026-08-13 (15:00 +03:00)
+
+### 📌 Başlık
+Zimmetten Arızalıya Ayrıştırmada Mükerrer Depo Stok Düşümünden Kaynaklanan 'Stok Yetersiz' Hatasının Çözülmesi
+
+### 🎯 Değişiklik & İşlem Özeti
+1. **Mükerrer Stok Düşümü Hata Tespiti (`lib/services/stock_service.dart`):**
+   - Personele zimmet verilirken (`register_product_stock_loan`) ürün miktarı depodaki fiziki stoktan zaten düşüldüğü için (`products.stock_quantity`), zimmet dönüşünde ürünü arızalıya ayırırken veya sarf ederken `register_product_stock_movement(out)` metodunun tekrar çağrılması stok miktarını eksiye (`< 0`) düşürmeye çalışıyor ve Postgres `Stok yetersiz! Mevcut: 0.00` hatasını fırlatıyordu.
+
+2. **Geliştirilen Çözüm (`logStockMovementAudit` & `deductFromWarehouseStock: false`):**
+   - Zimmet dönüşü işlemlerde (Sarf ve Arızalı ayrıştırma) fiziki depodan ikinci kez stok düşülmemesi sağlandı. Sadece stok hareket logu (`logStockMovementAudit`) ve arızalı ürün kaydı (`defective_products`) oluşturuldu.
+   - İade edilen miktarlar ise (`returnedQty > 0`) depodaki fiziki stok miktarına sorunsuz şekilde geri eklendi.
+
+### 📁 Etkilenen Dosyalar
+- `[MODIFY] lib/services/stock_service.dart`
+- `[MODIFY] CODEX_REVISIONS.md`
+
+---
+
 ## [REV-014] - 2026-08-13 (14:55 +03:00)
 
 ### 📌 Başlık
@@ -18,25 +37,6 @@ Stok Tablosu 'İşlemler' Hücrelerinin Kurumsal 'Stok İşlemleri ▾' Menü Bu
      - 👤 **Personele Zimmetle**
      - ✏️ **Ürün Bilgilerini Düzenle**
      - 🗑️ **Depodan Çıkar (Katalogda Sakla)**
-
-### 📁 Etkilenen Dosyalar
-- `[MODIFY] lib/pages/stock_overview_page.dart`
-- `[MODIFY] CODEX_REVISIONS.md`
-
----
-
-## [REV-013] - 2026-08-13 (14:34 +03:00)
-
-### 📌 Başlık
-Personel Zimmet Ekstresi Modalının Genişletilmesi, Kolon Aralıklarının Mükemmelleştirilmesi ve Kesilme Sorununun Çözülmesi
-
-### 🎯 Değişiklik & İşlem Özeti
-1. **Modal Genişliği & Kolon Aralıkları (`lib/pages/stock_overview_page.dart`):**
-   - Modal diyaloğun maksimum genişliği ekranın %95'ine (1400px) çıkarıldı.
-   - `DataTable` varsayılan 56px kolon aralıkları yerine `columnSpacing: 14` ve `horizontalMargin: 12` olarak optimize edildi. Böylece 6 kolon ve tüm aksiyon butonları sağdan kesilmeden tam sığdı.
-
-2. **Kompakt Aksiyon Butonları:**
-   - Döküm ekranı aksiyon butonları yer kaplamayacak şık kompakt etiketli butonlara (`[Zimmeti İşle]`, `[Sarf]`, `[Arızalı]`, `[İade]`) dönüştürüldü.
 
 ### 📁 Etkilenen Dosyalar
 - `[MODIFY] lib/pages/stock_overview_page.dart`

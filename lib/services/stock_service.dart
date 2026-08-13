@@ -532,6 +532,38 @@ class StockService {
     );
   }
 
+  /// Zimmet kapatma veya zimmet dönüşü işlemlerde depo stoğundan mükerrer düşüm yapmadan sadece audit logu tutan yardımcı metod.
+  Future<void> logStockMovementAudit({
+    required String productId,
+    required String movementType,
+    required int quantity,
+    String? reason,
+    String? destination,
+    String? note,
+  }) async {
+    try {
+      final current = await _supabase
+          .from(_table)
+          .select('stock_quantity')
+          .eq('id', productId)
+          .maybeSingle();
+      final curQty = (current?['stock_quantity'] as num?)?.toInt() ?? 0;
+
+      await _supabase.from('stock_movements').insert({
+        'product_id': productId,
+        'movement_type': movementType,
+        'quantity': quantity,
+        'quantity_before': curQty,
+        'quantity_after': curQty,
+        'reason': reason,
+        'destination': destination,
+        'note': note,
+      });
+    } catch (e) {
+      debugPrint('Stok hareket audit log hatası: $e');
+    }
+  }
+
   /// Personel zimmetini esnek sarf (tüketim), iade ve arızalı miktarları ile işler/kapatır.
   Future<void> processPersonnelLoanResolution({
     required int loanId,
@@ -555,7 +587,7 @@ class StockService {
 
     final remainingQty = totalLoanQty - totalAccounted;
 
-    // 1. İade Edilen Miktar -> Depo stokuna tekrar giriş yapılır
+    // 1. İade Edilen Miktar -> Depo stokuna tekrar giriş yapılır (fiziksel stoğa geri katılır)
     if (returnedQty > 0) {
       final current = await _supabase
           .from(_table)
@@ -565,7 +597,7 @@ class StockService {
       final curQty = (current['stock_quantity'] as num?)?.toInt() ?? 0;
       await updateQuantity(productId, curQty + returnedQty);
 
-      await registerStockMovement(
+      await logStockMovementAudit(
         productId: productId,
         movementType: 'in',
         quantity: returnedQty,
@@ -575,10 +607,10 @@ class StockService {
       );
     }
 
-    // 2. Sarf Edilen Miktar -> İş koduna sarf / çıkış hareketi kaydedilir
+    // 2. Sarf Edilen Miktar -> Zimmet verilirken fiziksel stoktan zaten düşüldüğü için tekrar stok düşülmez, sadece log tutulur
     if (consumedQty > 0) {
       final jobDesc = (jobCode != null && jobCode.isNotEmpty) ? 'İş Kodu: $jobCode' : 'Personel Sarfı';
-      await registerStockMovement(
+      await logStockMovementAudit(
         productId: productId,
         movementType: 'out',
         quantity: consumedQty,
@@ -588,7 +620,7 @@ class StockService {
       );
     }
 
-    // 3. Arızalı Ayrılan Miktar -> Arızalı ürünler takibine eklenir (Arızalı Depoda/Bekliyor)
+    // 3. Arızalı Ayrılan Miktar -> Zimmetten arızalıya ayrıldığı için depo stoğundan mükerrer düşüm YAPILMAZ!
     if (defectiveQty > 0) {
       await reportDefectiveProduct(
         productId: productId,
@@ -597,6 +629,7 @@ class StockService {
         faultDescription: faultDescription ?? 'Zimmet dönüşü arızalı bildirildi',
         jobCode: jobCode,
         notes: note,
+        deductFromWarehouseStock: false, // Zimmet verilirken zaten düşüldüğü için tekrar düşme!
       );
     }
 
@@ -667,6 +700,7 @@ class StockService {
     String? faultDescription,
     String? jobCode,
     String? notes,
+    bool deductFromWarehouseStock = true,
   }) async {
     if (quantity <= 0) throw Exception('Arızalı miktar 0\'dan büyük olmalıdır.');
     await _supabase.from('defective_products').insert({
@@ -679,14 +713,25 @@ class StockService {
       'status': 'in_faulty_stock',
     });
 
-    await registerStockMovement(
-      productId: productId,
-      movementType: 'out',
-      quantity: quantity,
-      reason: 'Arızalıya ayrıldı (Arızalı Depoda)',
-      destination: jobCode ?? reportedByName,
-      note: faultDescription,
-    );
+    if (deductFromWarehouseStock) {
+      await registerStockMovement(
+        productId: productId,
+        movementType: 'out',
+        quantity: quantity,
+        reason: 'Arızalıya ayrıldı (Arızalı Depoda)',
+        destination: jobCode ?? reportedByName,
+        note: faultDescription,
+      );
+    } else {
+      await logStockMovementAudit(
+        productId: productId,
+        movementType: 'out',
+        quantity: quantity,
+        reason: 'Zimmetten arızalıya ayrıldı (Arızalı Depoda)',
+        destination: jobCode ?? reportedByName,
+        note: faultDescription,
+      );
+    }
   }
 
   /// Arızalı ürün durumunu günceller ve kargo / tamir / değişim / hurda hareketini işler.

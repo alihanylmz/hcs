@@ -412,6 +412,22 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     String selectedSenderAccount = 'default'; // 'default', 'preparedBy', 'company', 'custom'
     final customSenderCtrl = TextEditingController();
 
+    final quoteUrl = _quote.publicShareSlug.isNotEmpty 
+        ? _quote.publicShareSlug 
+        : 'https://uzalteknikservis.info/#/quote/${_quote.id}';
+
+    final contactNameStr = _quote.customerName.trim().isNotEmpty ? _quote.customerName.trim() : "Yetkili";
+    final subjectCtrl = TextEditingController(text: 'Teklif: ${_quote.code} - Uzal Teklif');
+    final bodyCtrl = TextEditingController(
+      text: 'Sayın $contactNameStr,\n\n'
+          '${_quote.code} kodlu teklifimizi incelemenize sunuyoruz.\n\n'
+          '📄 Teklifi Çevrimiçi Görüntülemek ve PDF Olarak İndirmek İçin Bağlantıya Tıklayın:\n'
+          '$quoteUrl\n\n'
+          'Teklif ile ilgili sorularınız veya revizyon talepleriniz için bu e-postaya yanıt verebilirsiniz.\n\n'
+          'Bilgilerinize saygılarımızla,\n'
+          'Uzal Teknik Servis',
+    );
+
     final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -643,6 +659,34 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 16),
+                const Text(
+                  'E-POSTA KONUSU',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: subjectCtrl,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.title_rounded, size: 18),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'E-POSTA İÇERİĞİ / MESAJI (DÜZENLENEBİLİR)',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: bodyCtrl,
+                  maxLines: 5,
+                  style: const TextStyle(fontSize: 12.5, height: 1.35),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    alignLabelWithHint: true,
+                  ),
+                ),
               ],
             ),
           ),
@@ -666,6 +710,8 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 Navigator.pop(ctx, {
                   'toEmail': target,
                   'senderEmail': senderAddr,
+                  'subject': subjectCtrl.text.trim(),
+                  'body': bodyCtrl.text.trim(),
                 });
               },
               icon: const Icon(Icons.send_rounded, size: 16),
@@ -680,26 +726,15 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     if (result == null || !result.containsKey('toEmail')) return;
     final finalToEmail = result['toEmail']!;
     final selectedSender = result['senderEmail'] ?? '';
-    final quoteUrl = _quote.publicShareSlug.isNotEmpty 
-        ? _quote.publicShareSlug 
-        : 'https://uzalteknikservis.info/#/quote/${_quote.id}';
+    final customSubject = result['subject'] ?? 'Teklif: ${_quote.code}';
+    final customBody = result['body'] ?? '';
 
-    // Standart Dart Uri yapisi - tum bosluk ve turkce karakterleri otomatik ve hatasiz encode eder
-    final uri = Uri(
-      scheme: 'mailto',
-      path: finalToEmail,
-      queryParameters: {
-        'cc': 'teklif@uzalteknik.com',
-        'subject': 'Teklif: ${_quote.code} - Uzal Teklif',
-        'body': 'Sayin ${_quote.customerName.trim().isNotEmpty ? _quote.customerName.trim() : "Yetkili"},\n\n'
-            '${_quote.code} kodlu teklifimizi incelemenize sunuyoruz.\n\n'
-            '📄 Teklifi Çevrimiçi Görüntülemek ve PDF Olarak İndirmek İçin Bağlantıya Tıklayın:\n'
-            '$quoteUrl\n\n'
-            'Teklif ile ilgili sorularınız veya revizyon talepleriniz için bu e-postaya yanıt verebilirsiniz.\n\n'
-            'Bilgilerinize saygılarımızla,\n'
-            'Uzal Teknik Servis',
-      },
-    );
+    // mailto URL'sinde + işaretlerini önlemek için %20 dönüşümü
+    final encodedSubject = Uri.encodeComponent(customSubject).replaceAll('+', '%20');
+    final encodedBody = Uri.encodeComponent(customBody).replaceAll('+', '%20');
+    final encodedCc = Uri.encodeComponent('teklif@uzalteknik.com').replaceAll('+', '%20');
+
+    final uri = Uri.parse('mailto:$finalToEmail?cc=$encodedCc&subject=$encodedSubject&body=$encodedBody');
 
     try {
       bool launched = false;

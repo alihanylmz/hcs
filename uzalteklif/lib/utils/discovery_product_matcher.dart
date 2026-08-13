@@ -123,10 +123,45 @@ DiscoveryProductRecommendation recommendationForDiscoveryPoint(
   };
 }
 
+/// Kullanicinin bizzat yildizlayarak (⭐) varsayilan yaptigi urunlerin kategorisel hafizasi
+final Map<String, String> _userFavoriteProductIds = {};
+
+void setUserFavoriteProduct(String categoryKey, String productId) {
+  if (productId.isEmpty) {
+    _userFavoriteProductIds.remove(categoryKey);
+  } else {
+    _userFavoriteProductIds[categoryKey] = productId;
+  }
+}
+
+String? getUserFavoriteProductId(String categoryKey) {
+  return _userFavoriteProductIds[categoryKey];
+}
+
+String getCategoryKeyForPoint(DiscoveryPoint point) {
+  final name = point.name.toLowerCase();
+  if (name.contains('sicaklik') || name.contains('sıcaklık')) return 'sicaklik_sensoru';
+  if (name.contains('damper')) return 'damper_aktuatoru';
+  if (name.contains('vana')) return 'vana_aktuatoru';
+  if (name.contains('basinc') || name.contains('basınç')) return 'basinc_sensoru';
+  if (name.contains('nem')) return 'nem_sensoru';
+  return point.type.name;
+}
+
 /// Nokta turune veya adina gore stok katalogundan en uygun varsayilan urunu otomatik secer.
-/// Ornek: Sicaklik sensoru noktasi icin Honeywell/VF20 sicaklik sensoru urununu otomatik bulur.
+/// Kullanici bir urunu ⭐ ile varsayilan yapmissa, tum ayni tur noktalar otomatik o urunle acilir!
 Product? findDefaultProductForPoint(DiscoveryPoint point, List<Product> products) {
   if (products.isEmpty) return null;
+  
+  // 0. Kullanicinin bizzat ⭐ yildizladigi varsayilan urun var mi kontrol et
+  final catKey = getCategoryKeyForPoint(point);
+  final favId = _userFavoriteProductIds[catKey];
+  if (favId != null && favId.isNotEmpty) {
+    for (final p in products) {
+      if (p.id == favId && p.isActive) return p;
+    }
+  }
+
   final rec = recommendationForDiscoveryPoint(point);
 
   // 1. Once kategori ve alt kategoriye tam uyan ilk aktif stoklu urunu ara

@@ -3995,17 +3995,51 @@ class _DiscoveryProductPickerDialogState
                           final product = products[index];
                           final selected = product.id == widget.point.productId;
                           final recommended = recommendation.matches(product);
+                          final catKey = getCategoryKeyForPoint(widget.point);
+                          final currentFavId = getUserFavoriteProductId(catKey);
+                          final isFavorite = currentFavId == product.id;
+
                           return ListTile(
                             selected: selected,
                             leading: Icon(
                               selected
                                   ? Icons.check_circle_rounded
-                                  : Icons.inventory_2_outlined,
+                                  : (isFavorite ? Icons.star_rounded : Icons.inventory_2_outlined),
+                              color: selected
+                                  ? const Color(0xFF29956F)
+                                  : (isFavorite ? const Color(0xFFE5A93C) : null),
                             ),
-                            title: Text(
-                              '${product.code} · ${product.name}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            title: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${product.code} · ${product.name}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: isFavorite || selected ? FontWeight.w800 : FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                if (isFavorite)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    margin: const EdgeInsets.only(left: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFE5A93C).withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: const Color(0xFFE5A93C)),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.star_rounded, size: 13, color: Color(0xFFE5A93C)),
+                                        SizedBox(width: 4),
+                                        Text('⭐ VARSAYILAN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF9D5C1D))),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
                             subtitle: Text(
                               '${productMainCategoryTurkishLabel(product)} › '
@@ -4015,12 +4049,45 @@ class _DiscoveryProductPickerDialogState
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            trailing: recommended
-                                ? const Chip(
-                                    avatar: Icon(Icons.check_rounded, size: 16),
-                                    label: Text('Filtreye uygun'),
-                                  )
-                                : const Chip(label: Text('Manuel seçim')),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: isFavorite ? 'Varsayılanlıktan Çıkar' : 'Bu Ürünü Tüm Noktalara VARSAYILAN Yap ⭐',
+                                  icon: Icon(
+                                    isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
+                                    color: isFavorite ? const Color(0xFFE5A93C) : const Color(0xFF5B6F7F),
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      if (isFavorite) {
+                                        setUserFavoriteProduct(catKey, '');
+                                      } else {
+                                        setUserFavoriteProduct(catKey, product.id);
+                                      }
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          isFavorite
+                                              ? 'Varsayılan ürün sıfırlandı.'
+                                              : '⭐ "${product.name}" tüm benzer noktalar için VARSAYILAN ÜRÜN yapıldı!',
+                                        ),
+                                        backgroundColor: isFavorite ? const Color(0xFF5B6F7F) : const Color(0xFF29956F),
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                const SizedBox(width: 4),
+                                recommended
+                                    ? const Chip(
+                                        avatar: Icon(Icons.check_rounded, size: 16),
+                                        label: Text('Filtreye uygun'),
+                                      )
+                                    : const Chip(label: Text('Manuel seçim')),
+                              ],
+                            ),
                             onTap: () => Navigator.pop(
                               context,
                               _ProductSelectionResult(product),

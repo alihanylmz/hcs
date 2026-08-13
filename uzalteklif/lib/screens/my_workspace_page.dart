@@ -331,8 +331,33 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
               ],
             ),
           ),
-          // Sadece Yonetici / Patron personel secici dropdown'u gorebilir
-          if (widget.isManager && _personList.isNotEmpty)
+          const SizedBox(width: 12),
+          ElevatedButton.icon(
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('İş Takip ve Atölye sistemine geçiliyor...'),
+                  duration: Duration(seconds: 1),
+                  backgroundColor: Color(0xFF2B82C9),
+                ),
+              );
+              Future.delayed(const Duration(milliseconds: 300), () {
+                Navigator.of(context).pushNamedAndRemoveUntil('/tickets', (route) => false);
+              });
+            },
+            icon: const Icon(Icons.build_circle_outlined, size: 18),
+            label: const Text('🛠️ İş Takip & Atölye ➔'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2B82C9),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+          if (widget.isManager && _personList.isNotEmpty) ...[
+            const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
               decoration: BoxDecoration(
@@ -371,6 +396,7 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                 ),
               ),
             ),
+          ],
         ],
       ),
     );

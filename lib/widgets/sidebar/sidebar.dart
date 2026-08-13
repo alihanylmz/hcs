@@ -84,8 +84,8 @@ class Sidebar extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 children: [
                   SidebarItem(
-                    icon: Icons.list_alt_rounded,
-                    label: 'Is Listesi',
+                    icon: Icons.assignment_outlined,
+                    label: 'Saha İş Emirleri & Servisler',
                     isActive: activeMenuItem == 'ticket_list',
                     activeColor: activeColor,
                     iconColor: iconColor,
@@ -94,7 +94,7 @@ class Sidebar extends StatelessWidget {
                   ),
                   SidebarItem(
                     icon: Icons.precision_manufacturing_outlined,
-                    label: 'Atolye Imalat',
+                    label: 'Atölye İmalat & Pano Reçeteleri',
                     isActive: activeMenuItem == 'workshop',
                     activeColor: activeColor,
                     iconColor: iconColor,
@@ -103,24 +103,11 @@ class Sidebar extends StatelessWidget {
                   ),
                   if (PermissionService.roleHasPermission(
                     userRole,
-                    AppPermission.viewDashboard,
-                  ))
-                    SidebarItem(
-                      icon: Icons.dashboard_rounded,
-                      label: 'Yonetici Paneli',
-                      isActive: activeMenuItem == 'dashboard',
-                      activeColor: activeColor,
-                      iconColor: iconColor,
-                      textColor: textColor,
-                      onTap: () => _navigate(context, const DashboardPage()),
-                    ),
-                  if (PermissionService.roleHasPermission(
-                    userRole,
                     AppPermission.viewStock,
                   ))
                     SidebarItem(
                       icon: Icons.inventory_2_outlined,
-                      label: 'Stok',
+                      label: 'Stok ve Ekipman Kataloğu',
                       isActive: activeMenuItem == 'stock',
                       activeColor: activeColor,
                       iconColor: iconColor,
@@ -130,7 +117,7 @@ class Sidebar extends StatelessWidget {
                     ),
                   SidebarItem(
                     icon: Icons.task_alt_rounded,
-                    label: 'Biten Isler',
+                    label: 'Biten İşler ve Tamamlananlar',
                     isActive: activeMenuItem == 'archived',
                     activeColor: activeColor,
                     iconColor: iconColor,
@@ -138,9 +125,22 @@ class Sidebar extends StatelessWidget {
                     onTap:
                         () => _navigate(context, const ArchivedTicketsPage()),
                   ),
+                  if (PermissionService.roleHasPermission(
+                    userRole,
+                    AppPermission.viewDashboard,
+                  ))
+                    SidebarItem(
+                      icon: Icons.dashboard_rounded,
+                      label: 'Yönetici Performans Panosu',
+                      isActive: activeMenuItem == 'dashboard',
+                      activeColor: activeColor,
+                      iconColor: iconColor,
+                      textColor: textColor,
+                      onTap: () => _navigate(context, const DashboardPage()),
+                    ),
                   SidebarItem(
                     icon: Icons.support_agent_rounded,
-                    label: 'Ariza Rehberi',
+                    label: 'Arıza & Teknik Kılavuz',
                     isActive: activeMenuItem == 'fault_codes',
                     activeColor: activeColor,
                     iconColor: iconColor,
@@ -152,7 +152,7 @@ class Sidebar extends StatelessWidget {
                   const SizedBox(height: 10),
                   SidebarItem(
                     icon: Icons.person_outline_rounded,
-                    label: 'Profilim',
+                    label: 'Profilim & Ayarlar',
                     isActive: activeMenuItem == 'profile',
                     activeColor: activeColor,
                     iconColor: iconColor,
@@ -161,7 +161,7 @@ class Sidebar extends StatelessWidget {
                   ),
                   SidebarItem(
                     icon: Icons.logout_rounded,
-                    label: 'Cikis Yap',
+                    label: 'Oturumu Kapat',
                     isActive: false,
                     activeColor: AppColors.corporateRed,
                     iconColor: const Color(0xFFFECACA),
@@ -174,6 +174,51 @@ class Sidebar extends StatelessWidget {
             const SizedBox(height: 10),
             const SidebarDivider(),
             const SizedBox(height: 10),
+            // UZAL TEKLİF SİSTEMİNE GEÇİŞ DÜĞMESİ
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _switchToQuoteSystem(context),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2B82C9).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF2B82C9).withValues(alpha: 0.4)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.description_outlined, size: 20, color: Color(0xFF2B82C9)),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Uzal Teklif & Keşif',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              'Teklif Sistemine Geç ➔',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF2B82C9),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
             Row(
               children: [
                 Expanded(
@@ -362,6 +407,20 @@ class Sidebar extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _switchToQuoteSystem(BuildContext context) {
+    // Web platformunda hash uzerinden veya direkt kök dizine akici gecis yap
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Teklif ve Keşif sistemine geçiliyor...'),
+        duration: Duration(seconds: 1),
+        backgroundColor: Color(0xFF2B82C9),
+      ),
+    );
+    Future.delayed(const Duration(milliseconds: 300), () {
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    });
   }
 
   void _navigate(BuildContext context, Widget page) {

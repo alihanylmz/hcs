@@ -18,7 +18,10 @@ Güvenli Soft-Untracking (Katalog Koruma), Sanal Katalog Temizliği ve Akıllı 
    - Üst menüye eklenen *"Sanal Katalog Stoklarını Temizle"* aksiyonu ile veritabanındaki sanal katalog takipleri tek tıkla temizlenebilir. Kullanıcı sadece kendi depoya eklediği 5-10 gerçek fiziksel ürünü listede tutar.
 
 3. **Akıllı Ürün İsmi Formatlama (`formatProductName`):**
-   - Katalog aktarımlarından gelen karmaşık ve tekrarlayan isim metinleri (Örn: `V5011N1040/U V5011N1040/U 2 Yollu Vana DN15...`) temizlendi. Ürün Kodu ve Sade Türkçe Ürün Adı ayrı DataGrid sütunlarında net ve okunabilir hale getirildi.
+   - Katalog aktarımlarından gelen karmaşık metinler temizlendi. Ürün Kodu ve Sade Ürün Adı ayrı DataGrid sütunlarında gösterildi.
+
+4. **Sürüm Yükseltme & PWA Önbellek Yenilenmesi:**
+   - Uygulama sürümü `1.1.11+16` olarak yükseltilerek tarayıcı ve Plesk FTP önbelleğinin yenilenmesi garanti altına alındı.
 
 ### 📁 Etkilenen Dosyalar
 - `[MODIFY] lib/services/stock_service.dart`

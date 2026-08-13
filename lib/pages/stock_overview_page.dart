@@ -840,7 +840,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
   // --- ZİMMET İŞLEME & KAPATMA MODALI ---
 
-  void _showCloseLoanModal(Map<String, dynamic> loan) {
+  void _showCloseLoanModal(Map<String, dynamic> loan, {String defaultAction = 'all'}) {
     if (!_canManageStock) return;
     final loanId = loan['id'];
     final totalLoanQty = _asInt(loan['quantity']);
@@ -849,9 +849,9 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     final productObj = loan['inventory'] ?? {};
     final productName = productObj['displayName'] ?? productObj['name'] ?? 'Ürün';
 
-    final consumedCtrl = TextEditingController(text: '0');
-    final returnedCtrl = TextEditingController(text: totalLoanQty.toString());
-    final defectiveCtrl = TextEditingController(text: '0');
+    final consumedCtrl = TextEditingController(text: defaultAction == 'consumed' ? totalLoanQty.toString() : '0');
+    final returnedCtrl = TextEditingController(text: defaultAction == 'returned' || defaultAction == 'all' ? totalLoanQty.toString() : '0');
+    final defectiveCtrl = TextEditingController(text: defaultAction == 'defective' ? totalLoanQty.toString() : '0');
     final faultDescCtrl = TextEditingController();
     String? selectedJobCode;
     final noteCtrl = TextEditingController();
@@ -2128,7 +2128,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                     dataRowMinHeight: 52,
                     dataRowMaxHeight: 64,
                     columns: const [
-                      DataColumn(label: Text('Teknik Personel (Cari Hesap)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                      DataColumn(label: Text('Teknik Personel', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
                       DataColumn(label: Text('Zimmetli Kalem Çeşidi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
                       DataColumn(label: Text('Toplam Ürün Adedi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
                       DataColumn(label: Text('Son Zimmet Tarihi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
@@ -2215,6 +2215,9 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   // --- PERSONEL ZİMMET DETAY & EKSTRE MODALI (CARİ DÖKÜMÜ) ---
 
   void _showPersonnelDetailModal(String personnelName, String personnelId, List<Map<String, dynamic>> loans) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final dialogWidth = (screenWidth * 0.90).clamp(800.0, 1200.0);
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2222,32 +2225,42 @@ class _StockOverviewPageState extends State<StockOverviewPage>
           children: [
             const Icon(Icons.badge, color: AppColors.ink),
             const SizedBox(width: 8),
-            Expanded(child: Text('$personnelName - Zimmetli Ürün Dökümü')),
+            Expanded(child: Text('$personnelName - Zimmetli Ürün Dökümü & Ekstresi')),
           ],
         ),
         content: SingleChildScrollView(
           child: Container(
-            width: 750,
+            width: dialogWidth,
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: AppColors.surfaceAccent, borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceAccent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.mist),
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Toplam ${loans.length} Kalem / ${loans.fold<int>(0, (sum, l) => sum + _asInt(l['quantity']))} Adet Zimmetli Ürün Var',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 14),
+                      Row(
+                        children: [
+                          const Icon(Icons.inventory, color: AppColors.ink, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Toplam ${loans.length} Kalem / ${loans.fold<int>(0, (sum, l) => sum + _asInt(l['quantity']))} Adet Zimmetli Ürün Bulunuyor',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 14),
+                          ),
+                        ],
                       ),
                       if (_canManageStock)
                         ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
                           icon: const Icon(Icons.add, size: 16),
-                          label: const Text('+ Bu Personel İçin Yeni Zimmet Ver'),
+                          label: const Text('+ Bu Personele Zimmet Ekle'),
                           onPressed: () {
                             Navigator.pop(ctx);
                             _showPersonnelLoanModal(null, personnelId);
@@ -2258,46 +2271,130 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 ),
                 const SizedBox(height: 16),
 
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(AppColors.sand),
-                    headingRowHeight: 38,
-                    columns: const [
-                      DataColumn(label: Text('Ürün Adı / Kod', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
-                      DataColumn(label: Text('Miktar', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
-                      DataColumn(label: Text('Veriliş Tarihi', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
-                      DataColumn(label: Text('Zimmet Notu / İş Kodu', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
-                      DataColumn(label: Text('İşlem', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
-                    ],
-                    rows: loans.map((loan) {
-                      final product = loan['inventory'] ?? {};
-                      return DataRow(
-                        cells: [
-                          DataCell(Text('${product['displayName'] ?? product['name'] ?? 'Bilinmeyen'} (${product['code'] ?? ''})', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
-                          DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(color: AppColors.brass.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
-                              child: Text('${loan['quantity']} ${product['unit'] ?? 'Adet'}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink)),
-                            ),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.paper,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.mist),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                          child: DataTable(
+                            headingRowColor: WidgetStateProperty.all(AppColors.ink),
+                            headingRowHeight: 40,
+                            dataRowMinHeight: 52,
+                            dataRowMaxHeight: 64,
+                            columns: const [
+                              DataColumn(label: Text('Ürün Kodu', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                              DataColumn(label: Text('Ürün Adı', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                              DataColumn(label: Text('Zimmet Miktarı', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                              DataColumn(label: Text('Veriliş Tarihi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                              DataColumn(label: Text('İş Kodu / Zimmet Notu', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                              DataColumn(label: Text('Hızlı Zimmet İşlemleri', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                            ],
+                            rows: loans.map((loan) {
+                              final product = loan['inventory'] ?? {};
+                              final code = (product['code'] ?? '').toString();
+                              final name = (product['displayName'] ?? product['name'] ?? 'Bilinmeyen Ürün').toString();
+                              final qty = loan['quantity'];
+                              final unit = product['unit'] ?? 'Adet';
+
+                              return DataRow(
+                                cells: [
+                                  DataCell(Text(code.ifEmpty('-'), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 13))),
+                                  DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.ink, fontSize: 13))),
+                                  DataCell(
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(color: AppColors.sand, borderRadius: BorderRadius.circular(6), border: Border.all(color: AppColors.mist)),
+                                      child: Text('$qty $unit', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 13)),
+                                    ),
+                                  ),
+                                  DataCell(Text(_formatDate(loan['borrowed_at']), style: const TextStyle(color: AppColors.ink, fontSize: 13))),
+                                  DataCell(Text((loan['note'] ?? '-').toString(), style: const TextStyle(color: AppColors.ink, fontSize: 13))),
+                                  DataCell(
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppColors.ink,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          ),
+                                          icon: const Icon(Icons.tune_outlined, size: 14),
+                                          label: const Text('Zimmeti İşle / Kapat', style: TextStyle(fontSize: 12)),
+                                          onPressed: () {
+                                            Navigator.pop(ctx);
+                                            _showCloseLoanModal(loan);
+                                          },
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Tooltip(
+                                          message: 'Tümünü Sarf Et (Projede Kullanıldı)',
+                                          child: OutlinedButton.icon(
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: AppColors.mint,
+                                              side: const BorderSide(color: AppColors.mint),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            ),
+                                            icon: const Icon(Icons.check_circle_outline, size: 14),
+                                            label: const Text('Sarf Et', style: TextStyle(fontSize: 11)),
+                                            onPressed: () {
+                                              Navigator.pop(ctx);
+                                              _showCloseLoanModal(loan, defaultAction: 'consumed');
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Tooltip(
+                                          message: 'Arızaya Ayrıldı (RMA / Bozuk)',
+                                          child: OutlinedButton.icon(
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: AppColors.corporateRed,
+                                              side: const BorderSide(color: AppColors.corporateRed),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            ),
+                                            icon: const Icon(Icons.build_circle_outlined, size: 14),
+                                            label: const Text('Arızalı', style: TextStyle(fontSize: 11)),
+                                            onPressed: () {
+                                              Navigator.pop(ctx);
+                                              _showCloseLoanModal(loan, defaultAction: 'defective');
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Tooltip(
+                                          message: 'Sağlam Şekilde Depoya İade Et',
+                                          child: OutlinedButton.icon(
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: AppColors.ink,
+                                              side: const BorderSide(color: AppColors.mist),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            ),
+                                            icon: const Icon(Icons.replay, size: 14),
+                                            label: const Text('İade', style: TextStyle(fontSize: 11)),
+                                            onPressed: () {
+                                              Navigator.pop(ctx);
+                                              _showCloseLoanModal(loan, defaultAction: 'returned');
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }).toList(),
                           ),
-                          DataCell(Text(_formatDate(loan['borrowed_at']), style: const TextStyle(color: AppColors.ink))),
-                          DataCell(Text(loan['note'] ?? '-', style: const TextStyle(color: AppColors.ink))),
-                          DataCell(
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
-                              icon: const Icon(Icons.assignment_turned_in, size: 14),
-                              label: const Text('Zimmeti İşle / Kapat', style: TextStyle(fontSize: 12)),
-                              onPressed: () {
-                                Navigator.pop(ctx);
-                                _showCloseLoanModal(loan);
-                              },
-                            ),
-                          ),
-                        ],
+                        ),
                       );
-                    }).toList(),
+                    },
                   ),
                 ),
               ],

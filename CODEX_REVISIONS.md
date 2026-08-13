@@ -4,6 +4,32 @@ Bu dosya, yapay zeka ajanları (Antigravity, Codex vb.) tarafından yapılan tü
 
 ---
 
+## [REV-011] - 2026-08-13 (14:20 +03:00)
+
+### 📌 Başlık
+Personel Zimmet Ekstre Penceresinin Tam Genişlik Yapılması, Başlık İyileştirmesi ve Hızlı Sarf / Arızalı / İade Aksiyon Butonları
+
+### 🎯 Değişiklik & İşlem Özeti
+1. **Başlık İyileştirmesi (`lib/pages/stock_overview_page.dart`):**
+   - Tablo başlığındaki `(Cari Hesap)` ifadesi kaldırıldı, sade `Teknik Personel` olarak güncellendi.
+
+2. **Duyarlı ve Geniş Ekstre Penceresi:**
+   - Personel zimmet detay modalının genişliği ekranın %90'ına (max 1200px) çıkarıldı.
+   - Modal içerisindeki DataGrid `LayoutBuilder` + `ConstrainedBox(minWidth: constraints.maxWidth)` ile tamamen kaplayacak biçimde esnetildi. Kesilme/yarım görünme sorunu tamamen giderildi.
+
+3. **Hızlı Zimmet İşlem Butonları (Sarf Edildi / Arızalıya Ayır / İade):**
+   - Zimmet döküm tablosunda her ürün satırına doğrudan hızlı işlem butonları eklendi:
+     - ⚡ **`Sarf Et`**: Zimmetli miktarı doğrudan projede kullanıldı olarak sarf eder.
+     - 🛠️ **`Arızalı`**: Ürünü doğrudan arızalı stoğa (RMA) kaydırır.
+     - ↩️ **`İade`**: Ürünü depodaki sağlam stoğa iade eder.
+     - ⚙️ **`Zimmeti İşle / Kapat`**: Özelleştirilebilir miktar girişi modallarını açar.
+
+### 📁 Etkilenen Dosyalar
+- `[MODIFY] lib/pages/stock_overview_page.dart`
+- `[MODIFY] CODEX_REVISIONS.md`
+
+---
+
 ## [REV-010] - 2026-08-13 (14:10 +03:00)
 
 ### 📌 Başlık
@@ -19,35 +45,6 @@ Personel Bazlı Zimmet Yönetimi (Cari Hesap Mantığı & Ekstre Dökümü)
    - Ekstre içerisinden kalem kalem zimmet kapatılabilir/sarf/arızalı işlenebilir veya doğrudan o personel için yeni zimmet kaydı açılabilir.
 
 ### 📁 Etkilenen Dosyalar
-- `[MODIFY] lib/pages/stock_overview_page.dart`
-- `[MODIFY] CODEX_REVISIONS.md`
-
----
-
-## [REV-009] - 2026-08-13 (14:04 +03:00)
-
-### 📌 Başlık
-Arızalı Ürün Yönetimi (RMA & Servis Takibi) ve Zimmetten Arızalı Ayrıştırma Süreci Entegrasyonu
-
-### 🎯 Değişiklik & İşlem Özeti
-1. **Zimmet Kapatırken Arızalı Ayrıştırma (`lib/pages/stock_overview_page.dart`, `lib/services/stock_service.dart`):**
-   - Zimmet kapatma modalı 3 girdili yapıya yükseltildi: **Sarf Edilen**, **Depoya İade**, **Arızalı Ayrılan** (Örn: 10 zimmetten 5 sarf, 3 iade, 2 arızalı).
-   - Arızalı olarak bildirilen ürünler otomatik olarak **"Arızalı Ürünler (RMA)"** takip listesine kaydırılır ve durumları `Arızalı Depoda (Bekliyor)` olarak işaretlenir.
-
-2. **Arızalı Ürünler (RMA) Takip Sekmesi & Servis/Kargo Süreçleri:**
-   - Üst menüye yeni **"Arızalı Ürünler (RMA)"** DataGrid sekmesi eklendi.
-   - Arızalı ürünlerin süreç hareketleri tanımlandı:
-     - 🚚 `Tedarikçiye / Servise Kargolandı` (Firma Adı & Kargo Takip Kodu kaydı).
-     - ✅ `Tamir Edildi` (Otomatik olarak depodaki sağlam stok miktarına tekrar eklenir).
-     - 🔄 `Yenisi Geldi` (Otomatik olarak depodaki sağlam stok miktarına tekrar eklenir).
-     - ❌ `Hurdaya Ayrıldı` (Kullanılamaz çöp olarak arşivlenir).
-
-3. **Veritabanı Migration:**
-   - `defective_products` tablosu ve yetki politikaları eklendi (`uzalteklif/supabase/migrations/20260813_defective_products.sql`).
-
-### 📁 Etkilenen Dosyalar
-- `[NEW] uzalteklif/supabase/migrations/20260813_defective_products.sql`
-- `[MODIFY] lib/services/stock_service.dart`
 - `[MODIFY] lib/pages/stock_overview_page.dart`
 - `[MODIFY] CODEX_REVISIONS.md`
 

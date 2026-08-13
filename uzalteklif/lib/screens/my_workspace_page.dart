@@ -86,8 +86,15 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
         _products = products;
         _rates = rates;
         _personList = sortedPersons;
-        if (_selectedPerson.isEmpty && sortedPersons.isNotEmpty) {
-          _selectedPerson = sortedPersons.first;
+
+        // Yonetici degilse sadece kendi adina sabitle
+        if (!widget.isManager) {
+          _selectedPerson = widget.currentUserName.trim();
+        } else if (_selectedPerson.isEmpty && sortedPersons.isNotEmpty) {
+          // Yonetici ise varsayilan olarak ilk personeli veya tumunu secebilir
+          _selectedPerson = widget.currentUserName.trim().isNotEmpty
+              ? widget.currentUserName.trim()
+              : sortedPersons.first;
         }
         _loading = false;
       });
@@ -324,7 +331,8 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
               ],
             ),
           ),
-          if (_personList.isNotEmpty)
+          // Sadece Yonetici / Patron personel secici dropdown'u gorebilir
+          if (widget.isManager && _personList.isNotEmpty)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
               decoration: BoxDecoration(

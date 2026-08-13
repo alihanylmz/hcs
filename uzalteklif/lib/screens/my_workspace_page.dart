@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/market_rate.dart';
 import '../models/product.dart';
@@ -131,10 +132,17 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
     final approvedQuotes = quotes.where((q) => q.status == QuoteStatus.approved).toList();
     final wonQuotes = quotes.where((q) => q.status == QuoteStatus.accepted).toList();
 
+    // 🚨 Cevap Vermemiş / Zaman Aşımlı Teklifler (3 Günden Fazla Dönüş Olmayanlar)
+    final now = DateTime.now();
+    final overdueQuotes = approvedQuotes.where((q) {
+      final sentDate = q.emailSentAt ?? q.createdAt;
+      return q.customerResponse == CustomerResponse.pending && now.difference(sentDate).inDays >= 3;
+    }).toList();
+
     // Aksiyon gerektiren teklifler (Onayli ama e-posta atilmamis)
     final needsEmail = approvedQuotes.where((q) => q.emailSentAt == null).toList();
-    // E-posta atilmis ama cevap bekleyenler
-    final awaitingResponse = approvedQuotes.where((q) => q.emailSentAt != null && q.customerResponse == CustomerResponse.pending).toList();
+    // E-posta atilmis ama 3 gunden az süredir cevap bekleyenler
+    final normalAwaiting = approvedQuotes.where((q) => q.emailSentAt != null && q.customerResponse == CustomerResponse.pending && !overdueQuotes.contains(q)).toList();
 
     final wonTotal = wonQuotes.fold<double>(
       0,
@@ -195,7 +203,7 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                                 width: itemWidth,
                                 label: 'Takipte / Cevap Bekleyen',
                                 value: '${approvedQuotes.length}',
-                                subText: '${awaitingResponse.length} yanıt bekliyor',
+                                subText: '${normalAwaiting.length + overdueQuotes.length} yanıt bekliyor',
                                 icon: Icons.mark_email_read_rounded,
                                 color: const Color(0xFF2B82C9),
                               ),
@@ -214,8 +222,8 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                       const SizedBox(height: 20),
 
                       // Aksiyon Gerektirenler Paneli
-                      if (needsEmail.isNotEmpty || awaitingResponse.isNotEmpty) ...[
-                        _buildActionCenter(needsEmail, awaitingResponse),
+                      if (overdueQuotes.isNotEmpty || needsEmail.isNotEmpty || normalAwaiting.isNotEmpty) ...[
+                        _buildActionCenter(overdueQuotes, needsEmail, normalAwaiting),
                         const SizedBox(height: 20),
                       ],
 
@@ -392,7 +400,56 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
     );
   }
 
-  Widget _buildActionCenter(List<Quote> needsEmail, List<Quote> awaitingResponse) {
+  Future<void> _sendWhatsAppReminder(Quote q) async {
+    final rawPhone = q.documentProfile.customerPhone.trim();
+    final cleanPhone = rawPhone.replaceAll(RegExp(r'\D'), '');
+    final targetPhone = cleanPhone.startsWith('90')
+        ? cleanPhone
+        : cleanPhone.startsWith('0')
+            ? '90${cleanPhone.substring(1)}'
+            : cleanPhone.isNotEmpty
+                ? '90$cleanPhone'
+                : '';
+
+    final customerTitle = q.documentProfile.customerContactTitle.trim().isNotEmpty
+        ? q.documentProfile.customerContactTitle.trim()
+        : (q.customerCompany.isNotEmpty ? q.customerCompany : q.customerName);
+
+    final msg = '''
+Sayın $customerTitle,
+
+Tarafınıza sunulmuş olan ${q.code} kodlu teklifimiz hakkında görüşlerinizi öğrenmek ve yardımcı olmak isteriz.
+
+📄 Teklifi Çevrimiçi İncelemek İçin:
+https://uzalteknikservis.info/#/p/${q.publicToken}
+
+Sorularınız veya revize talepleriniz için bize ulaşabilirsiniz.
+
+Saygılarımızla,
+Uzal Teknik Servis
+''';
+
+    final uri = Uri.parse(
+      targetPhone.isNotEmpty
+          ? 'https://wa.me/$targetPhone?text=${Uri.encodeComponent(msg)}'
+          : 'https://wa.me/?text=${Uri.encodeComponent(msg)}',
+    );
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('WhatsApp açılamadı.')),
+      );
+    }
+  }
+
+  Widget _buildActionCenter(
+    List<Quote> overdueQuotes,
+    List<Quote> needsEmail,
+    List<Quote> normalAwaiting,
+  ) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -424,6 +481,51 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
               ],
             ),
             const SizedBox(height: 12),
+            // 🚨 KIRMIZI ALARM: 3+ GÜNDÜR DÖNÜŞ YAPILMAYAN TEKLİFLER
+            if (overdueQuotes.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF0F0),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF9D2C2C), width: 1.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: Color(0xFF9D2C2C), size: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          '🚨 KRİTİK: ${overdueQuotes.length} TEKLİFE 3+ GÜNDÜR DÖNÜŞ OLMADI!',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF9D2C2C),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    for (final q in overdueQuotes) ...[
+                      _ActionQuoteTile(
+                        quote: q,
+                        actionText: '💬 WhatsApp Hatırlat',
+                        icon: Icons.chat_rounded,
+                        btnColor: const Color(0xFF25D366),
+                        isOverdue: true,
+                        onTap: () => _sendWhatsAppReminder(q),
+                        onMailTap: () => _openQuoteReview(q),
+                      ),
+                      if (q != overdueQuotes.last) const SizedBox(height: 6),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+
             if (needsEmail.isNotEmpty) ...[
               const Text(
                 '📧 Müşteriye Henüz E-posta Gönderilmemiş:',
@@ -441,15 +543,15 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                 if (q != needsEmail.last) const SizedBox(height: 6),
               ],
             ],
-            if (needsEmail.isNotEmpty && awaitingResponse.isNotEmpty)
+            if (needsEmail.isNotEmpty && normalAwaiting.isNotEmpty)
               const Divider(height: 20),
-            if (awaitingResponse.isNotEmpty) ...[
+            if (normalAwaiting.isNotEmpty) ...[
               const Text(
-                '⏳ Müşteri Cevabı Bekleniyor:',
+                '⏳ Takipte / Müşteri Cevabı Bekleyenler:',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF2B82C9)),
               ),
               const SizedBox(height: 6),
-              for (final q in awaitingResponse) ...[
+              for (final q in normalAwaiting) ...[
                 _ActionQuoteTile(
                   quote: q,
                   actionText: 'Karar Gir',
@@ -457,7 +559,7 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                   btnColor: const Color(0xFF29956F),
                   onTap: () => _openQuoteReview(q),
                 ),
-                if (q != awaitingResponse.last) const SizedBox(height: 6),
+                if (q != normalAwaiting.last) const SizedBox(height: 6),
               ],
             ],
           ],
@@ -677,7 +779,9 @@ class _WorkspaceMetricCard extends StatelessWidget {
       ),
     );
   }
+
 }
+
 
 class _ActionQuoteTile extends StatelessWidget {
   const _ActionQuoteTile({
@@ -686,6 +790,8 @@ class _ActionQuoteTile extends StatelessWidget {
     required this.icon,
     required this.btnColor,
     required this.onTap,
+    this.isOverdue = false,
+    this.onMailTap,
   });
 
   final Quote quote;
@@ -693,15 +799,19 @@ class _ActionQuoteTile extends StatelessWidget {
   final IconData icon;
   final Color btnColor;
   final VoidCallback onTap;
+  final bool isOverdue;
+  final VoidCallback? onMailTap;
 
   @override
   Widget build(BuildContext context) {
+    final diffDays = DateTime.now().difference(quote.emailSentAt ?? quote.createdAt).inDays;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isOverdue ? const Color(0xFFFFF0F0) : Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8C88B)),
+        border: Border.all(color: isOverdue ? const Color(0xFF9D2C2C) : const Color(0xFFE8C88B)),
       ),
       child: Row(
         children: [
@@ -709,9 +819,31 @@ class _ActionQuoteTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${quote.code} — ${quote.customerCompany.isEmpty ? quote.customerName : quote.customerCompany}',
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12.5, color: Color(0xFF17304C)),
+                Row(
+                  children: [
+                    Text(
+                      '${quote.code} — ${quote.customerCompany.isEmpty ? quote.customerName : quote.customerCompany}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12.5,
+                        color: isOverdue ? const Color(0xFF9D2C2C) : const Color(0xFF17304C),
+                      ),
+                    ),
+                    if (isOverdue) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF9D2C2C),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '$diffDays Gündür Cevap Bekliyor',
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 Text(
                   quote.title.isEmpty ? 'Başlıksız teklif' : quote.title,
@@ -720,6 +852,19 @@ class _ActionQuoteTile extends StatelessWidget {
               ],
             ),
           ),
+          if (isOverdue && onMailTap != null) ...[
+            OutlinedButton.icon(
+              onPressed: onMailTap,
+              icon: const Icon(Icons.email_outlined, size: 14),
+              label: const Text('✉️ Mail'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF2B82C9),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
           FilledButton.icon(
             onPressed: onTap,
             icon: Icon(icon, size: 14),

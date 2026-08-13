@@ -394,6 +394,131 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     }
   }
 
+  /// WhatsApp uzerinden teklif baglantisi ve ozeti gonderir.
+  Future<void> _sendWhatsApp([String? initialPhone]) async {
+    final rawPhone = (initialPhone ?? _quote.documentProfile.customerPhone).trim();
+    final phoneCtrl = TextEditingController(text: rawPhone);
+
+    final String quoteUrl;
+    if (_quote.publicShareSlug.startsWith('http://') || _quote.publicShareSlug.startsWith('https://')) {
+      quoteUrl = _quote.publicShareSlug;
+    } else if (_quote.publicShareSlug.isNotEmpty) {
+      final cleanSlug = _quote.publicShareSlug.startsWith('/') ? _quote.publicShareSlug : '/${_quote.publicShareSlug}';
+      quoteUrl = 'https://uzalteknikservis.info/#$cleanSlug';
+    } else if (_quote.publicToken.isNotEmpty) {
+      quoteUrl = 'https://uzalteknikservis.info/#/p/${_quote.publicToken}';
+    } else {
+      quoteUrl = 'https://uzalteknikservis.info/#/quote/${_quote.id}';
+    }
+
+    final contactNameStr = _quote.customerName.trim().isNotEmpty ? _quote.customerName.trim() : "Yetkili";
+
+    final msgCtrl = TextEditingController(
+      text: 'Sayın $contactNameStr,\n\n'
+          '${_quote.code} kodlu teklif detaylarımızı bilgilerinize sunarız.\n\n'
+          '📄 Teklifi Çevrimiçi İncelemek & İndirmek İçin Bağlantı:\n'
+          '$quoteUrl\n\n'
+          'Bilgilerinize saygılarımızla,\n'
+          'Uzal Teknik Servis',
+    );
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.chat_rounded, color: Color(0xFF25D366)),
+            SizedBox(width: 8),
+            Text('WhatsApp İle Teklif Gönder'),
+          ],
+        ),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Müşteri Telefon / WhatsApp Numarası',
+                  hintText: '0555 123 45 67 veya +90...',
+                  prefixIcon: Icon(Icons.phone_outlined),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: msgCtrl,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: 'WhatsApp Mesajı Metni',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF25D366),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.send_rounded, size: 18),
+            label: const Text('WhatsApp İle Gönder'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != true) return;
+
+    final targetPhone = phoneCtrl.text.trim();
+    if (targetPhone.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lütfen geçerli bir telefon numarası girin.')),
+        );
+      }
+      return;
+    }
+
+    // Telefon numarasini rakamlardan olusacak sekilde temizle
+    String cleanDigits = targetPhone.replaceAll(RegExp(r'\D'), '');
+    if (cleanDigits.startsWith('0')) {
+      cleanDigits = '90${cleanDigits.substring(1)}';
+    } else if (cleanDigits.length == 10) {
+      cleanDigits = '90$cleanDigits';
+    }
+
+    final encodedMsg = Uri.encodeComponent(msgCtrl.text);
+    final waUri = Uri.parse('https://wa.me/$cleanDigits?text=$encodedMsg');
+
+    try {
+      final launched = await launchUrl(waUri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        await launchUrl(waUri, mode: LaunchMode.platformDefault);
+      }
+    } catch (_) {
+      await launchUrl(waUri, mode: LaunchMode.platformDefault);
+    }
+
+    // Teklif durumunu Teklif Gonderildi yap
+    await _setStatusManually(QuoteStatus.approved);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Teklif WhatsApp üzerinden $cleanDigits numarasına yönlendirildi!'),
+          backgroundColor: const Color(0xFF25D366),
+        ),
+      );
+    }
+  }
+
   /// Sistemin e-posta istemcisini acar, gonderim kaydeder (Alici & Gonderen hesap secim dialogu).
   Future<void> _sendEmail([String? initialEmail]) async {
     final availableEmails = <String>{};
@@ -1511,44 +1636,54 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: () => _sendWhatsApp(),
+                  icon: const Icon(Icons.chat_rounded, size: 16),
+                  label: const Text('💬 WhatsApp İle Gönder'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF25D366),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                  ),
+                ),
               ],
             ),
-          ] else if (emails.isNotEmpty) ...[
-            const SizedBox(height: 8),
+          ] else ...[
+            const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: emails
-                  .map(
+              children: [
+                if (emails.isNotEmpty)
+                  ...emails.map(
                     (e) => FilledButton.icon(
                       onPressed: () => _sendEmail(e),
                       icon: const Icon(Icons.send_rounded, size: 16),
-                      label: Text(e),
+                      label: Text('E-posta Gönder ($e)'),
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF2B82C9),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 8,
-                        ),
-                        textStyle: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        ),
                       ),
                     ),
                   )
-                  .toList(),
-            ),
-          ] else ...[
-            const SizedBox(height: 6),
-            const Text(
-              'Bu teklifte kayıtlı müşteri e-postası yok. '
-              'Teklif seçeneklerinden ekleyebilirsiniz.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Color(0xFF5B6F7F),
-                fontWeight: FontWeight.w600,
-              ),
+                else
+                  FilledButton.icon(
+                    onPressed: () => _sendEmail(),
+                    icon: const Icon(Icons.send_rounded, size: 16),
+                    label: const Text('E-posta İle Gönder'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF2B82C9),
+                    ),
+                  ),
+                FilledButton.icon(
+                  onPressed: () => _sendWhatsApp(),
+                  icon: const Icon(Icons.chat_rounded, size: 16),
+                  label: const Text('💬 WhatsApp İle Gönder'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF25D366),
+                  ),
+                ),
+              ],
             ),
           ],
         ],

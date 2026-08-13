@@ -11,6 +11,7 @@ import '../services/product_csv_service.dart';
 import '../services/product_repository.dart';
 import '../utils/product_category_labels.dart';
 import '../widgets/workspace_background.dart';
+import '../services/module_switcher.dart';
 import 'product_detail_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -553,18 +554,7 @@ class _HomePageState extends State<HomePage> {
       runSpacing: 8,
       children: [
         ElevatedButton.icon(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('İş Takip ve Atölye sistemine geçiliyor...'),
-                duration: Duration(seconds: 1),
-                backgroundColor: Color(0xFF2B82C9),
-              ),
-            );
-            Future.delayed(const Duration(milliseconds: 300), () {
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            });
-          },
+          onPressed: () => ModuleSwitcher.switchToTask(context),
           icon: const Icon(Icons.build_circle_outlined, size: 18),
           label: const Text('🛠️ İş Takip & Atölye ➔'),
           style: ElevatedButton.styleFrom(

@@ -11,6 +11,7 @@ import '../../pages/profile_page.dart';
 import '../../pages/stock_overview_page.dart';
 import '../../pages/ticket_list_page.dart';
 import '../../pages/workshop_page.dart';
+import '../../services/app_module_service.dart';
 import '../../services/permission_service.dart';
 import '../../theme/app_colors.dart';
 import 'sidebar_item.dart';
@@ -411,20 +412,7 @@ class Sidebar extends StatelessWidget {
   }
 
   void _switchToQuoteSystem(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Teklif ve Keşif sistemine geçiliyor...'),
-        duration: Duration(seconds: 1),
-        backgroundColor: Color(0xFF2B82C9),
-      ),
-    );
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (kIsWeb) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      } else {
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      }
-    });
+    AppModuleService.switchToQuote(context);
   }
 
   void _navigate(BuildContext context, Widget page) {

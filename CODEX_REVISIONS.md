@@ -4,6 +4,35 @@ Bu dosya, yapay zeka ajanları (Antigravity, Codex vb.) tarafından yapılan tü
 
 ---
 
+## [REV-009] - 2026-08-13 (14:04 +03:00)
+
+### 📌 Başlık
+Arızalı Ürün Yönetimi (RMA & Servis Takibi) ve Zimmetten Arızalı Ayrıştırma Süreci Entegrasyonu
+
+### 🎯 Değişiklik & İşlem Özeti
+1. **Zimmet Kapatırken Arızalı Ayrıştırma (`lib/pages/stock_overview_page.dart`, `lib/services/stock_service.dart`):**
+   - Zimmet kapatma modalı 3 girdili yapıya yükseltildi: **Sarf Edilen**, **Depoya İade**, **Arızalı Ayrılan** (Örn: 10 zimmetten 5 sarf, 3 iade, 2 arızalı).
+   - Arızalı olarak bildirilen ürünler otomatik olarak **"Arızalı Ürünler (RMA)"** takip listesine kaydırılır ve durumları `Arızalı Depoda (Bekliyor)` olarak işaretlenir.
+
+2. **Arızalı Ürünler (RMA) Takip Sekmesi & Servis/Kargo Süreçleri:**
+   - Üst menüye yeni **"Arızalı Ürünler (RMA)"** DataGrid sekmesi eklendi.
+   - Arızalı ürünlerin süreç hareketleri tanımlandı:
+     - 🚚 `Tedarikçiye / Servise Kargolandı` (Firma Adı & Kargo Takip Kodu kaydı).
+     - ✅ `Tamir Edildi` (Otomatik olarak depodaki sağlam stok miktarına tekrar eklenir).
+     - 🔄 `Yenisi Geldi` (Otomatik olarak depodaki sağlam stok miktarına tekrar eklenir).
+     - ❌ `Hurdaya Ayrıldı` (Kullanılamaz çöp olarak arşivlenir).
+
+3. **Veritabanı Migration:**
+   - `defective_products` tablosu ve yetki politikaları eklendi (`uzalteklif/supabase/migrations/20260813_defective_products.sql`).
+
+### 📁 Etkilenen Dosyalar
+- `[NEW] uzalteklif/supabase/migrations/20260813_defective_products.sql`
+- `[MODIFY] lib/services/stock_service.dart`
+- `[MODIFY] lib/pages/stock_overview_page.dart`
+- `[MODIFY] CODEX_REVISIONS.md`
+
+---
+
 ## [REV-008] - 2026-08-13 (13:28 +03:00)
 
 ### 📌 Başlık
@@ -25,30 +54,6 @@ UzalTeklif Birebir Renk Teması Entegrasyonu ve %100 Ekran Genişliğine Yayıla
 
 ### 📁 Etkilenen Dosyalar
 - `[MODIFY] lib/theme/app_colors.dart`
-- `[MODIFY] lib/pages/stock_overview_page.dart`
-- `[MODIFY] CODEX_REVISIONS.md`
-
----
-
-## [REV-007] - 2026-08-13 (12:44 +03:00)
-
-### 📌 Başlık
-Yüksek Kontrastlı Tablo Tasarımı, Esnek Zimmet Sarf/İade Yönetimi ve Akıllı Katalog İsimlendirmesi
-
-### 🎯 Değişiklik & İşlem Özeti
-1. **Esnek Zimmet Sarf / İade ve İş Kodu Bağlantısı (`lib/services/stock_service.dart`, `lib/pages/stock_overview_page.dart`):**
-   - **Kısmi Sarf / İade Mantığı:** Personeldeki zimmet kapatılırken veya işlenirken sarf edilen (projede kullanılan) miktar ile depoya iade edilen miktar ayrı ayrı girilebilir (Örn: 10 adet zimmetten 5'i sarf edildi, 5'i depoya iade alındı).
-   - **İş Kodu Dropdown:** Zimmet verirken veya sarf işlerken serbest not yerine doğrudan aktif **İş Kodu (Ticket)** seçimi zorunlu/isteğe bağlı dropdown olarak bağlandı.
-
-2. **Akıllı Katalog Ürün İsimlendirmesi:**
-   - Katalogdaki ham teknik özellik dizileri (`16UIO,4CHO,4Rel...`) ana ürün adı yerine alt özellik rozetine çekildi. Ürün Kodu, Marka ve Kategori harmanlanarak temiz kurumsal başlıklar (`Honeywell Zone Controllers`) gösterildi.
-
-3. **Yüksek Kontrastlı ERP Tablo Tasarımı:**
-   - Kullanıcı ekran görüntüsü analiz edilerek sönük gri metinler, hizalaması kayan sayfalama çubuğu ve koyu gri buton uyuşmazlıkları düzeltildi.
-   - Tablo hücrelerinde tam koyu slate metinler (`#0F172A`, `#1E293B`), belirgin kenarlıklar ve kart altıyla hizalı temiz sayfalama çubuğu sağlandı.
-
-### 📁 Etkilenen Dosyalar
-- `[MODIFY] lib/services/stock_service.dart`
 - `[MODIFY] lib/pages/stock_overview_page.dart`
 - `[MODIFY] CODEX_REVISIONS.md`
 

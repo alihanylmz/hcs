@@ -30,6 +30,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   List<Map<String, dynamic>> _missingTickets = [];
   List<Map<String, dynamic>> _stockMovements = [];
   List<Map<String, dynamic>> _personnelLoans = [];
+  List<Map<String, dynamic>> _defectiveProducts = [];
   List<Map<String, dynamic>> _activeTickets = [];
 
   bool _isLoading = true;
@@ -37,7 +38,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
   String _searchQuery = '';
   String _selectedCategory = 'Tümü';
-  int _activeTab = 0; // 0: Depodaki Stoklar, 1: Kritik Stoklar, 2: Tüm Katalog, 3: Zimmetler, 4: Hareketler, 5: Eksik İşler
+  int _activeTab = 0; // 0: Depodaki Stoklar, 1: Kritik Stoklar, 2: Tüm Katalog, 3: Zimmetler, 4: Hareketler, 5: Eksik İşler, 6: Arızalı Ürünler
 
   // SAYFALAMA (PAGINATION) STATE
   int _currentPage = 0;
@@ -73,6 +74,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       _loadMissingTickets(),
       _loadStockMovements(),
       _loadPersonnelLoans(),
+      _loadDefectiveProducts(),
       _loadActiveTickets(),
     ]);
   }
@@ -119,6 +121,13 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     try {
       final data = await _stockService.getOpenPersonnelLoans();
       if (mounted) setState(() => _personnelLoans = data);
+    } catch (_) {}
+  }
+
+  Future<void> _loadDefectiveProducts() async {
+    try {
+      final data = await _stockService.getDefectiveProducts();
+      if (mounted) setState(() => _defectiveProducts = data);
     } catch (_) {}
   }
 
@@ -805,7 +814,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     );
   }
 
-  // --- ZİMMET İŞLEME & KAPATMA MODALI ---
+  // --- ZİMMET İŞLEME & KAPATMA MODALI (ESNEK SARF / İADE / ARIZALI) ---
 
   void _showCloseLoanModal(Map<String, dynamic> loan) {
     if (!_canManageStock) return;
@@ -818,6 +827,8 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
     final consumedCtrl = TextEditingController(text: '0');
     final returnedCtrl = TextEditingController(text: totalLoanQty.toString());
+    final defectiveCtrl = TextEditingController(text: '0');
+    final faultDescCtrl = TextEditingController();
     String? selectedJobCode;
     final noteCtrl = TextEditingController();
 
@@ -827,7 +838,8 @@ class _StockOverviewPageState extends State<StockOverviewPage>
         builder: (ctx, setModalState) {
           final consumed = int.tryParse(consumedCtrl.text.trim()) ?? 0;
           final returned = int.tryParse(returnedCtrl.text.trim()) ?? 0;
-          final totalAccounted = consumed + returned;
+          final defective = int.tryParse(defectiveCtrl.text.trim()) ?? 0;
+          final totalAccounted = consumed + returned + defective;
           final remaining = totalLoanQty - totalAccounted;
           final isValid = totalAccounted > 0 && totalAccounted <= totalLoanQty;
 
@@ -839,102 +851,129 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 Expanded(child: Text('Zimmeti İşle / Kapat: $personnelName')),
               ],
             ),
-            content: Container(
-              width: 480,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Ürün: $productName (${productObj['code'] ?? ''})', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  Text('Personeldeki Toplam Zimmetli Miktar: $totalLoanQty ${productObj['unit'] ?? 'Adet'}', style: const TextStyle(color: AppColors.ink, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
+            content: SingleChildScrollView(
+              child: Container(
+                width: 500,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Ürün: $productName (${productObj['code'] ?? ''})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Personeldeki Zimmetli Miktar: $totalLoanQty ${productObj['unit'] ?? 'Adet'}', style: const TextStyle(color: AppColors.ink, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
 
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: consumedCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Sarf Edilen Miktar *',
-                            helperText: 'Projede/işletmede kullanılan',
-                            border: OutlineInputBorder(),
-                          ),
-                          onChanged: (_) => setModalState(() {}),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: returnedCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Depoya İade Miktarı *',
-                            helperText: 'Stoğa geri teslim edilen',
-                            border: OutlineInputBorder(),
-                          ),
-                          onChanged: (_) => setModalState(() {}),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  DropdownButtonFormField<String>(
-                    value: selectedJobCode,
-                    decoration: const InputDecoration(
-                      labelText: 'Sarf Yapılan İş Kodu (İş Emri Bağlantısı)',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem<String>(value: null, child: Text('Seçilmedi (Genel Sarf)')),
-                      ..._activeTickets.map((t) {
-                        final code = t['job_code'] ?? t['id'];
-                        final cust = t['customers'] is Map ? (t['customers']['name'] ?? '') : '';
-                        return DropdownMenuItem<String>(
-                          value: code.toString(),
-                          child: Text('$code - $cust (${t['title'] ?? ''})', overflow: TextOverflow.ellipsis),
-                        );
-                      }),
-                    ],
-                    onChanged: (val) => setModalState(() => selectedJobCode = val),
-                  ),
-                  const SizedBox(height: 12),
-
-                  TextField(
-                    controller: noteCtrl,
-                    decoration: const InputDecoration(labelText: 'Açıklama / Not', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // KISMI HESAPLAMA ÖZETİ
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: isValid ? (remaining == 0 ? AppColors.mint.withOpacity(0.1) : AppColors.brass.withOpacity(0.1)) : Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: isValid ? (remaining == 0 ? AppColors.mint : AppColors.brass) : Colors.red,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
                       children: [
-                        Text(
-                          'Sarf: $consumed | İade: $returned | İşlenen: $totalAccounted / $totalLoanQty',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        Expanded(
+                          child: TextField(
+                            controller: consumedCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Sarf Edilen *',
+                              helperText: 'Projede kullanılan',
+                              border: OutlineInputBorder(),
+                            ),
+                            onChanged: (_) => setModalState(() {}),
+                          ),
                         ),
-                        if (remaining > 0)
-                          Text('• $remaining ${productObj['unit'] ?? 'Adet'} ürün personelin zimmetinde kalmaya devam edecek.', style: const TextStyle(fontSize: 12, color: AppColors.ink))
-                        else if (remaining == 0)
-                          const Text('• Bu zimmet kaydı tamamen kapatılacaktır.', style: const TextStyle(fontSize: 12, color: AppColors.mint))
-                        else
-                          const Text('• HATA: Sarf + İade miktarı toplam zimmetli miktardan fazla olamaz!', style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: returnedCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Sağlam İade *',
+                              helperText: 'Stoğa geri teslim',
+                              border: OutlineInputBorder(),
+                            ),
+                            onChanged: (_) => setModalState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: defectiveCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Arızalı Ayrılan *',
+                              helperText: 'Bozuk bildirilen',
+                              border: OutlineInputBorder(),
+                            ),
+                            onChanged: (_) => setModalState(() {}),
+                          ),
+                        ),
                       ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+
+                    if (defective > 0) ...[
+                      TextField(
+                        controller: faultDescCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Arıza Sebebi / Açıklaması *',
+                          hintText: 'Örn: Açılmıyor, röle çıkışı yanmış vb.',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    DropdownButtonFormField<String>(
+                      value: selectedJobCode,
+                      decoration: const InputDecoration(
+                        labelText: 'Sarf/Arıza Yapılan İş Kodu (İş Emri Bağlantısı)',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(value: null, child: Text('Seçilmedi (Genel İşlemler)')),
+                        ..._activeTickets.map((t) {
+                          final code = t['job_code'] ?? t['id'];
+                          final cust = t['customers'] is Map ? (t['customers']['name'] ?? '') : '';
+                          return DropdownMenuItem<String>(
+                            value: code.toString(),
+                            child: Text('$code - $cust (${t['title'] ?? ''})', overflow: TextOverflow.ellipsis),
+                          );
+                        }),
+                      ],
+                      onChanged: (val) => setModalState(() => selectedJobCode = val),
+                    ),
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: noteCtrl,
+                      decoration: const InputDecoration(labelText: 'Açıklama / Not', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // KISMI HESAPLAMA ÖZETİ
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isValid ? (remaining == 0 ? AppColors.mint.withOpacity(0.1) : AppColors.brass.withOpacity(0.1)) : Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isValid ? (remaining == 0 ? AppColors.mint : AppColors.brass) : Colors.red,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Sarf: $consumed | İade: $returned | Arızalı: $defective | Toplam İşlenen: $totalAccounted / $totalLoanQty',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          if (remaining > 0)
+                            Text('• $remaining ${productObj['unit'] ?? 'Adet'} ürün personelin zimmetinde kalmaya devam edecek.', style: const TextStyle(fontSize: 12, color: AppColors.ink))
+                          else if (remaining == 0)
+                            const Text('• Bu zimmet kaydı tamamen kapatılacaktır.', style: const TextStyle(fontSize: 12, color: AppColors.mint))
+                          else
+                            const Text('• HATA: Sarf + İade + Arızalı miktarı toplam zimmetli miktardan fazla olamaz!', style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             actions: [
@@ -955,6 +994,8 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                             totalLoanQty: totalLoanQty,
                             consumedQty: consumed,
                             returnedQty: returned,
+                            defectiveQty: defective,
+                            faultDescription: faultDescCtrl.text.trim(),
                             jobCode: selectedJobCode,
                             note: noteCtrl.text.trim(),
                           );
@@ -964,6 +1005,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                           );
                           _loadStocks();
                           _loadPersonnelLoans();
+                          _loadDefectiveProducts();
                           _loadStockMovements();
                         } catch (e) {
                           if (!mounted) return;
@@ -980,6 +1022,136 @@ class _StockOverviewPageState extends State<StockOverviewPage>
         },
       ),
     );
+  }
+
+  // --- ARIZALI ÜRÜN DURUM GÜNCELLEME MODALI (KARGO / SERVİS / TAMİR) ---
+
+  void _showUpdateDefectiveStatusModal(Map<String, dynamic> defItem) {
+    if (!_canManageStock) return;
+    final defectiveId = defItem['id'];
+    final productId = defItem['product_id']?.toString() ?? '';
+    final qty = _asInt(defItem['quantity']);
+    final currentStatus = defItem['status'] ?? 'in_faulty_stock';
+    final productObj = defItem['inventory'] ?? {};
+    final productName = productObj['displayName'] ?? productObj['name'] ?? 'Ürün';
+
+    String newStatus = 'shipped_to_supplier';
+    final trackingCtrl = TextEditingController(text: defItem['tracking_number'] ?? '');
+    final supplierCtrl = TextEditingController(text: defItem['supplier_name'] ?? '');
+    final noteCtrl = TextEditingController(text: defItem['notes'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.build_circle_outlined, color: AppColors.brass),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Arızalı Ürün Süreci: $productName')),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Container(
+                width: 450,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Arızalı Miktar: $qty ${productObj['unit'] ?? 'Adet'}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Mevcut Durum: ${_getDefectiveStatusLabel(currentStatus)}', style: const TextStyle(color: AppColors.ink)),
+                    const SizedBox(height: 16),
+
+                    DropdownButtonFormField<String>(
+                      value: newStatus,
+                      decoration: const InputDecoration(labelText: 'Yeni Süreç Durumu *', border: OutlineInputBorder()),
+                      items: const [
+                        DropdownMenuItem(value: 'shipped_to_supplier', child: Text('🚚 Tedarikçiye / Servise Kargolandı')),
+                        DropdownMenuItem(value: 'repaired_returned', child: Text('✅ Tamir Edildi (Sağlam Stoğa Ekle)')),
+                        DropdownMenuItem(value: 'replaced', child: Text('🔄 Yenisi Geldi (Sağlam Stoğa Ekle)')),
+                        DropdownMenuItem(value: 'scrapped', child: Text('❌ Hurdaya Ayrıldı (Çöp)')),
+                      ],
+                      onChanged: (val) => setModalState(() => newStatus = val!),
+                    ),
+                    const SizedBox(height: 12),
+
+                    if (newStatus == 'shipped_to_supplier') ...[
+                      TextField(
+                        controller: supplierCtrl,
+                        decoration: const InputDecoration(labelText: 'Tedarikçi / Servis Firma Adı *', border: OutlineInputBorder()),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: trackingCtrl,
+                        decoration: const InputDecoration(labelText: 'Kargo Şirketi ve Takip Kodu *', border: OutlineInputBorder()),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    TextField(
+                      controller: noteCtrl,
+                      decoration: const InputDecoration(labelText: 'Not / Süreç Açıklaması', border: OutlineInputBorder()),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    await _stockService.updateDefectiveStatus(
+                      defectiveId: defectiveId,
+                      newStatus: newStatus,
+                      trackingNumber: trackingCtrl.text.trim(),
+                      supplierName: supplierCtrl.text.trim(),
+                      notes: noteCtrl.text.trim(),
+                      productId: productId,
+                      quantity: qty,
+                    );
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Arızalı ürün süreci güncellendi.'), backgroundColor: AppColors.mint),
+                    );
+                    _loadStocks();
+                    _loadDefectiveProducts();
+                    _loadStockMovements();
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Hata: $e'), backgroundColor: AppColors.corporateRed),
+                    );
+                  }
+                },
+                child: const Text('Durumu Güncelle'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  String _getDefectiveStatusLabel(String status) {
+    switch (status) {
+      case 'in_faulty_stock':
+        return 'Arızalı Depoda (Bekliyor)';
+      case 'shipped_to_supplier':
+        return 'Tedarikçiye Kargolandı';
+      case 'repaired_returned':
+        return 'Tamir Edildi (Sağlam Stoğa Eklendi)';
+      case 'replaced':
+        return 'Yenisi Geldi (Sağlam Stoğa Eklendi)';
+      case 'scrapped':
+        return 'Hurdaya Ayrıldı (Çöp)';
+      default:
+        return status;
+    }
   }
 
   void _showBarcodeScannerModal() {
@@ -1166,7 +1338,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. KPI ÖZET KARTLARI BAR (UzalTeklif Premium Kartlar)
+              // 1. KPI ÖZET KARTLARI BAR
               Row(
                 children: [
                   Expanded(
@@ -1204,11 +1376,20 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                       color: AppColors.mint,
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildKpiCard(
+                      title: 'Arızalı Ürünler',
+                      value: '${_defectiveProducts.length} Kayıt',
+                      icon: Icons.build_circle_outlined,
+                      color: _defectiveProducts.isNotEmpty ? AppColors.corporateRed : const Color(0xFF5A6E82),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
 
-              // 2. KONTROL & FİLTRELEME BARI (Paper Surface & Mist Border)
+              // 2. KONTROL & FİLTRELEME BARI
               Container(
                 decoration: BoxDecoration(
                   color: AppColors.paper,
@@ -1276,7 +1457,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
               ),
               const SizedBox(height: 16),
 
-              // 3. SEKMELİ GEZİNTİ BUTONLARI (Teklif Tab Style)
+              // 3. SEKMELİ GEZİNTİ BUTONLARI
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
@@ -1288,6 +1469,8 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                     _buildTabChip(2, 'Tüm Ürün Kataloğu', Icons.menu_book),
                     const SizedBox(width: 8),
                     _buildTabChip(3, 'Personel Zimmetleri (${_personnelLoans.length})', Icons.badge),
+                    const SizedBox(width: 8),
+                    _buildTabChip(6, 'Arızalı Ürünler (RMA) (${_defectiveProducts.length})', Icons.build_circle),
                     const SizedBox(width: 8),
                     _buildTabChip(4, 'Stok Hareket Logları (${_stockMovements.length})', Icons.history),
                     const SizedBox(width: 8),
@@ -1305,6 +1488,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 if (_activeTab == 1) _buildStockDataGrid(criticalStocks, showTrackButton: false),
                 if (_activeTab == 2) _buildStockDataGrid(filteredStocks, showTrackButton: true),
                 if (_activeTab == 3) _buildPersonnelLoansTable(),
+                if (_activeTab == 6) _buildDefectiveProductsTable(),
                 if (_activeTab == 4) _buildMovementsTable(),
                 if (_activeTab == 5) _buildMissingTicketsTable(),
               ],
@@ -1397,7 +1581,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     );
   }
 
-  // --- TAM GENİŞLİK (FULL-WIDTH STRETCH) SAYFALAMALI DATAGRID TABLO ---
+  // --- TAM GENİŞLİK SAYFALAMALI DATAGRID STOK TABLOSU ---
 
   Widget _buildStockDataGrid(List<Map<String, dynamic>> stocks, {required bool showTrackButton}) {
     if (stocks.isEmpty) {
@@ -1426,7 +1610,6 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       );
     }
 
-    // SAYFALAMA HESAPLAMASI
     final totalItems = stocks.length;
     final totalPages = (totalItems / _pageSize).ceil();
     if (_currentPage >= totalPages) _currentPage = 0;
@@ -1446,7 +1629,6 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // FULL-WIDTH STRETCHING TABLE VIA LAYOUTBUILDER
           LayoutBuilder(
             builder: (context, constraints) {
               return SingleChildScrollView(
@@ -1454,7 +1636,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minWidth: constraints.maxWidth),
                   child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(AppColors.ink), // Premium Ink Header Bar (#15304A)
+                    headingRowColor: WidgetStateProperty.all(AppColors.ink),
                     headingRowHeight: 44,
                     dataRowMinHeight: 48,
                     dataRowMaxHeight: 56,
@@ -1552,10 +1734,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: isOut
-                                          ? const Color(0xFFFEE2E2) // Soft Red
+                                          ? const Color(0xFFFEE2E2)
                                           : isLow
-                                              ? const Color(0xFFFEF3C7) // Soft Amber
-                                              : const Color(0xFFDCFCE7), // Soft Mint Emerald
+                                              ? const Color(0xFFFEF3C7)
+                                              : const Color(0xFFDCFCE7),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
@@ -1636,7 +1818,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
             },
           ),
 
-          // SAYFALAMA KONTROL BARI (PAGINATION FOOTER - FULL WIDTH)
+          // SAYFALAMA KONTROL BARI
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
@@ -1711,6 +1893,128 @@ class _StockOverviewPageState extends State<StockOverviewPage>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // --- ARIZALI ÜRÜNLER TABLOSU (RMA) ---
+
+  Widget _buildDefectiveProductsTable() {
+    if (_defectiveProducts.isEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          color: AppColors.paper,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.mist),
+        ),
+        padding: const EdgeInsets.all(32),
+        child: const Center(
+          child: Text('Arızalı stok veya servis takibinde ürün bulunmuyor.', style: TextStyle(color: Color(0xFF5A6E82))),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.paper,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.mist),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.all(AppColors.ink),
+                headingRowHeight: 44,
+                columns: const [
+                  DataColumn(label: Text('Tarih', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                  DataColumn(label: Text('Ürün Adı / Kod', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                  DataColumn(label: Text('Miktar', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                  DataColumn(label: Text('Bildiren Personel', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                  DataColumn(label: Text('İş Kodu', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                  DataColumn(label: Text('Arıza Sebebi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                  DataColumn(label: Text('Süreç Durumu', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                  DataColumn(label: Text('Tedarikçi / Kargo Takip', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                  DataColumn(label: Text('İşlem', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                ],
+                rows: _defectiveProducts.map((def) {
+                  final product = def['inventory'] ?? {};
+                  final status = def['status'] ?? 'in_faulty_stock';
+                  final tracking = (def['tracking_number'] ?? '').toString();
+                  final supplier = (def['supplier_name'] ?? '').toString();
+
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(_formatDate(def['created_at']), style: const TextStyle(color: AppColors.ink))),
+                      DataCell(Text('${product['displayName'] ?? product['name'] ?? 'Bilinmeyen'} (${product['code'] ?? ''})', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
+                      DataCell(
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(6)),
+                          child: Text('${def['quantity']} ${product['unit'] ?? 'Adet'}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFB91C1C))),
+                        ),
+                      ),
+                      DataCell(Text(def['reported_by_name'] ?? '-', style: const TextStyle(color: AppColors.ink))),
+                      DataCell(Text(def['job_code'] ?? '-', style: const TextStyle(color: AppColors.ink, fontWeight: FontWeight.bold))),
+                      DataCell(Text(def['fault_description'] ?? '-', style: const TextStyle(color: AppColors.ink))),
+                      DataCell(
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: status == 'in_faulty_stock'
+                                ? const Color(0xFFFEF3C7) // Amber
+                                : status == 'shipped_to_supplier'
+                                    ? AppColors.surfaceAccent // Blue Soft
+                                    : status == 'repaired_returned' || status == 'replaced'
+                                        ? const Color(0xFFDCFCE7) // Mint Emerald
+                                        : const Color(0xFFFEE2E2), // Red Scrapped
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _getDefectiveStatusLabel(status),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: status == 'in_faulty_stock'
+                                  ? const Color(0xFFB45309)
+                                  : status == 'shipped_to_supplier'
+                                      ? AppColors.ink
+                                      : status == 'repaired_returned' || status == 'replaced'
+                                          ? const Color(0xFF15803D)
+                                          : const Color(0xFFB91C1C),
+                            ),
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        Text(
+                          [
+                            if (supplier.isNotEmpty) 'Firma: $supplier',
+                            if (tracking.isNotEmpty) 'Kargo: $tracking',
+                          ].join(' | ').ifEmpty('-'),
+                          style: const TextStyle(fontSize: 12, color: AppColors.ink),
+                        ),
+                      ),
+                      DataCell(
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
+                          icon: const Icon(Icons.build_circle, size: 16),
+                          label: const Text('Süreci Güncelle'),
+                          onPressed: () => _showUpdateDefectiveStatusModal(def),
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1932,6 +2236,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       ),
     );
   }
+}
+
+extension _StringEmptyExt on String {
+  String ifEmpty(String fallback) => trim().isEmpty ? fallback : this;
 }
 
 // --- STOK KAYIT / KATALOGDAN STOĞA ALMA DİYALOĞU ---

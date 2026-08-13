@@ -172,7 +172,6 @@ class StockService {
   }
 
   /// Stok ürünlerini çeker.
-  /// [onlyTracked] true (varsayılan) ise yalnızca fiziksel olarak depoya alınan (stock_tracking_started = true) ürünleri getirir.
   Future<List<Map<String, dynamic>>> getStocks({
     bool onlyTracked = true,
   }) async {
@@ -224,7 +223,7 @@ class StockService {
     return products;
   }
 
-  /// Katalogdaki bir ürün için stok takibini başlatır ve depoya giriş hareketi kaydeder (Katalog ürünü değişmez).
+  /// Katalogdaki bir ürün için stok takibini başlatır ve depoya giriş hareketi kaydeder.
   Future<void> startStockTracking({
     required String productId,
     required int initialQuantity,
@@ -267,7 +266,7 @@ class StockService {
     }
   }
 
-  /// Stok takibini kapatır ve ürünü depodan çıkarır (GÜVENLİ: Fiyat teklifleri kataloğundaki ürün asla silinmez!).
+  /// Stok takibini kapatır (GÜVENLİ: Fiyat teklifleri kataloğundaki ürün asla silinmez!).
   Future<void> stopStockTracking(String productId) async {
     await _supabase.from(_table).update({
       'stock_tracking_started': false,
@@ -276,12 +275,12 @@ class StockService {
     }).eq('id', productId);
   }
 
-  /// Stok takibini durdurur (deleteStock geriye uyumluluk adapter'ı - Soft untrack).
+  /// Stok takibini durdurur (deleteStock geriye uyumluluk adapter'ı).
   Future<void> deleteStock(String id) async {
     await stopStockTracking(id);
   }
 
-  /// Veritabanındaki tüm sanal katalog stoklarını temizler ve depoyu sıfırlar. (Katalog ürünleri silinmez, sadece stok takibi kapatılır!).
+  /// Veritabanındaki tüm sanal katalog stoklarını temizler ve depoyu sıfırlar.
   Future<void> resetCatalogStockTracking() async {
     await _supabase.from(_table).update({
       'stock_tracking_started': false,
@@ -533,7 +532,7 @@ class StockService {
     );
   }
 
-  /// Personel zimmetini esnek sarf (tüketim) ve iade miktarları ile işler/kapatır.
+  /// Personel zimmetini esnek sarf (tüketim), iade ve arızalı miktarları ile işler/kapatır.
   Future<void> processPersonnelLoanResolution({
     required int loanId,
     required String productId,
@@ -541,17 +540,20 @@ class StockService {
     required int totalLoanQty,
     required int consumedQty,
     required int returnedQty,
+    int defectiveQty = 0,
+    String? faultDescription,
     String? jobCode,
     String? note,
   }) async {
-    if (consumedQty + returnedQty <= 0) {
-      throw Exception('Lütfen en az 1 adet sarf veya iade miktarı giriniz.');
+    final totalAccounted = consumedQty + returnedQty + defectiveQty;
+    if (totalAccounted <= 0) {
+      throw Exception('Lütfen en az 1 adet sarf, iade veya arızalı miktarı giriniz.');
     }
-    if (consumedQty + returnedQty > totalLoanQty) {
-      throw Exception('Sarf ($consumedQty) + İade ($returnedQty) toplam zimmetli miktardan ($totalLoanQty) fazla olamaz.');
+    if (totalAccounted > totalLoanQty) {
+      throw Exception('Sarf ($consumedQty) + İade ($returnedQty) + Arızalı ($defectiveQty) toplam zimmetli miktardan ($totalLoanQty) fazla olamaz.');
     }
 
-    final remainingQty = totalLoanQty - (consumedQty + returnedQty);
+    final remainingQty = totalLoanQty - totalAccounted;
 
     // 1. İade Edilen Miktar -> Depo stokuna tekrar giriş yapılır
     if (returnedQty > 0) {
@@ -586,9 +588,23 @@ class StockService {
       );
     }
 
-    // 3. Zimmet Kaydını Güncelle veya Kapat
+    // 3. Arızalı Ayrılan Miktar -> Arızalı ürünler takibine eklenir (Arızalı Depoda/Bekliyor)
+    if (defectiveQty > 0) {
+      await reportDefectiveProduct(
+        productId: productId,
+        quantity: defectiveQty,
+        reportedByName: personnelName,
+        faultDescription: faultDescription ?? 'Zimmet dönüşü arızalı bildirildi',
+        jobCode: jobCode,
+        notes: note,
+      );
+    }
+
+    // 4. Zimmet Kaydını Güncelle veya Kapat
     if (remainingQty <= 0) {
-      final resolution = consumedQty > 0 && returnedQty == 0 ? 'consumed' : 'returned';
+      final resolution = consumedQty > 0 && returnedQty == 0 && defectiveQty == 0
+          ? 'consumed'
+          : 'returned';
       await _supabase
           .from('product_stock_loans')
           .update({
@@ -601,7 +617,7 @@ class StockService {
           .from('product_stock_loans')
           .update({
             'quantity': remainingQty,
-            'note': '[Kısmi İade: $returnedQty / Sarf: $consumedQty] ${note ?? ''}'.trim(),
+            'note': '[İşlendi: $returnedQty İade / $consumedQty Sarf / $defectiveQty Arızalı] ${note ?? ''}'.trim(),
           })
           .eq('id', loanId);
     }
@@ -618,6 +634,122 @@ class StockService {
       'close_product_stock_loan',
       params: {'p_loan_id': loanId, 'p_resolution': resolution},
     );
+  }
+
+  // --- ARIZALI ÜRÜN VE RMA TAKİBİ (DEFECTIVE PRODUCTS) ---
+
+  /// Tüm arızalı ürün kayıtlarını çeker.
+  Future<List<Map<String, dynamic>>> getDefectiveProducts() async {
+    try {
+      final response = await _supabase
+          .from('defective_products')
+          .select('*, products:product_id(id, code, name, category, brand, model, unit, stock_quantity, specifications)')
+          .order('created_at', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response).map((def) {
+        final product = def['products'];
+        return {
+          ...def,
+          'inventory': product is Map<String, dynamic> ? _productToStock(product) : null,
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint('Arızalı ürünler çekme hatası: $e');
+      return [];
+    }
+  }
+
+  /// Yeni arızalı ürün kaydı oluşturur.
+  Future<void> reportDefectiveProduct({
+    required String productId,
+    required int quantity,
+    String? reportedByName,
+    String? faultDescription,
+    String? jobCode,
+    String? notes,
+  }) async {
+    if (quantity <= 0) throw Exception('Arızalı miktar 0\'dan büyük olmalıdır.');
+    await _supabase.from('defective_products').insert({
+      'product_id': productId,
+      'reported_by_name': reportedByName,
+      'quantity': quantity,
+      'fault_description': faultDescription,
+      'job_code': jobCode,
+      'notes': notes,
+      'status': 'in_faulty_stock',
+    });
+
+    await registerStockMovement(
+      productId: productId,
+      movementType: 'out',
+      quantity: quantity,
+      reason: 'Arızalıya ayrıldı (Arızalı Depoda)',
+      destination: jobCode ?? reportedByName,
+      note: faultDescription,
+    );
+  }
+
+  /// Arızalı ürün durumunu günceller ve kargo / tamir / değişim / hurda hareketini işler.
+  Future<void> updateDefectiveStatus({
+    required int defectiveId,
+    required String newStatus,
+    String? trackingNumber,
+    String? supplierName,
+    String? notes,
+    required String productId,
+    required int quantity,
+  }) async {
+    final validStatuses = [
+      'in_faulty_stock',
+      'shipped_to_supplier',
+      'repaired_returned',
+      'replaced',
+      'scrapped',
+    ];
+
+    if (!validStatuses.contains(newStatus)) {
+      throw Exception('Geçersiz arızalı ürün durumu.');
+    }
+
+    final payload = <String, dynamic>{
+      'status': newStatus,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    if (trackingNumber != null && trackingNumber.isNotEmpty) {
+      payload['tracking_number'] = trackingNumber;
+    }
+    if (supplierName != null && supplierName.isNotEmpty) {
+      payload['supplier_name'] = supplierName;
+    }
+    if (notes != null && notes.isNotEmpty) {
+      payload['notes'] = notes;
+    }
+
+    await _supabase.from('defective_products').update(payload).eq('id', defectiveId);
+
+    // Eğer ürün Tamir Edildiyse veya Yenisi Geldiyse -> Tekrar depodaki sağlam stok miktarına katılır!
+    if (newStatus == 'repaired_returned' || newStatus == 'replaced') {
+      final current = await _supabase
+          .from(_table)
+          .select('stock_quantity')
+          .eq('id', productId)
+          .single();
+      final curQty = (current['stock_quantity'] as num?)?.toInt() ?? 0;
+      await updateQuantity(productId, curQty + quantity);
+
+      final statusDesc = newStatus == 'repaired_returned'
+          ? 'Tedarikçiden tamir edildi - Sağlam depoya eklendi'
+          : 'Tedarikçiden yenisi geldi - Sağlam depoya eklendi';
+
+      await registerStockMovement(
+        productId: productId,
+        movementType: 'in',
+        quantity: quantity,
+        reason: statusDesc,
+        destination: supplierName,
+        note: notes,
+      );
+    }
   }
 
   // --- TICKET PARTS ---

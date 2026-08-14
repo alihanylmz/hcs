@@ -51,6 +51,16 @@ class PdfHelper {
     }
   }
 
+  static Future<pw.ImageProvider?> loadInovaksLogo() async {
+    try {
+      final pngData = await rootBundle.load('assets/images/inovaks.png');
+      final pngBytes = pngData.buffer.asUint8List();
+      return pw.MemoryImage(pngBytes);
+    } catch (e) {
+      return null;
+    }
+  }
+
   static String formatDate(String? iso) {
     if (iso == null) return '-';
     final parsed = DateTime.tryParse(iso);

@@ -88,6 +88,9 @@ class TicketPdfService {
       } else if (partnerName != null &&
           partnerName.toLowerCase().contains('vensa')) {
         pdf = await _generateVensaTicketPdf(ticket, enrichedNotes);
+      } else if (partnerName != null &&
+          partnerName.toLowerCase().contains('inovaks')) {
+        pdf = await _generateInovaksTicketPdf(ticket, enrichedNotes);
       } else {
         pdf = await _generateStandardTicketPdf(ticket, enrichedNotes);
       }
@@ -976,12 +979,15 @@ class TicketPdfService {
     final lowerPartner = (partnerName ?? '').toLowerCase();
     final bool isPoint = lowerPartner.contains('point');
     final bool isVensa = lowerPartner.contains('vensa');
+    final bool isInovaks = lowerPartner.contains('inovaks');
 
     final PdfColor themePrimary =
         isPoint
             ? const PdfColor.fromInt(0xFFD32F2F)
             : isVensa
             ? const PdfColor.fromInt(0xFF1976D2)
+            : isInovaks
+            ? const PdfColor.fromInt(0xFF273082)
             : const PdfColor.fromInt(0xFF183B63);
     const PdfColor themeSurface = PdfColor.fromInt(0xFFF4F7FB);
     const PdfColor themeBorder = PdfColor.fromInt(0xFFD6E0EA);
@@ -995,6 +1001,8 @@ class TicketPdfService {
             ? await PdfHelper.loadPointLogo()
             : isVensa
             ? await PdfHelper.loadVensaLogo()
+            : isInovaks
+            ? await PdfHelper.loadInovaksLogo()
             : null;
 
     final uniquePartners =
@@ -1990,6 +1998,60 @@ class TicketPdfService {
               font,
               address:
                   'Pursaklar Sanayi Sitesi 1643. Cad. No: 18 Altındağ, Ankara',
+            ),
+        build:
+            (context) => [
+              _buildInfoSection(
+                ticket,
+                customer,
+                font,
+                status,
+                accentColor: accentColor,
+              ),
+              _buildDescriptionSection(ticket, font),
+              _buildTechnicalSection(ticket, font),
+              _buildNotesSection(notes, font, accentColor: accentColor),
+              ..._buildImagesSection(notes, font, primaryColor),
+            ],
+      ),
+    );
+    return pdf;
+  }
+
+  static Future<pw.Document> _generateInovaksTicketPdf(
+    Map<String, dynamic> ticket,
+    List<Map<String, dynamic>> notes,
+  ) async {
+    final pdf = pw.Document();
+    final font = await PdfHelper.loadTurkishFont();
+    final logo = await PdfHelper.loadInovaksLogo();
+    final customer =
+        ticket['customers'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final status = ticket['status'] as String? ?? 'open';
+    const primaryColor = PdfColor.fromInt(0xFF273082); // İnovaks Mavi/Lacivert
+    const accentColor = PdfColor.fromInt(0xFFE30613);  // İnovaks Kırmızı
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageTheme: pw.PageTheme(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+          theme: pw.ThemeData.withFont(base: font, bold: font),
+          buildBackground: (context) => _buildWatermark(logo),
+        ),
+        header:
+            (context) => _buildHeaderWithLogo(
+              ticket,
+              font,
+              logo,
+              "Teknik Servis İş Emri ve Servis Formu",
+              primaryColor,
+            ),
+        footer:
+            (context) => _buildFooter(
+              ticket,
+              font,
+              address: 'İnovaks Isıtma Soğutma Klima San. ve Tic. A.Ş.',
             ),
         build:
             (context) => [

@@ -7,6 +7,7 @@ import '../models/cari_account.dart';
 import '../models/market_rate.dart';
 import '../models/product.dart';
 import '../models/quote.dart';
+import '../models/user_quote_profile.dart';
 import '../services/cari_repository.dart';
 import '../services/company_stamp_service.dart';
 import '../services/market_rate_service.dart';
@@ -196,9 +197,28 @@ class _QuotesPageState extends State<QuotesPage> {
   Future<void> _reload() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
-    final quotes = await widget.quoteRepository.fetchQuotes();
+    final rawQuotes = await widget.quoteRepository.fetchQuotes();
     final products = await widget.productRepository.fetchProducts();
     final rates = await widget.marketRateService.fetchRates();
+    UserQuoteProfile? myProfile;
+    try {
+      myProfile = await widget.userProfileRepository.fetchMine();
+    } catch (_) {}
+
+    final isManager = widget.isManager || myProfile?.isManager == true;
+    final myUid = myProfile?.userId;
+    final myEmail = myProfile?.preparedByEmail;
+    final myName = myProfile?.preparedByName;
+
+    final quotes = rawQuotes.where((q) {
+      return q.canAccess(
+        currentUserId: myUid,
+        currentUserEmail: myEmail,
+        currentUserName: myName,
+        isManager: isManager,
+      );
+    }).toList();
+
     List<CariAccount> cariler = const [];
     try {
       cariler = await widget.cariRepository.fetchAll();

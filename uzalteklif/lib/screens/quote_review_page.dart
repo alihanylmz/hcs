@@ -332,6 +332,124 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     }
   }
 
+  Future<void> _shareWithColleague() async {
+    final allProfiles = await widget.userProfileRepository.fetchAll();
+    if (!mounted) return;
+
+    final currentShared = List<String>.from(_quote.sharedWith);
+
+    final selected = await showDialog<List<String>>(
+      context: context,
+      builder: (context) {
+        final tempSelection = Set<String>.from(currentShared);
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.group_add_rounded, color: Color(0xFF2B82C9)),
+                  SizedBox(width: 8),
+                  Text('Mesai Arkadaşıyla Paylaş', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 400,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Bu teklifi görmesini ve üzerinde çalışabilmesini istediğiniz arkadaşlarınızı seçin:',
+                      style: TextStyle(fontSize: 12.5, color: Color(0xFF5B6F7F)),
+                    ),
+                    const SizedBox(height: 12),
+                    if (allProfiles.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(child: Text('Kayıtlı başka personel bulunamadı.')),
+                      )
+                    else
+                      Flexible(
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: allProfiles.length,
+                          itemBuilder: (context, index) {
+                            final p = allProfiles[index];
+                            final identifier = p.preparedByName.trim().isNotEmpty
+                                ? p.preparedByName.trim()
+                                : p.preparedByEmail.trim();
+                            if (identifier.isEmpty) return const SizedBox.shrink();
+
+                            final isChecked = tempSelection.contains(identifier) ||
+                                tempSelection.contains(p.userId) ||
+                                tempSelection.contains(p.preparedByEmail);
+
+                            return CheckboxListTile(
+                              value: isChecked,
+                              title: Text(
+                                p.preparedByName.isEmpty ? p.preparedByEmail : p.preparedByName,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              subtitle: Text(
+                                '${p.preparedByTitle} • ${p.preparedByEmail}',
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                              onChanged: (val) {
+                                setStateDialog(() {
+                                  if (val == true) {
+                                    tempSelection.add(identifier);
+                                  } else {
+                                    tempSelection.remove(identifier);
+                                    tempSelection.remove(p.userId);
+                                    tempSelection.remove(p.preparedByEmail);
+                                  }
+                                });
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('İptal'),
+                ),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop(tempSelection.toList()),
+                  icon: const Icon(Icons.check_rounded, size: 16),
+                  label: const Text('Kaydet ve Paylaş'),
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF2B82C9)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (selected != null && mounted) {
+      await _runBusy(() async {
+        final updated = _quote.copyWith(sharedWith: selected);
+        await widget.quoteRepository.updateSharedWith(updated.id, selected);
+        if (!mounted) return;
+        setState(() => _quote = updated);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              selected.isEmpty
+                  ? 'Paylaşım kaldırıldı; teklif özel hale getirildi.'
+                  : 'Teklif seçilen mesai arkadaşlarıyla paylaşıldı!',
+            ),
+            backgroundColor: const Color(0xFF29956F),
+          ),
+        );
+      }, 'Paylaşım kaydedilemedi');
+    }
+  }
+
   Future<void> _copyQuote() async {
     await Navigator.of(context).push<Quote>(
       MaterialPageRoute(
@@ -974,6 +1092,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 _setStatusManually(status);
                 return;
               }
+              if (v == 'share') _shareWithColleague();
               if (v == 'cancel') _cancelQuote();
               if (v == 'accepted') _markAccepted();
               if (v == 'arch') _toggleArchive(true);
@@ -981,6 +1100,15 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
               if (v == 'copy') _copyQuote();
             },
             itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'share',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.group_add_rounded, color: Color(0xFF2B82C9)),
+                  title: Text('Mesai arkadaşıyla paylaş'),
+                ),
+              ),
               const PopupMenuItem(
                 value: 'copy',
                 child: ListTile(
@@ -1009,6 +1137,11 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                   child: Text('Aktif tekliflere al'),
                 ),
             ],
+          ),
+          IconButton(
+            tooltip: 'Mesai Arkadaşıyla Paylaş',
+            onPressed: _isBusy ? null : _shareWithColleague,
+            icon: const Icon(Icons.group_add_rounded, color: Colors.white),
           ),
           IconButton(
             tooltip: 'PDF oluştur',
@@ -1162,6 +1295,21 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+                  if (_quote.sharedWith.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.group_rounded, size: 14, color: Color(0xFF2B82C9)),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            'Paylaşılan Arkadaş(lar): ${_quote.sharedWith.join(', ')}',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2B82C9)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

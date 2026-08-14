@@ -464,6 +464,7 @@ class Quote {
     this.emailSentTo = '',
     this.emailViewedAt,
     this.customerResponse = CustomerResponse.pending,
+    this.sharedWith = const [],
   });
 
   final String id;
@@ -576,6 +577,43 @@ class Quote {
 
   /// Musterinin teklif karari.
   final CustomerResponse customerResponse;
+
+  /// Teklifin paylasildigi kullanici id veya e-posta listesi.
+  final List<String> sharedWith;
+
+  /// Kullanicinin bu teklifi gorme / duzenleme yetkisi var mi?
+  /// - Admin veya Manager her teklifi gorur.
+  /// - Olusturan kisi (`createdBy` veya `createdByName` / `preparedByName`) gorur.
+  /// - `sharedWith` listesinde olanlar (user_id veya e-posta) gorur.
+  bool canAccess({
+    String? currentUserId,
+    String? currentUserEmail,
+    String? currentUserName,
+    bool isManager = false,
+  }) {
+    if (isManager) return true;
+
+    final uid = currentUserId?.trim();
+    if (uid != null && uid.isNotEmpty) {
+      if (createdBy == uid) return true;
+      if (sharedWith.contains(uid)) return true;
+    }
+
+    final email = currentUserEmail?.trim().toLowerCase();
+    if (email != null && email.isNotEmpty) {
+      if (emailSentTo.trim().toLowerCase() == email) return true;
+      if (sharedWith.map((e) => e.trim().toLowerCase()).contains(email)) return true;
+    }
+
+    final name = currentUserName?.trim().toLowerCase();
+    if (name != null && name.isNotEmpty) {
+      if (createdByName.trim().toLowerCase() == name) return true;
+      if (documentProfile.preparedByName.trim().toLowerCase() == name) return true;
+      if (sharedWith.map((e) => e.trim().toLowerCase()).contains(name)) return true;
+    }
+
+    return false;
+  }
 
   /// Kalemleri kategori sirasina gore gruplandirir. Bir kategoriye ait hic
   /// kalem yoksa grup listeye eklenmez. Son olarak hicbir `sections` icindeki
@@ -739,6 +777,7 @@ class Quote {
     DateTime? emailViewedAt,
     bool clearEmailViewedAt = false,
     CustomerResponse? customerResponse,
+    List<String>? sharedWith,
   }) {
     return Quote(
       id: id,
@@ -781,6 +820,7 @@ class Quote {
       emailSentTo: emailSentTo ?? this.emailSentTo,
       emailViewedAt: clearEmailViewedAt ? null : (emailViewedAt ?? this.emailViewedAt),
       customerResponse: customerResponse ?? this.customerResponse,
+      sharedWith: sharedWith ?? this.sharedWith,
     );
   }
 
@@ -826,6 +866,7 @@ class Quote {
     'email_sent_to': emailSentTo,
     'email_viewed_at': emailViewedAt?.toIso8601String(),
     'customer_response': customerResponse.storageKey,
+    'shared_with': sharedWith,
   };
 
   factory Quote.fromJson(Map<String, dynamic> json) {
@@ -840,6 +881,9 @@ class Quote {
         (json['document_profile'] as Map<String, dynamic>?) ?? const {};
     final sectionsJson = (json['sections'] as List<dynamic>? ?? const [])
         .cast<Map<String, dynamic>>();
+    final sharedWithList = (json['shared_with'] as List<dynamic>? ?? const [])
+        .map((e) => e.toString())
+        .toList();
 
     return Quote(
       id: json['id'] as String,
@@ -889,6 +933,7 @@ class Quote {
       customerResponse: CustomerResponseX.fromStorageKey(
         json['customer_response'] as String?,
       ),
+      sharedWith: sharedWithList,
     );
   }
 

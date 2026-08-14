@@ -171,5 +171,22 @@ class QuoteRepository {
       'customer_response': response.storageKey,
     }).eq('id', quoteId);
   }
+
+  /// Teklifin paylasildigi kisiler listesini gunceller.
+  Future<void> updateSharedWith(
+    String quoteId,
+    List<String> sharedWith,
+  ) async {
+    final index = _memoryQuotes.indexWhere((q) => q.id == quoteId);
+    if (index != -1) {
+      _memoryQuotes[index] = _memoryQuotes[index].copyWith(
+        sharedWith: sharedWith,
+      );
+    }
+    if (_client == null) return;
+    await _client.from('quotes').update({
+      'shared_with': sharedWith,
+    }).eq('id', quoteId);
+  }
 }
 

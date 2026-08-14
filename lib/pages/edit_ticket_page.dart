@@ -7,7 +7,8 @@ import '../services/partner_service.dart';
 import '../services/permission_service.dart';
 import '../services/user_service.dart';
 import '../models/partner.dart';
-import '../models/ticket_part.dart'; // Eklendi
+import '../models/ticket_part.dart';
+import '../models/user_profile.dart';
 import '../theme/app_colors.dart';
 
 class EditTicketPage extends StatefulWidget {
@@ -32,42 +33,63 @@ class _EditTicketPageState extends State<EditTicketPage> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _jobCodeController = TextEditingController();
+  final _projectLocationController = TextEditingController();
+  final _internalNotesController = TextEditingController();
   final _kompresor1KwController = TextEditingController();
   final _kompresor2KwController = TextEditingController();
-  final _heaterKwController = TextEditingController(); // Yeni: Isıtıcı kW
+  final _heaterKwController = TextEditingController();
   final _customerNameController = TextEditingController();
   final _customerAddressController = TextEditingController();
   final _customerPhoneController = TextEditingController();
 
+  // Jet Fan Controller'ları
+  final _jetFanCountController = TextEditingController();
+  final _inverterBrandController = TextEditingController();
+  int _selectedZoneCount = 0;
+  final List<TextEditingController> _zoneFanCountControllers = [];
+  int _smokeFanCount = 0;
+  List<Map<String, dynamic>> _smokeFans = [];
+  int _freshFanCount = 0;
+  List<Map<String, dynamic>> _freshFans = [];
+
+  // Proje Alanları
+  String _jobType = 'service';
+  String _projectType = 'BMS';
+  String _projectStatus = 'planned';
+  String? _responsibleUserId;
+  final Set<String> _assignedUserIds = {};
+  DateTime? _projectStartDate;
+  DateTime? _projectDueDate;
+
+  // Santral & Teknik Alanlar
   String? _selectedDeviceModel;
   String? _selectedPlcModel;
-
   String? _selectedHmiBrand;
   double? _selectedHmiSize;
 
   String? _selectedAspiratorBrand;
-  String? _selectedAspiratorModel; // Aspiratör için model
+  String? _selectedAspiratorModel;
   double? _selectedAspiratorKw;
-  List<String> _availableAspiratorModels =
-      []; // Aspiratör markasına göre modeller
+  List<String> _availableAspiratorModels = [];
 
   String? _selectedVantBrand;
-  String? _selectedVantModel; // Vantilatör için model
+  String? _selectedVantModel;
   double? _selectedVantKw;
-  List<String> _availableVantModels = []; // Vantilatör markasına göre modeller
+  List<String> _availableVantModels = [];
 
   final StockService _stockService = StockService();
-  List<String> _availableDriveBrands = []; // Veritabanından yüklenen markalar
+  List<String> _availableDriveBrands = [];
 
-  // Partner Firmalar
+  // Partner & Kullanıcılar
   final PartnerService _partnerService = PartnerService();
   List<Partner> _partners = [];
+  List<UserProfile> _users = [];
   int? _selectedPartnerId;
-  bool _canAssignPartner = false; // Sadece admin/manager atayabilir
+  bool _canAssignPartner = false;
   bool _canManageDraftTickets = false;
 
   String _selectedTandem = 'yok';
-  String _heaterExists = 'Yok'; // Yeni: Isıtıcı var mı yok mu
+  String _heaterExists = 'Yok';
   String _selectedIsiticiKademe = 'yok';
 
   bool _dx = false;
@@ -78,9 +100,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
   bool _brulor = false;
 
   DateTime? _plannedDate;
-  PlatformFile? _selectedPdf; // Seçilen PDF dosyası
-  bool _isUploading = false;
-
+  PlatformFile? _selectedPdf;
   String _status = 'open';
   String _priority = 'normal';
   String? _customerId;
@@ -88,7 +108,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
   bool _isSaving = false;
   bool _isLoading = true;
   String? _errorMessage;
-  String? _userRole; // Kullanıcı rolü (admin/manager kontrolü için)
+  String? _userRole;
 
   // Stok Parça Yönetimi
   List<TicketPart> _usedParts = [];
@@ -103,22 +123,53 @@ class _EditTicketPageState extends State<EditTicketPage> {
   @override
   void initState() {
     super.initState();
-    _loadDriveBrands();
-    _loadTicket();
-    _loadUserRole();
-    _loadPartners();
-    _loadUsedParts();
-    _loadInventory();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    await Future.wait([
+      _loadDriveBrands(),
+      _loadUserRole(),
+      _loadUsers(),
+      _loadPartners(),
+      _loadUsedParts(),
+      _loadInventory(),
+    ]);
+    await _loadTicket();
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _jobCodeController.dispose();
+    _projectLocationController.dispose();
+    _internalNotesController.dispose();
+    _kompresor1KwController.dispose();
+    _kompresor2KwController.dispose();
+    _heaterKwController.dispose();
+    _jetFanCountController.dispose();
+    _inverterBrandController.dispose();
+    for (final c in _zoneFanCountControllers) {
+      c.dispose();
+    }
+    _customerNameController.dispose();
+    _customerAddressController.dispose();
+    _customerPhoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUsers() async {
+    try {
+      final list = await UserService().getActiveUsers();
+      if (mounted) setState(() => _users = list);
+    } catch (_) {}
   }
 
   Future<void> _loadInventory() async {
     try {
       final items = await _stockService.getStocks();
-      if (mounted) {
-        setState(() {
-          _allInventory = items;
-        });
-      }
+      if (mounted) setState(() => _allInventory = items);
     } catch (e) {
       debugPrint('Envanter yükleme hatası: $e');
     }
@@ -148,83 +199,96 @@ class _EditTicketPageState extends State<EditTicketPage> {
     await showDialog(
       context: context,
       builder:
-          (ctx) => AlertDialog(
-            title: const Text('Parça Ekle'),
-            content: StatefulBuilder(
-              builder: (context, setState) {
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      hint: const Text('Ürün Seçiniz'),
-                      value: selectedInventoryId,
-                      items:
-                          _allInventory.map((item) {
-                            final itemId = item['id']?.toString() ?? '';
-                            final qty = (item['quantity'] as num?)?.toInt() ?? 0;
-                            return DropdownMenuItem<String>(
-                              value: itemId,
-                              child: Text(
-                                '${item['name']} (Stok: $qty)',
-                                style: TextStyle(
-                                  color: qty <= 0 ? Colors.red : Colors.black,
+          (ctx) => StatefulBuilder(
+            builder:
+                (context, setDialogState) => AlertDialog(
+                  title: const Text('Kullanılan Parça Ekle'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Stoktan Parça Seçin',
+                          border: OutlineInputBorder(),
+                        ),
+                        value: selectedInventoryId,
+                        items:
+                            _allInventory.map((item) {
+                              return DropdownMenuItem<String>(
+                                value: item['id'].toString(),
+                                child: Text(
+                                  '${item['name']} (Stok: ${item['quantity']})',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }).toList(),
+                        onChanged: (val) {
+                          setDialogState(() => selectedInventoryId = val);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: controller,
+                        decoration: const InputDecoration(
+                          labelText: 'Adet',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (val) {
+                          quantity = int.tryParse(val) ?? 1;
+                        },
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('İptal'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        if (selectedInventoryId == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Lütfen bir parça seçin.'),
+                            ),
+                          );
+                          return;
+                        }
+                        try {
+                          await _stockService.addPartToTicket(
+                            widget.ticketId,
+                            selectedInventoryId!,
+                            quantity,
+                          );
+                          if (mounted) {
+                            Navigator.pop(ctx);
+                            _loadUsedParts();
+                            _loadInventory();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Parça eklendi ve stoktan düşüldü.',
                                 ),
                               ),
                             );
-                          }).toList(),
-                      onChanged:
-                          (val) => setState(() => selectedInventoryId = val),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: controller,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Adet'),
-                      onChanged: (val) => quantity = int.tryParse(val) ?? 1,
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Hata: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text('Ekle'),
                     ),
                   ],
-                );
-              },
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('İptal'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  if (selectedInventoryId == null) return;
-                  try {
-                    await _stockService.addPartToTicket(
-                      widget.ticketId,
-                      selectedInventoryId!,
-                      quantity,
-                    );
-                    if (mounted) {
-                      Navigator.pop(ctx);
-                      _loadUsedParts();
-                      _loadInventory(); // Stok güncellendiği için yenile
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Parça eklendi ve stoktan düşüldü.'),
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Hata: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                },
-                child: const Text('Ekle'),
-              ),
-            ],
+                ),
           ),
     );
   }
@@ -253,7 +317,6 @@ class _EditTicketPageState extends State<EditTicketPage> {
       final userService = UserService();
       final profile = await userService.getCurrentUserProfile();
 
-      // Sadece Admin ve Yöneticiler partner atayabilir
       if (PermissionService.hasPermission(
         profile,
         AppPermission.assignTicketPartner,
@@ -273,7 +336,6 @@ class _EditTicketPageState extends State<EditTicketPage> {
 
   Future<void> _loadUserRole() async {
     final profile = await UserService().getCurrentUserProfile();
-
     if (!mounted) return;
 
     setState(() {
@@ -288,47 +350,23 @@ class _EditTicketPageState extends State<EditTicketPage> {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Bu kaydi duzenleme yetkiniz yok.'),
+          content: Text('Bu kaydı düzenleme yetkiniz yok.'),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 3),
         ),
       );
-      return;
-    }
-
-    final supabase = Supabase.instance.client;
-    final user = supabase.auth.currentUser;
-    if (user != null) {
-      try {
-        final profile =
-            await supabase
-                .from('profiles')
-                .select('role')
-                .eq('id', user.id)
-                .maybeSingle();
-        if (mounted) {
-          setState(() {
-            _userRole = profile != null ? profile['role'] as String? : null;
-          });
-        }
-      } catch (_) {
-        // Hata durumunda null kalır
-      }
     }
   }
 
   Future<void> _loadDriveBrands() async {
     try {
       final brands = await _stockService.getBrandsByCategory('Sürücü');
-      // Sadece veritabanından gelenleri kullan
-      final allBrands = brands;
       if (mounted) {
         setState(() {
-          _availableDriveBrands = allBrands;
+          _availableDriveBrands = brands;
         });
       }
     } catch (e) {
-      // Hata durumunda boş liste
       if (mounted) {
         setState(() {
           _availableDriveBrands = [];
@@ -354,7 +392,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
     }
 
     try {
-      final models = await _stockService.getBrandModels(brand, 'Sürücü');
+      final models = await _stockService.getModelsByBrand(brand);
       if (mounted) {
         setState(() {
           if (isAspirator) {
@@ -375,20 +413,6 @@ class _EditTicketPageState extends State<EditTicketPage> {
         });
       }
     }
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
-    _jobCodeController.dispose();
-    _kompresor1KwController.dispose();
-    _kompresor2KwController.dispose();
-    _heaterKwController.dispose();
-    _customerNameController.dispose();
-    _customerAddressController.dispose();
-    _customerPhoneController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadTicket() async {
@@ -425,25 +449,46 @@ class _EditTicketPageState extends State<EditTicketPage> {
 
       if (mounted) {
         setState(() {
-          // İş Bilgileri
           _titleController.text = ticket['title'] ?? '';
           _descriptionController.text = ticket['description'] ?? '';
           _jobCodeController.text = ticket['job_code'] ?? '';
           _status = ticket['status'] ?? 'open';
-          // Eğer veritabanından gelen status listede yoksa varsayılan 'open' olsun (güvenlik)
-          const validStatuses = ['open', 'done', 'archived', 'draft'];
+          const validStatuses = ['open', 'done', 'archived', 'draft', 'cancelled'];
           if (!validStatuses.contains(_status)) {
             _status = 'open';
           }
 
           _priority = ticket['priority'] ?? 'normal';
+          _jobType = ticket['job_type'] ?? 'service';
+          _projectType = ticket['project_type'] ?? 'BMS';
+          _projectStatus = ticket['project_status'] ?? 'planned';
+          _projectLocationController.text = ticket['project_location'] ?? '';
+          _responsibleUserId = ticket['responsible_user_id'] as String?;
+          _internalNotesController.text = ticket['internal_notes'] ?? '';
+
+          final assigned = ticket['assigned_user_ids'];
+          if (assigned is List) {
+            _assignedUserIds
+              ..clear()
+              ..addAll(assigned.map((e) => e.toString()));
+          }
 
           if (ticket['planned_date'] != null) {
             _plannedDate = DateTime.tryParse(ticket['planned_date'] as String);
           }
+          if (ticket['project_start_date'] != null) {
+            _projectStartDate = DateTime.tryParse(
+              ticket['project_start_date'] as String,
+            );
+          }
+          if (ticket['project_due_date'] != null) {
+            _projectDueDate = DateTime.tryParse(
+              ticket['project_due_date'] as String,
+            );
+          }
 
           // Teknik Bilgiler
-          _selectedDeviceModel = ticket['device_model'];
+          _selectedDeviceModel = ticket['device_model'] ?? 'Klima Santrali';
           _selectedPlcModel = ticket['plc_model'];
           _selectedHmiBrand = ticket['hmi_brand'];
           _selectedHmiSize = (ticket['hmi_size'] as num?)?.toDouble();
@@ -475,6 +520,41 @@ class _EditTicketPageState extends State<EditTicketPage> {
             _heaterKwController.text = isiticiKw.toString();
           }
 
+          // Jet Fan Alanları
+          _selectedZoneCount = (ticket['zone_count'] as num?)?.toInt() ?? 0;
+          _jetFanCountController.text =
+              ticket['jetfan_count']?.toString() ?? '';
+          _inverterBrandController.text = ticket['inverter_brand'] ?? '';
+
+          _zoneFanCountControllers.clear();
+          for (int i = 0; i < _selectedZoneCount; i++) {
+            _zoneFanCountControllers.add(TextEditingController());
+          }
+
+          // Detay JSON'dan parse
+          final jetfanDetails = ticket['jetfan_details'];
+          if (jetfanDetails is Map) {
+            final zList = jetfanDetails['zone_details'];
+            if (zList is List) {
+              for (int i = 0; i < zList.length && i < _zoneFanCountControllers.length; i++) {
+                final item = zList[i];
+                if (item is Map && item['fan_count'] != null) {
+                  _zoneFanCountControllers[i].text = item['fan_count'].toString();
+                }
+              }
+            }
+            final sFans = jetfanDetails['smoke_fans'];
+            if (sFans is List) {
+              _smokeFans = List<Map<String, dynamic>>.from(sFans);
+              _smokeFanCount = _smokeFans.length;
+            }
+            final fFans = jetfanDetails['fresh_fans'];
+            if (fFans is List) {
+              _freshFans = List<Map<String, dynamic>>.from(fFans);
+              _freshFanCount = _freshFans.length;
+            }
+          }
+
           // Partner Bilgileri
           _selectedPartnerId = ticket['partner_id'] as int?;
 
@@ -487,10 +567,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
 
           // Müşteri Bilgileri
           if (customer != null) {
-            _customerId =
-                customer['id'] as String?; // String veya int olabilir, dikkat
-            if (customer['id'] is int) _customerId = customer['id'].toString();
-
+            _customerId = customer['id']?.toString();
             _customerNameController.text = customer['name'] ?? '';
             _customerAddressController.text = customer['address'] ?? '';
             _customerPhoneController.text = customer['phone'] ?? '';
@@ -500,7 +577,6 @@ class _EditTicketPageState extends State<EditTicketPage> {
         });
       }
 
-      // Markalar yüklendikten sonra modelleri yükle (setState dışında)
       if (_selectedAspiratorBrand != null &&
           _selectedAspiratorBrand != 'Diğer') {
         await _loadModelsForBrand(_selectedAspiratorBrand!, true);
@@ -539,9 +615,42 @@ class _EditTicketPageState extends State<EditTicketPage> {
         );
       },
     );
-    if (picked != null) {
+
+    if (picked != null && mounted) {
+      setState(() => _plannedDate = picked);
+    }
+  }
+
+  Future<void> _pickProjectDate({required bool isStart}) async {
+    final now = DateTime.now();
+    final initial =
+        (isStart ? _projectStartDate : _projectDueDate) ?? _plannedDate ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: now.subtract(const Duration(days: 365 * 3)),
+      lastDate: now.add(const Duration(days: 365 * 5)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: _corporateNavy,
+              onPrimary: Colors.white,
+              onSurface: _textDark,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && mounted) {
       setState(() {
-        _plannedDate = picked;
+        if (isStart) {
+          _projectStartDate = picked;
+        } else {
+          _projectDueDate = picked;
+        }
       });
     }
   }
@@ -551,7 +660,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
-        withData: true, // Web için gerekli
+        withData: true,
       );
 
       if (result != null) {
@@ -574,6 +683,12 @@ class _EditTicketPageState extends State<EditTicketPage> {
     return double.tryParse(normalized);
   }
 
+  int? _parseInt(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return null;
+    return int.tryParse(trimmed);
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_customerId == null) {
@@ -589,12 +704,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
     final supabase = Supabase.instance.client;
 
     try {
-      // 4. Adım: Stok Değişikliği Kontrolü (OTOMATİK STOK DÜŞME KALDIRILDI)
-      // Artık manuel parça ekleme kullanılıyor.
-
-      final String? missingPartsString = null;
-
-      // Müşteri bilgilerini güncelle
+      // 1. Müşteri bilgilerini güncelle
       final customerId = _customerId;
       if (customerId != null) {
         await supabase
@@ -607,15 +717,47 @@ class _EditTicketPageState extends State<EditTicketPage> {
             .eq('id', customerId);
       }
 
-      // Isıtıcı verilerini hazırla
-      final komp1Kw = _parseDouble(_kompresor1KwController.text);
-      final komp2Kw = _parseDouble(_kompresor2KwController.text);
-      final heaterKw =
-          (_heaterExists == 'Var')
-              ? _parseDouble(_heaterKwController.text)
-              : null;
-      final heaterStage =
-          (_heaterExists == 'Var') ? _selectedIsiticiKademe : 'yok';
+      final isProject = _jobType == 'project';
+      final isJetFan = !isProject && _selectedDeviceModel == 'Jet Fan';
+      final isOther = !isProject && _selectedDeviceModel == 'Diğer / Arıza';
+
+      final komp1Kw = (isProject || isJetFan || isOther)
+          ? null
+          : _parseDouble(_kompresor1KwController.text);
+      final komp2Kw = (isProject || isJetFan || isOther)
+          ? null
+          : _parseDouble(_kompresor2KwController.text);
+      final heaterKw = (!isProject && !isJetFan && !isOther && _heaterExists == 'Var')
+          ? _parseDouble(_heaterKwController.text)
+          : null;
+      final heaterStage = (!isProject && !isJetFan && !isOther && _heaterExists == 'Var')
+          ? _selectedIsiticiKademe
+          : 'yok';
+
+      // Jet Fan Verileri
+      final zoneCount = isJetFan ? _selectedZoneCount : null;
+      final List<Map<String, dynamic>> zoneDetails = [];
+      if (isJetFan) {
+        for (int i = 0; i < _zoneFanCountControllers.length; i++) {
+          zoneDetails.add({
+            'zone_no': i + 1,
+            'fan_count': _parseInt(_zoneFanCountControllers[i].text) ?? 0,
+          });
+        }
+      }
+
+      final jetFanCount = isJetFan ? _parseInt(_jetFanCountController.text) : null;
+      final inverterBrand = isJetFan && _inverterBrandController.text.trim().isNotEmpty
+          ? _inverterBrandController.text.trim()
+          : null;
+
+      final Map<String, dynamic>? jetfanDetails = isJetFan
+          ? {
+              'zone_details': zoneDetails,
+              'smoke_fans': _smokeFans,
+              'fresh_fans': _freshFans,
+            }
+          : null;
 
       // PDF Yükleme İşlemi
       String? pdfUrl;
@@ -636,7 +778,6 @@ class _EditTicketPageState extends State<EditTicketPage> {
                   ),
                 );
 
-            // Public URL al
             pdfUrl = supabase.storage
                 .from('ticket-files')
                 .getPublicUrl(fileName);
@@ -647,13 +788,12 @@ class _EditTicketPageState extends State<EditTicketPage> {
         }
       }
 
-      // Ticket açıklamasını güncelle (PDF varsa ekle)
       String finalDescription = _descriptionController.text.trim();
       if (pdfUrl != null) {
         finalDescription += '\n\nEkli PDF Dosyası: $pdfUrl';
       }
 
-      // 5. Adım: Ticket Bilgilerini Güncelle
+      // 2. Ticket Bilgilerini Güncelle
       await supabase
           .from('tickets')
           .update({
@@ -663,32 +803,49 @@ class _EditTicketPageState extends State<EditTicketPage> {
             'priority': _priority,
             'partner_id': _selectedPartnerId,
             'planned_date': _plannedDate?.toIso8601String(),
+            'job_type': _jobType,
+            'project_type': isProject ? _projectType : null,
+            'project_status': isProject ? _projectStatus : 'planned',
+            'project_location':
+                isProject ? _projectLocationController.text.trim() : null,
+            'responsible_user_id': isProject ? _responsibleUserId : null,
+            'assigned_user_ids':
+                isProject ? _assignedUserIds.toList(growable: false) : <String>[],
+            'project_start_date':
+                isProject ? _projectStartDate?.toIso8601String() : null,
+            'project_due_date':
+                isProject ? _projectDueDate?.toIso8601String() : null,
+            'internal_notes':
+                isProject ? _internalNotesController.text.trim() : null,
             'job_code':
                 _jobCodeController.text.trim().isEmpty
                     ? null
                     : _jobCodeController.text.trim(),
-            'device_model': _selectedDeviceModel,
-            'plc_model': _selectedPlcModel,
-            'hmi_brand': _selectedHmiBrand,
-            'hmi_size': _selectedHmiSize,
-            'aspirator_kw': _selectedAspiratorKw,
-            'aspirator_brand': _selectedAspiratorBrand,
-            'aspirator_model': _selectedAspiratorModel,
-            'vant_kw': _selectedVantKw,
-            'vant_brand': _selectedVantBrand,
-            'vant_model': _selectedVantModel,
+            'device_model': isProject ? null : _selectedDeviceModel,
+            'plc_model': (isProject || isOther || isJetFan) ? null : _selectedPlcModel,
+            'hmi_brand': (isProject || isOther || isJetFan) ? null : _selectedHmiBrand,
+            'hmi_size': (isProject || isOther || isJetFan) ? null : _selectedHmiSize,
+            'aspirator_kw': (isProject || isOther || isJetFan) ? null : _selectedAspiratorKw,
+            'aspirator_brand': (isProject || isOther || isJetFan) ? null : _selectedAspiratorBrand,
+            'aspirator_model': (isProject || isOther || isJetFan) ? null : _selectedAspiratorModel,
+            'vant_kw': (isProject || isOther || isJetFan) ? null : _selectedVantKw,
+            'vant_brand': (isProject || isOther || isJetFan) ? null : _selectedVantBrand,
+            'vant_model': (isProject || isOther || isJetFan) ? null : _selectedVantModel,
             'kompresor_kw_1': komp1Kw,
             'kompresor_kw_2': komp2Kw,
-            'tandem': _selectedTandem,
+            'tandem': (isProject || isOther || isJetFan) ? 'yok' : _selectedTandem,
             'isitici_kademe': heaterStage,
             'isitici_kw': heaterKw,
-            'dx': _dx,
-            'sulu_batarya': _suluBatarya,
-            'karisim_damper': _karisimDamper,
-            'nemlendirici': _nemlendirici,
-            'rotor': _rotor,
-            'brulor': _brulor,
-            'missing_parts': missingPartsString,
+            'dx': (isProject || isOther || isJetFan) ? false : _dx,
+            'sulu_batarya': (isProject || isOther || isJetFan) ? false : _suluBatarya,
+            'karisim_damper': (isProject || isOther || isJetFan) ? false : _karisimDamper,
+            'nemlendirici': (isProject || isOther || isJetFan) ? false : _nemlendirici,
+            'rotor': (isProject || isOther || isJetFan) ? false : _rotor,
+            'brulor': (isProject || isOther || isJetFan) ? false : _brulor,
+            'zone_count': zoneCount,
+            'jetfan_count': jetFanCount,
+            'inverter_brand': inverterBrand,
+            if (jetfanDetails != null) 'jetfan_details': jetfanDetails,
           })
           .eq('id', _ticketIdQueryValue);
 
@@ -711,12 +868,17 @@ class _EditTicketPageState extends State<EditTicketPage> {
     final surfaceColor = isDark ? const Color(0xFF1E293B) : _surfaceWhite;
     final textColor = isDark ? Colors.white : _textDark;
 
+    final isProject = _jobType == 'project';
+    final isJetFan = !isProject && _selectedDeviceModel == 'Jet Fan';
+    final isOther = !isProject && _selectedDeviceModel == 'Diğer / Arıza';
+    final showSantralTechnicalCards = !isProject && !isJetFan && !isOther;
+
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
         backgroundColor: surfaceColor,
         elevation: 1,
-        shadowColor: Colors.black.withOpacity(0.05),
+        shadowColor: Colors.black.withValues(alpha: 0.05),
         iconTheme: IconThemeData(color: textColor),
         leadingWidth: 80,
         leading: Row(
@@ -760,11 +922,26 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                 border: Border.all(color: Colors.red.shade200),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Text(
-                                _errorMessage!,
-                                style: const TextStyle(color: Colors.red),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.error_outline,
+                                    color: Colors.red,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _errorMessage!,
+                                      style: const TextStyle(color: Colors.red),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
+
+                          // İŞ TİPİ SEÇİCİ
+                          _buildJobTypeSelector(),
+                          const SizedBox(height: 16),
 
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -774,16 +951,19 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                 child: Column(
                                   children: [
                                     _buildContentCard(
-                                      title: 'İŞ BİLGİLERİ',
+                                      title: 'İş Bilgileri',
                                       icon: Icons.work_outline,
                                       children: [
                                         Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Expanded(
                                               flex: 2,
                                               child: _buildTextField(
                                                 controller: _titleController,
                                                 label: 'İş Başlığı',
+                                                hint: 'Örn: Klima Bakımı',
                                                 isRequired: true,
                                               ),
                                             ),
@@ -793,6 +973,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                               child: _buildTextField(
                                                 controller: _jobCodeController,
                                                 label: 'İş Kodu',
+                                                hint: 'H-001-23',
                                               ),
                                             ),
                                           ],
@@ -801,75 +982,9 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                         _buildTextField(
                                           controller: _descriptionController,
                                           label: 'İş Açıklaması',
+                                          hint:
+                                              'Yapılacak işlemlerin detayları...',
                                           maxLines: 3,
-                                        ),
-                                        const SizedBox(height: 16),
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: DropdownButtonFormField<
-                                                String
-                                              >(
-                                                isExpanded: true,
-                                                value: _status,
-                                                decoration: _inputDecoration(
-                                                  'Durum',
-                                                ),
-                                                items: [
-                                                  // Admin ve manager'lar için draft seçeneği
-                                                  if (_canManageDraftTickets)
-                                                    const DropdownMenuItem(
-                                                      value: 'draft',
-                                                      child: Text(
-                                                        'Taslak (Gizli)',
-                                                      ),
-                                                    ),
-                                                  const DropdownMenuItem(
-                                                    value: 'open',
-                                                    child: Text('Açık'),
-                                                  ),
-                                                  const DropdownMenuItem(
-                                                    value: 'done',
-                                                    child: Text('Bitti'),
-                                                  ),
-                                                ],
-                                                onChanged:
-                                                    (val) => setState(
-                                                      () => _status = val!,
-                                                    ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 16),
-                                            Expanded(
-                                              child: DropdownButtonFormField<
-                                                String
-                                              >(
-                                                isExpanded: true,
-                                                value: _priority,
-                                                decoration: _inputDecoration(
-                                                  'Öncelik',
-                                                ),
-                                                items: const [
-                                                  DropdownMenuItem(
-                                                    value: 'low',
-                                                    child: Text('Düşük'),
-                                                  ),
-                                                  DropdownMenuItem(
-                                                    value: 'normal',
-                                                    child: Text('Normal'),
-                                                  ),
-                                                  DropdownMenuItem(
-                                                    value: 'high',
-                                                    child: Text('Yüksek'),
-                                                  ),
-                                                ],
-                                                onChanged:
-                                                    (val) => setState(
-                                                      () => _priority = val!,
-                                                    ),
-                                              ),
-                                            ),
-                                          ],
                                         ),
                                         const SizedBox(height: 16),
                                         _buildDatePicker(),
@@ -892,7 +1007,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                               borderRadius:
                                                   BorderRadius.circular(8),
                                               color: _backgroundGrey
-                                                  .withOpacity(0.5),
+                                                  .withValues(alpha: 0.5),
                                             ),
                                             child: Row(
                                               children: [
@@ -909,30 +1024,21 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                                             .start,
                                                     children: [
                                                       const Text(
-                                                        'Ek Döküman (PDF)',
+                                                        'Ek Doküman (PDF)',
                                                         style: TextStyle(
                                                           fontSize: 11,
                                                           color: _textLight,
                                                         ),
                                                       ),
-                                                      const SizedBox(height: 2),
                                                       Text(
                                                         _selectedPdf != null
                                                             ? _selectedPdf!.name
-                                                            : 'Dosya seçilmedi',
-                                                        style: TextStyle(
-                                                          color:
-                                                              _selectedPdf !=
-                                                                      null
-                                                                  ? _textDark
-                                                                  : _textLight,
+                                                            : 'Yeni PDF Seç (İsteğe bağlı)',
+                                                        style: const TextStyle(
+                                                          fontSize: 13,
                                                           fontWeight:
-                                                              FontWeight.w600,
-                                                          fontSize: 14,
+                                                              FontWeight.w500,
                                                         ),
-                                                        overflow:
-                                                            TextOverflow
-                                                                .ellipsis,
                                                       ),
                                                     ],
                                                   ),
@@ -941,6 +1047,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                                   IconButton(
                                                     icon: const Icon(
                                                       Icons.close,
+                                                      size: 18,
                                                       color: Colors.red,
                                                     ),
                                                     onPressed:
@@ -962,11 +1069,18 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                       ],
                                     ),
                                     const SizedBox(height: 24),
+
+                                    // PROJE BİLGİLERİ (Proje Seçildiyse)
+                                    if (isProject) ...[
+                                      _buildProjectInfoCard(),
+                                      const SizedBox(height: 24),
+                                    ],
+
+                                    // MÜŞTERİ BİLGİLERİ
                                     _buildContentCard(
-                                      title: 'MÜŞTERİ BİLGİLERİ',
+                                      title: 'Müşteri Bilgileri',
                                       icon: Icons.person_outline,
                                       children: [
-                                        // --- PARTNER FİRMA SEÇİMİ (Sadece Yetkililer İçin) ---
                                         if (_canAssignPartner &&
                                             _partners.isNotEmpty) ...[
                                           _buildDropdown<int?>(
@@ -978,8 +1092,9 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                               ..._partners.map((p) => p.id),
                                             ],
                                             itemLabelBuilder: (val) {
-                                              if (val == null)
+                                              if (val == null) {
                                                 return 'Atama Yapılmayacak (Doğrudan Müşteri)';
+                                              }
                                               final p = _partners.firstWhere(
                                                 (element) => element.id == val,
                                                 orElse:
@@ -1036,7 +1151,8 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                       ],
                                     ),
                                     const SizedBox(height: 24),
-                                    // --- KULLANILAN MALZEMELER (YENİ) ---
+
+                                    // KULLANILAN MALZEMELER
                                     _buildContentCard(
                                       title: 'KULLANILAN MALZEMELER',
                                       icon: Icons.inventory_2_outlined,
@@ -1107,31 +1223,37 @@ class _EditTicketPageState extends State<EditTicketPage> {
                                 ),
                               ),
 
-                              if (isWide) const SizedBox(width: 24),
-
-                              if (isWide)
+                              if (isWide && !isProject && !isOther) ...[
+                                const SizedBox(width: 24),
                                 Expanded(
                                   flex: 2,
-                                  child: Column(
-                                    children: [
-                                      _buildTechnicalInfoCard(),
-                                      const SizedBox(height: 24),
-                                      _buildHeaterInfoCard(),
-                                      const SizedBox(height: 24),
-                                      _buildHardwareFeaturesCard(),
-                                    ],
-                                  ),
+                                  child: isJetFan
+                                      ? _buildJetFanInfoCard()
+                                      : Column(
+                                        children: [
+                                          _buildTechnicalInfoCard(),
+                                          const SizedBox(height: 24),
+                                          _buildHeaterInfoCard(),
+                                          const SizedBox(height: 24),
+                                          _buildHardwareFeaturesCard(),
+                                        ],
+                                      ),
                                 ),
+                              ],
                             ],
                           ),
 
-                          if (!isWide) ...[
+                          if (!isWide && !isProject && !isOther) ...[
                             const SizedBox(height: 24),
-                            _buildTechnicalInfoCard(),
-                            const SizedBox(height: 24),
-                            _buildHeaterInfoCard(),
-                            const SizedBox(height: 24),
-                            _buildHardwareFeaturesCard(),
+                            if (isJetFan)
+                              _buildJetFanInfoCard()
+                            else ...[
+                              _buildTechnicalInfoCard(),
+                              const SizedBox(height: 24),
+                              _buildHeaterInfoCard(),
+                              const SizedBox(height: 24),
+                              _buildHardwareFeaturesCard(),
+                            ],
                           ],
 
                           const SizedBox(height: 40),
@@ -1172,9 +1294,403 @@ class _EditTicketPageState extends State<EditTicketPage> {
     );
   }
 
+  Widget _buildJobTypeSelector() {
+    return Row(
+      children: [
+        Expanded(
+          child: _JobTypeOption(
+            title: 'Servis İşi',
+            subtitle: 'Klima, bakım, arıza ve tek seferlik saha işleri',
+            icon: Icons.build_circle_outlined,
+            selected: _jobType == 'service',
+            onTap: () => setState(() => _jobType = 'service'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _JobTypeOption(
+            title: 'Proje İşi',
+            subtitle: 'BMS, SCADA, otomasyon ve uzun süreli işler',
+            icon: Icons.account_tree_outlined,
+            selected: _jobType == 'project',
+            onTap: () => setState(() => _jobType = 'project'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProjectInfoCard() {
+    return _buildContentCard(
+      title: 'Proje Takip Bilgileri',
+      icon: Icons.account_tree_outlined,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildDropdown<String>(
+                label: 'Proje Tipi',
+                value: _projectType,
+                items: const [
+                  'BMS',
+                  'SCADA',
+                  'PLC/HMI',
+                  'Pano Revizyonu',
+                  'BACnet/Modbus',
+                  'Devreye Alma',
+                  'Diğer',
+                ],
+                onChanged:
+                    (value) => setState(() => _projectType = value ?? 'BMS'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildDropdown<String>(
+                label: 'Proje Durumu',
+                value: _projectStatus,
+                items: const [
+                  'planned',
+                  'in_progress',
+                  'waiting',
+                  'testing',
+                  'missing',
+                  'done',
+                  'cancelled',
+                ],
+                itemLabels: const {
+                  'planned': 'Planlandı',
+                  'in_progress': 'Devam ediyor',
+                  'waiting': 'Beklemede',
+                  'testing': 'Test aşamasında',
+                  'missing': 'Eksik bekliyor',
+                  'done': 'Tamamlandı',
+                  'cancelled': 'İptal edildi',
+                },
+                onChanged:
+                    (value) =>
+                        setState(() => _projectStatus = value ?? 'planned'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          controller: _projectLocationController,
+          label: 'Lokasyon',
+          icon: Icons.location_on_outlined,
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildDropdown<String>(
+                label: 'Sorumlu Kullanıcı',
+                value: _responsibleUserId,
+                items: _users.map((user) => user.id).toList(),
+                itemLabelBuilder: (id) {
+                  final user = _users.firstWhere(
+                    (item) => item.id == id,
+                    orElse: () => UserProfile(id: id, role: UserRole.user),
+                  );
+                  return user.displayName;
+                },
+                onChanged:
+                    (value) => setState(() => _responsibleUserId = value),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final user in _users)
+              FilterChip(
+                label: Text(user.displayName),
+                selected: _assignedUserIds.contains(user.id),
+                onSelected: (selected) {
+                  setState(() {
+                    if (selected) {
+                      _assignedUserIds.add(user.id);
+                    } else {
+                      _assignedUserIds.remove(user.id);
+                    }
+                  });
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _ProjectDateBox(
+                label: 'Başlangıç Tarihi',
+                date: _projectStartDate,
+                onTap: () => _pickProjectDate(isStart: true),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _ProjectDateBox(
+                label: 'Planlanan Bitiş',
+                date: _projectDueDate,
+                onTap: () => _pickProjectDate(isStart: false),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          controller: _internalNotesController,
+          label: 'İç Notlar',
+          maxLines: 3,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildJetFanInfoCard() {
+    final countOptions = List.generate(21, (index) => index);
+
+    return _buildContentCard(
+      title: 'Jet Fan & Otopark Havalandırma',
+      icon: Icons.wind_power,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildDropdown<int>(
+                label: 'Zone Sayısı',
+                value: _selectedZoneCount,
+                items: countOptions,
+                onChanged: (val) {
+                  setState(() {
+                    _selectedZoneCount = val ?? 0;
+                    if (_selectedZoneCount > _zoneFanCountControllers.length) {
+                      for (
+                        int i = _zoneFanCountControllers.length;
+                        i < _selectedZoneCount;
+                        i++
+                      ) {
+                        _zoneFanCountControllers.add(TextEditingController());
+                      }
+                    } else {
+                      for (
+                        int i = _zoneFanCountControllers.length - 1;
+                        i >= _selectedZoneCount;
+                        i--
+                      ) {
+                        _zoneFanCountControllers[i].dispose();
+                        _zoneFanCountControllers.removeAt(i);
+                      }
+                    }
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildTextField(
+                controller: _jetFanCountController,
+                label: 'Toplam Jet Fan',
+                icon: Icons.numbers,
+                isNumeric: true,
+              ),
+            ),
+          ],
+        ),
+        if (_zoneFanCountControllers.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Text(
+            'Zone Bazlı Fan Sayıları',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: _textLight,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _zoneFanCountControllers.length,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _buildTextField(
+                  controller: _zoneFanCountControllers[index],
+                  label: '${index + 1}. Zone Jet Fan Sayısı',
+                  isNumeric: true,
+                ),
+              );
+            },
+          ),
+        ],
+        const SizedBox(height: 24),
+        const Divider(),
+        const SizedBox(height: 16),
+        Text(
+          'Duman Tahliye Fanları',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: _corporateNavy,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _buildDropdown<int>(
+          label: 'Duman Tahliye Fanı Sayısı',
+          value: _smokeFanCount,
+          items: countOptions,
+          onChanged: (val) {
+            setState(() {
+              _smokeFanCount = val ?? 0;
+              if (_smokeFanCount > _smokeFans.length) {
+                for (int i = _smokeFans.length; i < _smokeFanCount; i++) {
+                  _smokeFans.add({'brand': null, 'kw': null});
+                }
+              } else {
+                _smokeFans.length = _smokeFanCount;
+              }
+            });
+          },
+        ),
+        if (_smokeFans.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _smokeFans.length,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 24,
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${index + 1}.',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildDropdown<String>(
+                        label: 'İnverter Markası',
+                        value: _smokeFans[index]['brand'],
+                        items: _availableDriveBrands,
+                        onChanged: (val) {
+                          setState(() => _smokeFans[index]['brand'] = val);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildDropdown<double>(
+                        label: 'Güç (kW)',
+                        value: _smokeFans[index]['kw'],
+                        items: StockService.kwValues,
+                        itemLabelBuilder: (val) => '$val kW',
+                        onChanged: (val) {
+                          setState(() => _smokeFans[index]['kw'] = val);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+        const SizedBox(height: 24),
+        const Divider(),
+        const SizedBox(height: 16),
+        Text(
+          'Taze Hava Fanları',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: _corporateNavy,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _buildDropdown<int>(
+          label: 'Taze Hava Fanı Sayısı',
+          value: _freshFanCount,
+          items: countOptions,
+          onChanged: (val) {
+            setState(() {
+              _freshFanCount = val ?? 0;
+              if (_freshFanCount > _freshFans.length) {
+                for (int i = _freshFans.length; i < _freshFanCount; i++) {
+                  _freshFans.add({'brand': null, 'kw': null});
+                }
+              } else {
+                _freshFans.length = _freshFanCount;
+              }
+            });
+          },
+        ),
+        if (_freshFans.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _freshFans.length,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 24,
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${index + 1}.',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildDropdown<String>(
+                        label: 'İnverter Markası',
+                        value: _freshFans[index]['brand'],
+                        items: _availableDriveBrands,
+                        onChanged: (val) {
+                          setState(() => _freshFans[index]['brand'] = val);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildDropdown<double>(
+                        label: 'Güç (kW)',
+                        value: _freshFans[index]['kw'],
+                        items: StockService.kwValues,
+                        itemLabelBuilder: (val) => '$val kW',
+                        onChanged: (val) {
+                          setState(() => _freshFans[index]['kw'] = val);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
   Widget _buildTechnicalInfoCard() {
     return _buildContentCard(
-      title: 'CİHAZ TEKNİK VERİLERİ',
+      title: 'Cihaz Teknik Verileri',
       icon: Icons.settings_input_component,
       children: [
         Row(
@@ -1217,7 +1733,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
             ),
           ],
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         const Text(
           'HMI Ekran Bilgileri',
           style: TextStyle(
@@ -1269,17 +1785,14 @@ class _EditTicketPageState extends State<EditTicketPage> {
                 onChanged: (val) async {
                   setState(() {
                     _selectedAspiratorBrand = val;
-                    _selectedAspiratorModel =
-                        null; // Marka değişince modeli sıfırla
+                    _selectedAspiratorModel = null;
                   });
                   await _loadModelsForBrand(val ?? '', true);
                 },
               ),
             ),
             const SizedBox(width: 12),
-            // Model seçimi (sadece modeller varsa göster)
             if (_selectedAspiratorBrand != null &&
-                _selectedAspiratorBrand != 'Diğer' &&
                 _availableAspiratorModels.isNotEmpty)
               Expanded(
                 child: _buildDropdown(
@@ -1291,7 +1804,6 @@ class _EditTicketPageState extends State<EditTicketPage> {
                 ),
               ),
             if (_selectedAspiratorBrand != null &&
-                _selectedAspiratorBrand != 'Diğer' &&
                 _availableAspiratorModels.isNotEmpty)
               const SizedBox(width: 12),
             Expanded(
@@ -1325,17 +1837,14 @@ class _EditTicketPageState extends State<EditTicketPage> {
                 onChanged: (val) async {
                   setState(() {
                     _selectedVantBrand = val;
-                    _selectedVantModel = null; // Marka değişince modeli sıfırla
+                    _selectedVantModel = null;
                   });
                   await _loadModelsForBrand(val ?? '', false);
                 },
               ),
             ),
             const SizedBox(width: 12),
-            // Model seçimi (sadece modeller varsa göster)
-            if (_selectedVantBrand != null &&
-                _selectedVantBrand != 'Diğer' &&
-                _availableVantModels.isNotEmpty)
+            if (_selectedVantBrand != null && _availableVantModels.isNotEmpty)
               Expanded(
                 child: _buildDropdown(
                   label: 'Model',
@@ -1344,9 +1853,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
                   onChanged: (val) => setState(() => _selectedVantModel = val),
                 ),
               ),
-            if (_selectedVantBrand != null &&
-                _selectedVantBrand != 'Diğer' &&
-                _availableVantModels.isNotEmpty)
+            if (_selectedVantBrand != null && _availableVantModels.isNotEmpty)
               const SizedBox(width: 12),
             Expanded(
               child: _buildDropdown<dynamic>(
@@ -1381,7 +1888,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
                 suffixText: 'kW',
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 16),
             Expanded(
               child: _buildTextField(
                 controller: _kompresor2KwController,
@@ -1393,22 +1900,12 @@ class _EditTicketPageState extends State<EditTicketPage> {
           ],
         ),
         const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildDropdown(
-                label: 'Tandem',
-                value: _selectedTandem,
-                items: const ['yok', '1', '2'],
-                itemLabels: const {
-                  'yok': 'Yok',
-                  '1': '1 Tandem',
-                  '2': '2 Tandem',
-                },
-                onChanged: (val) => setState(() => _selectedTandem = val!),
-              ),
-            ),
-          ],
+        _buildDropdown(
+          label: 'Tandem Özelliği',
+          value: _selectedTandem,
+          items: const ['yok', 'var'],
+          itemLabels: const {'yok': 'Yok', 'var': 'Var'},
+          onChanged: (val) => setState(() => _selectedTandem = val!),
         ),
       ],
     );
@@ -1416,7 +1913,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
 
   Widget _buildHardwareFeaturesCard() {
     return _buildContentCard(
-      title: 'DONANIM KONTROLÜ',
+      title: 'Donanım Özellikleri',
       icon: Icons.check_box_outlined,
       children: [
         Wrap(
@@ -1457,7 +1954,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
 
   Widget _buildHeaterInfoCard() {
     return _buildContentCard(
-      title: 'ISITICI BİLGİLERİ',
+      title: 'Isıtıcı Bilgileri',
       icon: Icons.whatshot,
       children: [
         Row(
@@ -1470,7 +1967,6 @@ class _EditTicketPageState extends State<EditTicketPage> {
                 onChanged: (val) {
                   setState(() {
                     _heaterExists = val!;
-                    // Eğer Yok seçilirse diğer alanları sıfırla
                     if (_heaterExists == 'Yok') {
                       _selectedIsiticiKademe = 'yok';
                       _heaterKwController.clear();
@@ -1499,15 +1995,14 @@ class _EditTicketPageState extends State<EditTicketPage> {
                     '5': '5 Kademe',
                     '6': '6 Kademe',
                   },
-                  onChanged:
-                      (val) => setState(() => _selectedIsiticiKademe = val!),
+                  onChanged: (val) => setState(() => _selectedIsiticiKademe = val!),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
                 child: _buildTextField(
                   controller: _heaterKwController,
-                  label: 'Isıtıcı Güç',
+                  label: 'Isıtıcı Gücü (kW)',
                   isNumeric: true,
                   suffixText: 'kW',
                 ),
@@ -1519,25 +2014,109 @@ class _EditTicketPageState extends State<EditTicketPage> {
     );
   }
 
+  Widget _buildFeatureChip(
+    String label,
+    bool value,
+    Function(bool) onChanged,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeColor = isDark ? const Color(0xFF38BDF8) : _corporateNavy;
+    final activeTextColor = isDark ? Colors.black : Colors.white;
+
+    return FilterChip(
+      label: Text(label),
+      selected: value,
+      onSelected: onChanged,
+      selectedColor: activeColor,
+      checkmarkColor: activeTextColor,
+      labelStyle: TextStyle(
+        color: value ? activeTextColor : _textDark,
+        fontSize: 12,
+        fontWeight: value ? FontWeight.bold : FontWeight.normal,
+      ),
+      backgroundColor: _backgroundGrey.withValues(alpha: 0.5),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(6),
+        side: BorderSide(
+          color: value ? activeColor : Colors.grey.shade300,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDatePicker() {
+    final dateText =
+        _plannedDate == null
+            ? 'Planlanan Tarih Seç (İsteğe bağlı)'
+            : '${_plannedDate!.day}.${_plannedDate!.month}.${_plannedDate!.year}';
+
+    return InkWell(
+      onTap: _pickDate,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(8),
+          color: _backgroundGrey.withValues(alpha: 0.5),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.calendar_today_outlined,
+              color: _textLight,
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Planlanan Müdahale Tarihi',
+                    style: TextStyle(fontSize: 11, color: _textLight),
+                  ),
+                  Text(
+                    dateText,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_plannedDate != null)
+              IconButton(
+                icon: const Icon(Icons.close, size: 18, color: _textLight),
+                onPressed: () => setState(() => _plannedDate = null),
+              )
+            else
+              const Icon(Icons.arrow_drop_down, color: _textLight),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildContentCard({
     required String title,
     required IconData icon,
     required List<Widget> children,
   }) {
-    // Tema kontrolü
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF1E293B) : _surfaceWhite;
+    final cardBg = isDark ? const Color(0xFF1E293B) : _surfaceWhite;
+    final borderColor = isDark ? const Color(0xFF334155) : Colors.grey.shade200;
     final textColor = isDark ? Colors.white : _corporateNavy;
 
     return Container(
-      width: double.infinity,
       decoration: BoxDecoration(
-        color: cardColor,
+        color: cardBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1577,37 +2156,6 @@ class _EditTicketPageState extends State<EditTicketPage> {
     );
   }
 
-  InputDecoration _inputDecoration(
-    String label, {
-    String? hint,
-    IconData? icon,
-    String? suffixText,
-  }) {
-    return InputDecoration(
-      labelText: label,
-      hintText: hint,
-      suffixText: suffixText,
-      labelStyle: const TextStyle(color: _textLight, fontSize: 13),
-      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-      prefixIcon: icon != null ? Icon(icon, size: 20, color: _textLight) : null,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: Colors.grey.shade300),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: Colors.grey.shade300),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: _corporateNavy, width: 1.5),
-      ),
-      filled: true,
-      fillColor: _backgroundGrey.withOpacity(0.5),
-    );
-  }
-
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -1619,10 +2167,9 @@ class _EditTicketPageState extends State<EditTicketPage> {
     String? suffixText,
     TextInputType? keyboardType,
   }) {
-    // Tema kontrolü
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final fillColor =
-        isDark ? const Color(0xFF334155) : _backgroundGrey.withOpacity(0.5);
+        isDark ? const Color(0xFF334155) : _backgroundGrey.withValues(alpha: 0.5);
     final textColor = isDark ? Colors.white : _textDark;
 
     return TextFormField(
@@ -1680,22 +2227,25 @@ class _EditTicketPageState extends State<EditTicketPage> {
     required Function(T?) onChanged,
     bool isRequired = false,
   }) {
-    // Eğer gelen değer listede yoksa null yap (Hata vermemesi için)
+    // Listede olmayan bir değer varsa çökmeyi önlemek için listeye ekle
+    final List<T> effectiveItems = [
+      if (value != null && !items.contains(value)) value,
+      ...items,
+    ];
+
     T? safeValue;
     if (value != null) {
       try {
-        // Listede eşleşen değerin kendisini al (Referans güvenliği için)
-        safeValue = items.firstWhere((item) => item == value);
+        safeValue = effectiveItems.firstWhere((item) => item == value);
       } catch (_) {
         safeValue = null;
       }
     }
 
-    // Tema kontrolü - Dark mode uyumluluğu için
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dropdownColor = isDark ? const Color(0xFF1E293B) : _surfaceWhite;
     final fillColor =
-        isDark ? const Color(0xFF334155) : _backgroundGrey.withOpacity(0.5);
+        isDark ? const Color(0xFF334155) : _backgroundGrey.withValues(alpha: 0.5);
     final textColor = isDark ? Colors.white : Colors.black;
 
     return DropdownButtonFormField<T>(
@@ -1725,7 +2275,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
         fillColor: fillColor,
       ),
       items:
-          items.toSet().map((item) {
+          effectiveItems.toSet().map((item) {
             String text;
             if (itemLabels != null) {
               text = itemLabels[item] ?? item.toString();
@@ -1748,42 +2298,75 @@ class _EditTicketPageState extends State<EditTicketPage> {
                 return null;
               }
               : null,
-      style: TextStyle(
-        color: textColor,
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-      ),
     );
   }
+}
 
-  Widget _buildFeatureChip(String label, bool value, Function(bool) onChanged) {
+class _JobTypeOption extends StatelessWidget {
+  const _JobTypeOption({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => onChanged(!value),
-      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: value ? _corporateNavy : Colors.transparent,
+          color:
+              selected
+                  ? AppColors.corporateNavy.withValues(alpha: 0.08)
+                  : AppColors.surfaceSoft,
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: value ? _corporateNavy : Colors.grey.shade300,
+            color: selected ? AppColors.corporateNavy : AppColors.borderSubtle,
+            width: selected ? 1.4 : 1,
           ),
-          borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              value ? Icons.check : Icons.add,
-              size: 16,
-              color: value ? Colors.white : _textLight,
+              icon,
+              color: selected ? AppColors.corporateNavy : AppColors.textLight,
             ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: value ? Colors.white : _textLight,
-                fontWeight: value ? FontWeight.bold : FontWeight.normal,
-                fontSize: 13,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textDark,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textLight,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -1791,50 +2374,70 @@ class _EditTicketPageState extends State<EditTicketPage> {
       ),
     );
   }
+}
 
-  Widget _buildDatePicker() {
-    final dateText =
-        _plannedDate == null
+class _ProjectDateBox extends StatelessWidget {
+  const _ProjectDateBox({
+    required this.label,
+    required this.date,
+    required this.onTap,
+  });
+
+  final String label;
+  final DateTime? date;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final text =
+        date == null
             ? 'Tarih seçilmedi'
-            : '${_plannedDate!.day}.${_plannedDate!.month}.${_plannedDate!.year}';
+            : '${date!.day}.${date!.month}.${date!.year}';
     return InkWell(
-      onTap: _pickDate,
+      onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
+          color: AppColors.surfaceSoft,
+          border: Border.all(color: AppColors.borderSubtle),
           borderRadius: BorderRadius.circular(8),
-          color: _backgroundGrey.withOpacity(0.5),
         ),
         child: Row(
           children: [
             const Icon(
               Icons.calendar_today_outlined,
-              color: _textLight,
-              size: 20,
+              color: AppColors.textLight,
+              size: 18,
             ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Planlanan Tarih',
-                  style: TextStyle(fontSize: 11, color: _textLight),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  dateText,
-                  style: TextStyle(
-                    color: _plannedDate == null ? _textLight : _textDark,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppColors.textLight,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-              ],
+                  Text(
+                    text,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color:
+                          date == null
+                              ? AppColors.textLight
+                              : AppColors.textDark,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const Spacer(),
-            const Icon(Icons.arrow_drop_down, color: _textLight),
           ],
         ),
       ),

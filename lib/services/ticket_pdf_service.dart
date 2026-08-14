@@ -80,17 +80,31 @@ class TicketPdfService {
       final enrichedNotes = await _enrichNotesWithImages(notes);
 
       final partner = ticket['partners'] as Map<String, dynamic>?;
-      final partnerName = partner?['name'] as String?;
+      final customer = ticket['customers'] as Map<String, dynamic>?;
+
+      final rawPartnerName = partner?['name'] as String? ??
+          ticket['partner_name'] as String? ??
+          (ticket['partner'] is String ? ticket['partner'] as String : '') ??
+          '';
+
+      final rawCustomerName = customer?['name'] as String? ??
+          ticket['customer_name'] as String? ??
+          (ticket['customer'] is String ? ticket['customer'] as String : '') ??
+          '';
+
+      final combinedNames = '$rawPartnerName $rawCustomerName'
+          .replaceAll('İ', 'i')
+          .replaceAll('I', 'ı')
+          .replaceAll('ı', 'i')
+          .toLowerCase();
 
       pw.Document pdf;
-      if (partnerName != null && partnerName.toLowerCase().contains('point')) {
-        pdf = await _generatePointTicketPdf(ticket, enrichedNotes);
-      } else if (partnerName != null &&
-          partnerName.toLowerCase().contains('vensa')) {
-        pdf = await _generateVensaTicketPdf(ticket, enrichedNotes);
-      } else if (partnerName != null &&
-          partnerName.toLowerCase().contains('inovaks')) {
+      if (combinedNames.contains('inovaks')) {
         pdf = await _generateInovaksTicketPdf(ticket, enrichedNotes);
+      } else if (combinedNames.contains('point')) {
+        pdf = await _generatePointTicketPdf(ticket, enrichedNotes);
+      } else if (combinedNames.contains('vensa')) {
+        pdf = await _generateVensaTicketPdf(ticket, enrichedNotes);
       } else {
         pdf = await _generateStandardTicketPdf(ticket, enrichedNotes);
       }
@@ -976,7 +990,11 @@ class TicketPdfService {
     final font = await PdfHelper.loadTurkishFont();
     final now = DateTime.now();
 
-    final lowerPartner = (partnerName ?? '').toLowerCase();
+    final lowerPartner = (partnerName ?? '')
+        .replaceAll('İ', 'i')
+        .replaceAll('I', 'ı')
+        .replaceAll('ı', 'i')
+        .toLowerCase();
     final bool isPoint = lowerPartner.contains('point');
     final bool isVensa = lowerPartner.contains('vensa');
     final bool isInovaks = lowerPartner.contains('inovaks');

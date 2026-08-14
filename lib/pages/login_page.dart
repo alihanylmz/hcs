@@ -1,7 +1,6 @@
 import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -164,67 +163,163 @@ class _LoginPageState extends State<LoginPage> {
       child: Scaffold(
         body: Stack(
           children: [
-            Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.work_outline_rounded,
-                        size: 64,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        'IS TAKIP PORTALI',
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Teknisyen ve yonetim girisi',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.textTheme.bodySmall?.color,
-                        ),
-                      ),
-                      const SizedBox(height: 40),
-                      if (_errorMessage != null) _buildErrorCard(),
-                      _buildLoginForm(theme),
-                      const SizedBox(height: 24),
-                      Text(
-                        'Hesabiniz yoksa kayit talebi olusturabilirsiniz.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextButton.icon(
-                        onPressed: _isLoading ? null : _openRegisterPage,
-                        icon: const Icon(Icons.person_add_alt_1_rounded),
-                        label: const Text('Kayit Ol'),
-                      ),
+            // Arka Plan Lüks Gradyan
+            Positioned.fill(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF0F172A),
+                      Color(0xFF1E3E62),
+                      Color(0xFF17304C),
+                      Color(0xFF0A1120),
                     ],
                   ),
                 ),
               ),
             ),
+            // Dekoratif Parlayan Daireler
             Positioned(
-              right: 20,
-              bottom: 20,
-              child: Opacity(
-                opacity: 0.1,
-                child: SvgPicture.asset(
-                  'assets/images/log.svg',
-                  width: 100,
-                  height: 100,
-                  placeholderBuilder: (context) => const SizedBox(),
+              top: -80,
+              right: -80,
+              child: Container(
+                width: 320,
+                height: 320,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF2B82C9).withValues(alpha: 0.2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF2B82C9).withValues(alpha: 0.2),
+                      blurRadius: 100,
+                      spreadRadius: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: -100,
+              left: -100,
+              child: Container(
+                width: 360,
+                height: 360,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF29956F).withValues(alpha: 0.15),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF29956F).withValues(alpha: 0.15),
+                      blurRadius: 120,
+                      spreadRadius: 30,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // İçerik
+            Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Container(
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          blurRadius: 30,
+                          offset: const Offset(0, 15),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Logo Rozeti
+                        Container(
+                          width: 80,
+                          height: 80,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: 0.3),
+                                blurRadius: 20,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.asset(
+                              'lib/assest/logo/uzal.png',
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.build_rounded,
+                                size: 40,
+                                color: Color(0xFF17304C),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'UZAL TEKNİK',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Kurumsal İş Takip & Teknik Servis Portalı',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withValues(alpha: 0.75),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+                        if (_errorMessage != null) _buildErrorCard(),
+                        _buildLoginForm(theme),
+                        const SizedBox(height: 24),
+                        const Divider(color: Colors.white24, height: 1),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Hesabınız yok mu?',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 13,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _isLoading ? null : _openRegisterPage,
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF60A5FA),
+                                textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              child: const Text('Kayıt Oluştur'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -239,8 +334,8 @@ class _LoginPageState extends State<LoginPage> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1),
-        border: Border.all(color: Colors.red.withOpacity(0.5)),
+        color: Colors.red.withValues(alpha: 0.1),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -267,10 +362,21 @@ class _LoginPageState extends State<LoginPage> {
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
             autofillHints: const [AutofillHints.email],
-            decoration: const InputDecoration(
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            decoration: InputDecoration(
               labelText: 'E-posta Adresi',
-              prefixIcon: Icon(Icons.email_outlined),
-              border: OutlineInputBorder(),
+              labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+              prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF60A5FA)),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.08),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF60A5FA), width: 2),
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -280,13 +386,25 @@ class _LoginPageState extends State<LoginPage> {
             textInputAction: TextInputAction.done,
             autofillHints: const [AutofillHints.password],
             onSubmitted: (_) => _signIn(),
+            style: const TextStyle(color: Colors.white, fontSize: 14),
             decoration: InputDecoration(
-              labelText: 'Sifre',
-              prefixIcon: const Icon(Icons.lock_outline),
-              border: const OutlineInputBorder(),
+              labelText: 'Şifre',
+              labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+              prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF60A5FA)),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.08),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF60A5FA), width: 2),
+              ),
               suffixIcon: IconButton(
                 icon: Icon(
-                  _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
+                  _isPasswordVisible ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  color: Colors.white60,
                 ),
                 onPressed: () {
                   setState(() {
@@ -296,7 +414,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(
             children: [
               SizedBox(
@@ -309,7 +427,9 @@ class _LoginPageState extends State<LoginPage> {
                       _rememberMe = value ?? false;
                     });
                   },
-                  activeColor: theme.colorScheme.primary,
+                  activeColor: const Color(0xFF2B82C9),
+                  side: const BorderSide(color: Colors.white60),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                 ),
               ),
               const SizedBox(width: 8),
@@ -319,46 +439,52 @@ class _LoginPageState extends State<LoginPage> {
                     _rememberMe = !_rememberMe;
                   });
                 },
-                child: const Text('Beni Hatirla'),
+                child: Text(
+                  'Beni Hatırla',
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
-            height: 50,
+            height: 52,
             child: ElevatedButton(
               onPressed: _isLoading ? null : _signIn,
               style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2B82C9),
+                foregroundColor: Colors.white,
+                elevation: 4,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(14),
                 ),
+                shadowColor: const Color(0xFF2B82C9).withValues(alpha: 0.5),
               ),
-              child:
-                  _isLoading
-                      ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                      : const Text(
-                        'GIRIS YAP',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
                       ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: _isLoading ? null : _openRegisterPage,
-              child: const Text('Kayit Ol'),
+                    )
+                  : const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'GİRİŞ YAP',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Icon(Icons.arrow_forward_rounded, size: 18),
+                      ],
+                    ),
             ),
           ),
         ],

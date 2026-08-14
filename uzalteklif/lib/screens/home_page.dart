@@ -431,26 +431,46 @@ class _HomePageState extends State<HomePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildProductToolbar(),
-            const SizedBox(height: 14),
-            TextField(
-              onChanged: (value) => setState(() => _searchQuery = value),
-              decoration: InputDecoration(
-                labelText: 'Kod, urun adi, marka veya model ile ara',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: IconButton(
-                  tooltip: _showAdvancedSearch
-                      ? 'Detayli aramayi gizle'
-                      : 'Detayli aramayi ac',
-                  onPressed: () {
-                    setState(() => _showAdvancedSearch = !_showAdvancedSearch);
-                  },
-                  icon: Icon(
-                    _showAdvancedSearch
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
+            const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFCBD5E1)),
+              ),
+              child: TextField(
+                onChanged: (value) => setState(() => _searchQuery = value),
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                decoration: InputDecoration(
+                  hintText: '🔍 Ürün Kodu, Malzeme Adı, Marka veya Model Ara...',
+                  hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                  prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF2B82C9)),
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_searchQuery.isNotEmpty)
+                        IconButton(
+                          tooltip: 'Aramayı Temizle',
+                          icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF64748B)),
+                          onPressed: () => setState(() => _searchQuery = ''),
+                        ),
+                      IconButton(
+                        tooltip: _showAdvancedSearch ? 'Detaylı Aramayı Gizle' : 'Detaylı Aramayı Aç',
+                        onPressed: () {
+                          setState(() => _showAdvancedSearch = !_showAdvancedSearch);
+                        },
+                        icon: Icon(
+                          _showAdvancedSearch
+                              ? Icons.filter_list_off_rounded
+                              : Icons.tune_rounded,
+                          color: _showAdvancedSearch ? const Color(0xFF2B82C9) : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
                   ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                 ),
-                isDense: true,
               ),
             ),
             if (_showAdvancedSearch) ...[
@@ -515,97 +535,182 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildProductToolbar() {
     final compact = MediaQuery.sizeOf(context).width < 1500;
-    final logoSize = compact ? 64.0 : 98.0;
-    final logoAndTitle = Row(
-      children: [
-        Container(
-          width: logoSize,
-          height: logoSize,
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            color: Colors.white.withValues(alpha: 0.88),
-            border: Border.all(color: const Color(0xFFD8E0E8)),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Image.asset('lib/assest/logo/uzal.png', fit: BoxFit.contain),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            'UZAL TEKNIK',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.4,
-              color: const Color(0xFF17304C),
-              fontSize:
-                  (Theme.of(context).textTheme.headlineSmall?.fontSize ?? 24) *
-                  (compact ? 1.25 : 1.75),
-            ),
-          ),
-        ),
-      ],
-    );
+    final logoSize = compact ? 52.0 : 64.0;
 
-    final actions = Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        ElevatedButton.icon(
-          onPressed: () => ModuleSwitcher.switchToTask(context),
-          icon: const Icon(Icons.build_circle_outlined, size: 18),
-          label: const Text('🛠️ İş Takip & Atölye ➔'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF2B82C9),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        ),
-        OutlinedButton.icon(
-          onPressed: _saveCsvTemplate,
-          icon: const Icon(Icons.download_rounded),
-          label: const Text('CSV Sablon'),
-        ),
-        OutlinedButton.icon(
-          onPressed: _isImportingCsv ? null : _importProductsFromCsv,
-          icon: _isImportingCsv
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.upload_file_rounded),
-          label: const Text('CSV Yukle'),
-        ),
-        FilledButton.tonalIcon(
-          onPressed: _openNewProduct,
-          icon: const Icon(Icons.add_box_rounded),
-          label: const Text('Yeni Urun'),
-        ),
-      ],
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 980) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [logoAndTitle, const SizedBox(height: 10), actions],
-          );
-        }
-        return Row(
-          children: [
-            Expanded(child: logoAndTitle),
-            const SizedBox(width: 12),
-            actions,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF17304C),
+            Color(0xFF1E3E62),
+            Color(0xFF2B82C9),
           ],
-        );
-      },
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF17304C).withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 980;
+
+          final logoAndTitle = Row(
+            children: [
+              Container(
+                width: logoSize,
+                height: logoSize,
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.asset('lib/assest/logo/uzal.png', fit: BoxFit.contain),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'UZAL TEKNİK',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.1,
+                            color: Colors.white,
+                            fontSize: compact ? 20 : 24,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                          ),
+                          child: const Text(
+                            'Katalog & Stok',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Endüstriyel Ürün Kataloğu ve Fiyat Takip Otomasyonu',
+                      style: TextStyle(
+                        fontSize: compact ? 11.5 : 13,
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+
+          final actions = Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () => ModuleSwitcher.switchToTask(context),
+                icon: const Icon(Icons.build_circle_outlined, size: 18),
+                label: const Text('🛠️ İş Takip & Atölye ➔'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF17304C),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900),
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _saveCsvTemplate,
+                icon: const Icon(Icons.download_rounded, size: 16),
+                label: const Text('CSV Şablon'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white54),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _isImportingCsv ? null : _importProductsFromCsv,
+                icon: _isImportingCsv
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.upload_file_rounded, size: 16),
+                label: const Text('CSV Yükle'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white54),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: _openNewProduct,
+                icon: const Icon(Icons.add_box_rounded, size: 18),
+                label: const Text('Yeni Ürün Ekle'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF29956F),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          );
+
+          if (isNarrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [logoAndTitle, const SizedBox(height: 14), actions],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: logoAndTitle),
+              const SizedBox(width: 16),
+              actions,
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -1394,19 +1499,24 @@ class _ProductCategoryBand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background = main ? const Color(0xFF17304C) : const Color(0xFF526A82);
     return Container(
-      height: main ? 42 : 34,
+      height: main ? 44 : 36,
       padding: EdgeInsets.symmetric(horizontal: main ? 16 : 28),
-      color: background,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: main
+              ? [const Color(0xFF1E3E62), const Color(0xFF17304C)]
+              : [const Color(0xFF475569), const Color(0xFF334155)],
+        ),
+      ),
       child: Row(
         children: [
           Icon(
             main
-                ? Icons.folder_rounded
+                ? Icons.folder_special_rounded
                 : Icons.subdirectory_arrow_right_rounded,
             size: main ? 19 : 17,
-            color: Colors.white,
+            color: main ? const Color(0xFF60A5FA) : const Color(0xFF94A3B8),
           ),
           const SizedBox(width: 9),
           Text(
@@ -1415,15 +1525,16 @@ class _ProductCategoryBand extends StatelessWidget {
               color: Colors.white,
               fontSize: main ? 13.5 : 12.5,
               fontWeight: main ? FontWeight.w900 : FontWeight.w800,
-              letterSpacing: main ? 0.35 : 0.1,
+              letterSpacing: main ? 0.4 : 0.1,
             ),
           ),
           const SizedBox(width: 9),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
             ),
             child: Text(
               '$count ürün',
@@ -1447,7 +1558,11 @@ class _ProductTableHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 46,
-      color: const Color(0xFF17304C),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+        ),
+      ),
       child: const Row(
         children: [
           _ProductTableCell(text: '#', width: 50, header: true),
@@ -1481,25 +1596,26 @@ class _ProductTableRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = product.isActive ? 'Aktif' : 'Pasif';
     final statusColor = !product.isActive
-        ? const Color(0xFF7A4B4B)
-        : const Color(0xFF2C6957);
+        ? const Color(0xFFDC2626)
+        : const Color(0xFF16A34A);
 
     return SizedBox(
       height: 48,
       child: Material(
-        color: index.isEven ? Colors.white : const Color(0xFFF5F8FB),
+        color: index.isEven ? Colors.white : const Color(0xFFF8FAFC),
         child: InkWell(
           onTap: onTap,
+          hoverColor: const Color(0xFFE2E8F0),
           child: Container(
             decoration: const BoxDecoration(
               border: Border(
-                bottom: BorderSide(color: Color(0xFFDCE3EA), width: 0.8),
+                bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
               ),
             ),
             child: Row(
               children: [
                 _ProductTableCell(text: '${index + 1}', width: 50),
-                _ProductTableCell(text: product.code, width: 155, strong: true),
+                _ProductTableCell(text: product.code, width: 155, strong: true, color: const Color(0xFF0F172A)),
                 _ProductTableCell(text: product.name, width: 310),
                 _ProductTableCell(
                   text: productSubcategoryTurkishLabel(product),
@@ -1507,13 +1623,19 @@ class _ProductTableRow extends StatelessWidget {
                 ),
                 _ProductTableCell(text: product.brand, width: 135),
                 _ProductTableCell(text: product.model, width: 165),
-                _ProductTableCell(text: product.currencyLabel, width: 75),
+                _ProductTableCell(text: product.currencyLabel, width: 75, strong: true, color: const Color(0xFF2563EB)),
                 _ProductTableCell(
                   text: product.formattedSalePrice,
                   width: 130,
                   strong: true,
+                  color: const Color(0xFF059669),
                 ),
-                _ProductTableCell(text: product.formattedStock, width: 105),
+                _ProductTableCell(
+                  text: product.formattedStock,
+                  width: 105,
+                  strong: product.isLowStock,
+                  color: product.isLowStock ? const Color(0xFFD97706) : null,
+                ),
                 _ProductTableCell(
                   text: status,
                   width: 85,

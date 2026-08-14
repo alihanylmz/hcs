@@ -161,7 +161,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
 
   Future<void> _loadUsers() async {
     try {
-      final list = await UserService().getActiveUsers();
+      final list = await UserService().getAllUsers();
       if (mounted) setState(() => _users = list);
     } catch (_) {}
   }
@@ -392,7 +392,7 @@ class _EditTicketPageState extends State<EditTicketPage> {
     }
 
     try {
-      final models = await _stockService.getModelsByBrand(brand);
+      final models = await _stockService.getBrandModels(brand, 'Sürücü');
       if (mounted) {
         setState(() {
           if (isAspirator) {

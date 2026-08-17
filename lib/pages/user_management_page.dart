@@ -11,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../widgets/access_denied_view.dart';
 import '../widgets/custom_header.dart';
 import '../widgets/user_access_editor_dialog.dart';
+import 'personnel_detail_page.dart';
 
 class UserManagementPage extends StatefulWidget {
   const UserManagementPage({super.key});
@@ -743,7 +744,39 @@ class _UserManagementPageState extends State<UserManagementPage> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               else
-                Icon(Icons.tune_rounded, color: Colors.grey.shade500, size: 21),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Personel Kartı & Zimmet/İş Ekstresi',
+                      icon: const Icon(
+                        Icons.badge_outlined,
+                        color: AppColors.corporateNavy,
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (_) => PersonnelDetailPage(
+                                  personnelId: user.id,
+                                  initialProfile: user,
+                                ),
+                          ),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      tooltip: 'Yetkileri Düzenle',
+                      icon: Icon(
+                        Icons.tune_rounded,
+                        color: Colors.grey.shade600,
+                        size: 21,
+                      ),
+                      onPressed: () => _openAccessEditor(user),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),

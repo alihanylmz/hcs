@@ -49,20 +49,36 @@ class StockService {
 
     // Ürün adı ürün koduyla başlıyorsa veya aynısıysa temizle
     if (code.isNotEmpty) {
-      name = name.replaceAll(RegExp(RegExp.escape(code), caseSensitive: false), '').trim();
+      name =
+          name
+              .replaceAll(RegExp(RegExp.escape(code), caseSensitive: false), '')
+              .trim();
     }
-    name = name.replaceFirst(RegExp(r'^[-_\s:]+'), '').replaceFirst(RegExp(r'[-_\s:]+$'), '').trim();
+    name =
+        name
+            .replaceFirst(RegExp(r'^[-_\s:]+'), '')
+            .replaceFirst(RegExp(r'[-_\s:]+$'), '')
+            .trim();
 
     // Eğer ürün adı ham teknik özellik listesiyse (Örn: "16UIO,4CHO,4Rel,RJ45...")
-    final isRawTechnicalSpecs = name.contains(RegExp(r'\d+UIO|\d+CHO|\d+Rel|RJ45|Sylk|230V|DN\d+|PN\d+', caseSensitive: false));
+    final isRawTechnicalSpecs = name.contains(
+      RegExp(
+        r'\d+UIO|\d+CHO|\d+Rel|RJ45|Sylk|230V|DN\d+|PN\d+',
+        caseSensitive: false,
+      ),
+    );
 
     String title = '';
     String subtitle = '';
 
     if (isRawTechnicalSpecs || name.isEmpty) {
       final b = (brand != null && brand.isNotEmpty) ? brand : '';
-      final c = (category != null && category.isNotEmpty && category != 'Diğer') ? category : 'Ürün / Cihaz';
-      final m = (model != null && model.isNotEmpty && model != code) ? model : '';
+      final c =
+          (category != null && category.isNotEmpty && category != 'Diğer')
+              ? category
+              : 'Ürün / Cihaz';
+      final m =
+          (model != null && model.isNotEmpty && model != code) ? model : '';
       title = '$b $c $m'.replaceAll(RegExp(r'\s+'), ' ').trim();
       if (title.isEmpty) title = code.isNotEmpty ? code : 'İsimsiz Ürün';
       subtitle = name; // Ham özellikleri alt bilgiye koy
@@ -70,10 +86,7 @@ class StockService {
       title = name;
     }
 
-    return {
-      'title': title,
-      'subtitle': subtitle,
-    };
+    return {'title': title, 'subtitle': subtitle};
   }
 
   /// UI stok verilerini `products` veritabanı sütunlarına dönüştürür.
@@ -207,7 +220,8 @@ class StockService {
       query = query.eq('category', category);
     }
     final response = await query.order('name', ascending: true).limit(300);
-    final products = List<Map<String, dynamic>>.from(response).map(_productToStock).toList();
+    final products =
+        List<Map<String, dynamic>>.from(response).map(_productToStock).toList();
 
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim().toLowerCase();
@@ -216,7 +230,10 @@ class StockService {
         final name = (p['name'] ?? '').toString().toLowerCase();
         final displayName = (p['displayName'] ?? '').toString().toLowerCase();
         final brand = (p['brand'] ?? '').toString().toLowerCase();
-        return code.contains(q) || name.contains(q) || displayName.contains(q) || brand.contains(q);
+        return code.contains(q) ||
+            name.contains(q) ||
+            displayName.contains(q) ||
+            brand.contains(q);
       }).toList();
     }
 
@@ -249,12 +266,15 @@ class StockService {
       specifications['barcode'] = barcode.trim();
     }
 
-    await _supabase.from(_table).update({
-      'stock_tracking_started': true,
-      'minimum_stock': minimumStock,
-      'specifications': specifications,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }).eq('id', productId);
+    await _supabase
+        .from(_table)
+        .update({
+          'stock_tracking_started': true,
+          'minimum_stock': minimumStock,
+          'specifications': specifications,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('id', productId);
 
     if (initialQuantity > 0) {
       await registerStockMovement(
@@ -268,11 +288,14 @@ class StockService {
 
   /// Stok takibini kapatır (GÜVENLİ: Fiyat teklifleri kataloğundaki ürün asla silinmez!).
   Future<void> stopStockTracking(String productId) async {
-    await _supabase.from(_table).update({
-      'stock_tracking_started': false,
-      'stock_quantity': 0,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }).eq('id', productId);
+    await _supabase
+        .from(_table)
+        .update({
+          'stock_tracking_started': false,
+          'stock_quantity': 0,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('id', productId);
   }
 
   /// Stok takibini durdurur (deleteStock geriye uyumluluk adapter'ı).
@@ -282,11 +305,14 @@ class StockService {
 
   /// Veritabanındaki tüm sanal katalog stoklarını temizler ve depoyu sıfırlar.
   Future<void> resetCatalogStockTracking() async {
-    await _supabase.from(_table).update({
-      'stock_tracking_started': false,
-      'stock_quantity': 0,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }).eq('stock_tracking_started', true);
+    await _supabase
+        .from(_table)
+        .update({
+          'stock_tracking_started': false,
+          'stock_quantity': 0,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('stock_tracking_started', true);
   }
 
   /// Barkod veya ürün koduna göre tek ürün getirir.
@@ -366,18 +392,44 @@ class StockService {
     }
   }
 
-  /// Stok kaydını günceller.
+  /// Stok kaydını günceller ve miktar değişikliği varsa otomatik hareket logu üretir.
   Future<void> updateStock(String id, Map<String, dynamic> data) async {
     final current =
         await _supabase
             .from(_table)
-            .select('specifications')
+            .select('specifications, stock_quantity, name')
             .eq('id', id)
             .single();
+
+    final oldQty = (current['stock_quantity'] as num?)?.toInt() ?? 0;
     await _supabase
         .from(_table)
         .update(_stockDataToProduct(data, current: current))
         .eq('id', id);
+
+    if (data.containsKey('quantity')) {
+      final newQty = (data['quantity'] as num?)?.toInt() ?? oldQty;
+      if (newQty != oldQty) {
+        final diff = newQty - oldQty;
+        final isIn = diff > 0;
+        final actor = _supabase.auth.currentUser;
+        try {
+          await _supabase.from('stock_movements').insert({
+            'product_id': id,
+            'movement_type': isIn ? 'in' : 'out',
+            'quantity': diff.abs(),
+            'quantity_before': oldQty,
+            'quantity_after': newQty,
+            'reason': 'Stok kartı düzenleme / Miktar düzeltme',
+            'destination': 'Depo',
+            'note': 'Kullanıcı tarafından elle güncellendi',
+            'created_by': actor?.id,
+          });
+        } catch (e) {
+          debugPrint('Stok güncelleme log hatası: $e');
+        }
+      }
+    }
   }
 
   /// Barkodu doğrudan ürüne bağlar.
@@ -403,8 +455,24 @@ class StockService {
         .eq('id', id);
   }
 
-  /// Stok miktarını günceller.
-  Future<void> updateQuantity(String id, int newQuantity) async {
+  /// Stok miktarını günceller ve hareket logu kaydeder.
+  Future<void> updateQuantity(
+    String id,
+    int newQuantity, {
+    String? reason,
+    String? destination,
+    String? note,
+    String? serialNumber,
+    String? jobCode,
+  }) async {
+    final current =
+        await _supabase
+            .from(_table)
+            .select('stock_quantity')
+            .eq('id', id)
+            .single();
+    final oldQty = (current['stock_quantity'] as num?)?.toInt() ?? 0;
+
     await _supabase
         .from(_table)
         .update({
@@ -413,17 +481,39 @@ class StockService {
           'updated_at': DateTime.now().toUtc().toIso8601String(),
         })
         .eq('id', id);
+
+    if (newQuantity != oldQty) {
+      final diff = newQuantity - oldQty;
+      final actor = _supabase.auth.currentUser;
+      try {
+        await _supabase.from('stock_movements').insert({
+          'product_id': id,
+          'movement_type': diff > 0 ? 'in' : 'out',
+          'quantity': diff.abs(),
+          'quantity_before': oldQty,
+          'quantity_after': newQuantity,
+          'reason': reason ?? 'Stok miktarı güncellendi',
+          'destination': destination,
+          'note': note,
+          'serial_number': serialNumber,
+          'job_code': jobCode,
+          'created_by': actor?.id,
+        });
+      } catch (e) {
+        debugPrint('Stok miktar hareket logu hatası: $e');
+      }
+    }
   }
 
   // --- STOCK MOVEMENTS (STOK HAREKETLERİ) ---
 
   Future<List<Map<String, dynamic>>> getStockMovements({
-    int limit = 100,
+    int limit = 200,
   }) async {
     final response = await _supabase
         .from('stock_movements')
         .select(
-          '*, products:product_id(id, code, name, category, brand, model, unit, stock_quantity, minimum_stock, specifications)',
+          '*, products:product_id(id, code, name, category, brand, model, unit, stock_quantity, minimum_stock, specifications), profiles:created_by(id, full_name, email, role)',
         )
         .not('product_id', 'is', null)
         .order('created_at', ascending: false)
@@ -450,6 +540,8 @@ class StockService {
     String? reason,
     String? destination,
     String? note,
+    String? serialNumber,
+    String? jobCode,
   }) async {
     if (movementType != 'in' && movementType != 'out') {
       throw Exception('Geçersiz stok hareketi tipi (in/out olmalı).');
@@ -459,24 +551,47 @@ class StockService {
       throw Exception('Miktar 0\'dan büyük olmalıdır.');
     }
 
-    await _supabase.rpc(
-      'register_product_stock_movement',
-      params: {
-        'p_product_id': productId,
-        'p_movement_type': movementType,
-        'p_quantity': quantity,
-        'p_reason': reason,
-        'p_destination': destination,
-        'p_note': note,
-      },
-    );
+    try {
+      await _supabase.rpc(
+        'register_product_stock_movement',
+        params: {
+          'p_product_id': productId,
+          'p_movement_type': movementType,
+          'p_quantity': quantity,
+          'p_reason': reason,
+          'p_destination': destination,
+          'p_note': note,
+        },
+      );
+    } catch (e) {
+      debugPrint('RPC movement failed, using direct fallback: $e');
+      final current =
+          await _supabase
+              .from(_table)
+              .select('stock_quantity')
+              .eq('id', productId)
+              .single();
+      final oldQty = (current['stock_quantity'] as num?)?.toInt() ?? 0;
+      final newQty =
+          movementType == 'in' ? oldQty + quantity : oldQty - quantity;
+      if (newQty < 0) throw Exception('Stok yetersiz! Mevcut: $oldQty');
+
+      await updateQuantity(
+        productId,
+        newQty,
+        reason: reason,
+        destination: destination,
+        note: note,
+        serialNumber: serialNumber,
+        jobCode: jobCode,
+      );
+    }
   }
 
   // --- ZİMMET YÖNETİMİ (PERSONNEL LOANS) ---
 
   Future<List<Map<String, dynamic>>> getOpenPersonnelLoans() async {
     try {
-      // 0 veya daha az miktarı kalmış ama durumu hâlâ 'borrowed' olan tüm eski zimmet kayıtlarını otomatik olarak kapat
       await _supabase
           .from('product_stock_loans')
           .update({
@@ -493,7 +608,7 @@ class StockService {
     final response = await _supabase
         .from('product_stock_loans')
         .select(
-          '*, products:product_id(id, code, name, category, brand, model, unit, stock_quantity, minimum_stock, stock_tracking_started, specifications)',
+          '*, products:product_id(id, code, name, category, brand, model, unit, stock_quantity, minimum_stock, stock_tracking_started, specifications), profiles:personnel_id(id, full_name, email, phone, role)',
         )
         .eq('status', 'borrowed')
         .gt('quantity', 0)
@@ -519,7 +634,118 @@ class StockService {
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       debugPrint('Stok personeli listeleme hatası: $e');
-      return [];
+      try {
+        final fallback = await _supabase
+            .from('profiles')
+            .select('id, email, full_name, role, phone')
+            .not('role', 'in', ['pending', 'partner_user', 'partner'])
+            .order('full_name', ascending: true);
+        return List<Map<String, dynamic>>.from(fallback);
+      } catch (_) {
+        return [];
+      }
+    }
+  }
+
+  /// Çoklu seri numarasıyla personelin üzerine tekil satırlar (row-by-row) halinde zimmet kaydeder.
+  Future<String> registerBatchSerialLoans({
+    required String productId,
+    required String personnelId,
+    required List<String> serialNumbers,
+    String? jobCode,
+    String? note,
+  }) async {
+    final validSerials =
+        serialNumbers.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    if (validSerials.isEmpty) {
+      throw Exception('Lütfen en az 1 adet seri numarası giriniz.');
+    }
+
+    final totalQty = validSerials.length;
+    final current =
+        await _supabase
+            .from(_table)
+            .select('stock_quantity, name')
+            .eq('id', productId)
+            .single();
+    final curQty = (current['stock_quantity'] as num?)?.toInt() ?? 0;
+    if (curQty < totalQty) {
+      throw Exception(
+        'Stok yetersiz! Mevcut stok: $curQty, Zimmetlenmek istenen: $totalQty',
+      );
+    }
+
+    try {
+      final rpcRes = await _supabase.rpc(
+        'register_serial_stock_loans',
+        params: {
+          'p_product_id': productId,
+          'p_personnel_id': personnelId,
+          'p_serial_numbers': validSerials,
+          'p_job_code': jobCode,
+          'p_note': note,
+        },
+      );
+      return rpcRes?.toString() ?? 'BATCH-OK';
+    } catch (e) {
+      debugPrint(
+        'RPC register_serial_stock_loans failed, executing direct batch fallback: $e',
+      );
+      final batchId = 'BATCH-${DateTime.now().millisecondsSinceEpoch}';
+      final profile =
+          await _supabase
+              .from('profiles')
+              .select('full_name, email')
+              .eq('id', personnelId)
+              .single();
+      final personnelName =
+          (profile['full_name']?.toString().trim().isNotEmpty == true)
+              ? profile['full_name'].toString()
+              : (profile['email'] ?? 'Personel');
+      final actorId = _supabase.auth.currentUser?.id;
+
+      // 1. Depo stok miktarını düşür
+      final newQty = curQty - totalQty;
+      await _supabase
+          .from(_table)
+          .update({
+            'stock_quantity': newQty,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', productId);
+
+      // 2. Her seri no için tek tek satır oluştur
+      for (final sn in validSerials) {
+        await _supabase.from('product_stock_loans').insert({
+          'product_id': productId,
+          'personnel_id': personnelId,
+          'personnel_name': personnelName,
+          'quantity': 1,
+          'serial_number': sn,
+          'loan_batch_id': batchId,
+          'job_code': jobCode?.trim().isEmpty == true ? null : jobCode?.trim(),
+          'note': note?.trim().isEmpty == true ? null : note?.trim(),
+          'status': 'borrowed',
+          'borrowed_at': DateTime.now().toUtc().toIso8601String(),
+          'created_by': actorId,
+        });
+
+        await _supabase.from('stock_movements').insert({
+          'product_id': productId,
+          'movement_type': 'out',
+          'quantity': 1,
+          'quantity_before': curQty,
+          'quantity_after': newQty,
+          'reason': 'Personele zimmetlendi (Seri No: $sn)',
+          'destination': personnelName,
+          'note': note?.trim().isEmpty == true ? null : note?.trim(),
+          'serial_number': sn,
+          'job_code': jobCode?.trim().isEmpty == true ? null : jobCode?.trim(),
+          'created_by': actorId,
+        });
+      }
+
+      return batchId;
     }
   }
 
@@ -527,25 +753,91 @@ class StockService {
     required String productId,
     required String personnelId,
     required int quantity,
+    String? serialNumber,
     String? jobCode,
     String? note,
   }) async {
     if (quantity <= 0) throw Exception('Miktar 0\'dan büyük olmalıdır.');
-    
-    final noteText = [
-      if (jobCode != null && jobCode.isNotEmpty) '[İş Kodu: $jobCode]',
-      if (note != null && note.isNotEmpty) note,
-    ].join(' ').trim();
 
-    await _supabase.rpc(
-      'register_product_stock_loan',
-      params: {
-        'p_product_id': productId,
-        'p_personnel_id': personnelId,
-        'p_quantity': quantity,
-        'p_note': noteText.isNotEmpty ? noteText : null,
-      },
-    );
+    if (serialNumber != null && serialNumber.trim().isNotEmpty) {
+      await registerBatchSerialLoans(
+        productId: productId,
+        personnelId: personnelId,
+        serialNumbers: [serialNumber.trim()],
+        jobCode: jobCode,
+        note: note,
+      );
+      return;
+    }
+
+    final noteText =
+        [
+          if (jobCode != null && jobCode.isNotEmpty) '[İş Kodu: $jobCode]',
+          if (note != null && note.isNotEmpty) note,
+        ].join(' ').trim();
+
+    try {
+      await _supabase.rpc(
+        'register_product_stock_loan',
+        params: {
+          'p_product_id': productId,
+          'p_personnel_id': personnelId,
+          'p_quantity': quantity,
+          'p_note': noteText.isNotEmpty ? noteText : null,
+        },
+      );
+    } catch (e) {
+      debugPrint('RPC fallback loan: $e');
+      final current =
+          await _supabase
+              .from(_table)
+              .select('stock_quantity')
+              .eq('id', productId)
+              .single();
+      final curQty = (current['stock_quantity'] as num?)?.toInt() ?? 0;
+      if (curQty < quantity)
+        throw Exception('Stok yetersiz! Mevcut stok: $curQty');
+
+      final profile =
+          await _supabase
+              .from('profiles')
+              .select('full_name, email')
+              .eq('id', personnelId)
+              .single();
+      final personnelName =
+          (profile['full_name']?.toString().trim().isNotEmpty == true)
+              ? profile['full_name'].toString()
+              : (profile['email'] ?? 'Personel');
+      final actorId = _supabase.auth.currentUser?.id;
+
+      final newQty = curQty - quantity;
+      await updateQuantity(productId, newQty);
+
+      await _supabase.from('product_stock_loans').insert({
+        'product_id': productId,
+        'personnel_id': personnelId,
+        'personnel_name': personnelName,
+        'quantity': quantity,
+        'job_code': jobCode,
+        'note': noteText.isNotEmpty ? noteText : null,
+        'status': 'borrowed',
+        'borrowed_at': DateTime.now().toUtc().toIso8601String(),
+        'created_by': actorId,
+      });
+
+      await _supabase.from('stock_movements').insert({
+        'product_id': productId,
+        'movement_type': 'out',
+        'quantity': quantity,
+        'quantity_before': curQty,
+        'quantity_after': newQty,
+        'reason': 'Personele verildi',
+        'destination': personnelName,
+        'note': noteText.isNotEmpty ? noteText : null,
+        'job_code': jobCode,
+        'created_by': actorId,
+      });
+    }
   }
 
   /// Zimmet kapatma veya zimmet dönüşü işlemlerde depo stoğundan mükerrer düşüm yapmadan sadece audit logu tutan yardımcı metod.
@@ -556,14 +848,18 @@ class StockService {
     String? reason,
     String? destination,
     String? note,
+    String? serialNumber,
+    String? jobCode,
   }) async {
     try {
-      final current = await _supabase
-          .from(_table)
-          .select('stock_quantity')
-          .eq('id', productId)
-          .maybeSingle();
+      final current =
+          await _supabase
+              .from(_table)
+              .select('stock_quantity')
+              .eq('id', productId)
+              .maybeSingle();
       final curQty = (current?['stock_quantity'] as num?)?.toInt() ?? 0;
+      final actorId = _supabase.auth.currentUser?.id;
 
       await _supabase.from('stock_movements').insert({
         'product_id': productId,
@@ -574,10 +870,260 @@ class StockService {
         'reason': reason,
         'destination': destination,
         'note': note,
+        'serial_number': serialNumber,
+        'job_code': jobCode,
+        'created_by': actorId,
       });
     } catch (e) {
       debugPrint('Stok hareket audit log hatası: $e');
     }
+  }
+
+  /// Checklist ile seçilen zimmet kayıtlarını kapatır:
+  /// - Seçilenler -> 'consumed' (Sarf edildi / Projede kullanıldı)
+  /// - Seçilmeyenler (veya iade olarak belirtilenler) -> 'returned' (Depoya sağlam iade, stok +1 artar)
+  Future<void> processLoanChecklistResolution({
+    required List<int> consumedLoanIds,
+    required List<int> returnedLoanIds,
+    List<Map<String, dynamic>> defectiveLoans = const [],
+    required String personnelName,
+    String? jobCode,
+    String? note,
+  }) async {
+    final nowUtc = DateTime.now().toUtc().toIso8601String();
+    final actorId = _supabase.auth.currentUser?.id;
+
+    // 1. Sarf Edilenleri Kapat (consumed)
+    for (final loanId in consumedLoanIds) {
+      final loan =
+          await _supabase
+              .from('product_stock_loans')
+              .select()
+              .eq('id', loanId)
+              .maybeSingle();
+      if (loan == null) continue;
+      final prodId = loan['product_id'].toString();
+      final sn = loan['serial_number']?.toString();
+
+      await _supabase
+          .from('product_stock_loans')
+          .update({
+            'status': 'consumed',
+            'closed_at': nowUtc,
+            'closed_by': actorId,
+            'job_code': jobCode ?? loan['job_code'],
+          })
+          .eq('id', loanId);
+
+      await logStockMovementAudit(
+        productId: prodId,
+        movementType: 'out',
+        quantity: (loan['quantity'] as num?)?.toInt() ?? 1,
+        reason: 'Zimmetten sarf edildi (Seri No: ${sn ?? '-'})',
+        destination: jobCode ?? personnelName,
+        note: note ?? loan['note'],
+        serialNumber: sn,
+        jobCode: jobCode ?? loan['job_code'],
+      );
+    }
+
+    // 2. İade Edilenleri Kapat ve Stoğa Ekle (returned)
+    // Ürün bazında kaç adet iade edildiğini topla
+    final Map<String, int> returnCountsByProduct = {};
+    for (final loanId in returnedLoanIds) {
+      final loan =
+          await _supabase
+              .from('product_stock_loans')
+              .select()
+              .eq('id', loanId)
+              .maybeSingle();
+      if (loan == null) continue;
+      final prodId = loan['product_id'].toString();
+      final sn = loan['serial_number']?.toString();
+      final qty = (loan['quantity'] as num?)?.toInt() ?? 1;
+
+      returnCountsByProduct[prodId] =
+          (returnCountsByProduct[prodId] ?? 0) + qty;
+
+      await _supabase
+          .from('product_stock_loans')
+          .update({
+            'status': 'returned',
+            'closed_at': nowUtc,
+            'closed_by': actorId,
+          })
+          .eq('id', loanId);
+
+      await logStockMovementAudit(
+        productId: prodId,
+        movementType: 'in',
+        quantity: qty,
+        reason: 'Personelden depoya sağlam iade (Seri No: ${sn ?? '-'})',
+        destination: personnelName,
+        note: note ?? loan['note'],
+        serialNumber: sn,
+        jobCode: jobCode ?? loan['job_code'],
+      );
+    }
+
+    // Sağlam iade edilen miktarları depo stoğuna tekrar ekle
+    for (final entry in returnCountsByProduct.entries) {
+      try {
+        final inv =
+            await _supabase
+                .from(_table)
+                .select('stock_quantity')
+                .eq('id', entry.key)
+                .single();
+        final curQty = (inv['stock_quantity'] as num?)?.toInt() ?? 0;
+        await _supabase
+            .from(_table)
+            .update({
+              'stock_quantity': curQty + entry.value,
+              'updated_at': nowUtc,
+            })
+            .eq('id', entry.key);
+      } catch (e) {
+        debugPrint('İade stok artırma hatası (${entry.key}): $e');
+      }
+    }
+
+    // 3. Arızalı Bildirilenleri İşle
+    for (final def in defectiveLoans) {
+      final loanId = def['loanId'] as int;
+      final prodId = def['productId'].toString();
+      final sn = def['serialNumber']?.toString();
+      final faultDesc =
+          def['faultDescription']?.toString() ?? 'Zimmet dönüşü arızalı';
+
+      await _supabase
+          .from('product_stock_loans')
+          .update({
+            'status': 'returned',
+            'closed_at': nowUtc,
+            'closed_by': actorId,
+            'note': '[ARIZALI] $faultDesc',
+          })
+          .eq('id', loanId);
+
+      await reportDefectiveProduct(
+        productId: prodId,
+        quantity: 1,
+        reportedByName: personnelName,
+        faultDescription: 'Seri No: ${sn ?? '-'} - $faultDesc',
+        jobCode: jobCode,
+        notes: note,
+        deductFromWarehouseStock: false,
+      );
+    }
+  }
+
+  // --- PERSONEL KART & DETAY DESTEĞİ ---
+
+  /// Belirli bir personelin tüm açık ve geçmiş zimmetlerini getirir.
+  Future<List<Map<String, dynamic>>> getPersonnelLoans(
+    String personnelId, {
+    bool onlyOpen = false,
+  }) async {
+    try {
+      var query = _supabase
+          .from('product_stock_loans')
+          .select(
+            '*, products:product_id(id, code, name, category, brand, model, unit, stock_quantity, specifications)',
+          )
+          .eq('personnel_id', personnelId);
+
+      if (onlyOpen) {
+        query = query.eq('status', 'borrowed').gt('quantity', 0);
+      }
+
+      final response = await query.order('borrowed_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response)
+          .map((loan) {
+            final product = loan['products'];
+            return {
+              ...loan,
+              'inventory':
+                  product is Map<String, dynamic>
+                      ? _productToStock(product)
+                      : null,
+            };
+          })
+          .toList(growable: false);
+    } catch (e) {
+      debugPrint('Personel zimmetleri çekme hatası: $e');
+      return [];
+    }
+  }
+
+  /// Personelin ilişkili olduğu tüm stok hareket loglarını getirir.
+  Future<List<Map<String, dynamic>>> getPersonnelStockMovements(
+    String personnelId, {
+    String? personnelName,
+  }) async {
+    try {
+      final response = await _supabase
+          .from('stock_movements')
+          .select(
+            '*, products:product_id(id, code, name, category, brand, model, unit), profiles:created_by(id, full_name, email)',
+          )
+          .or(
+            'created_by.eq.$personnelId,destination.ilike.%${personnelName ?? ''}%',
+          )
+          .order('created_at', ascending: false)
+          .limit(100);
+
+      return List<Map<String, dynamic>>.from(response)
+          .map((m) {
+            final product = m['products'];
+            return {
+              ...m,
+              'inventory':
+                  product is Map<String, dynamic>
+                      ? _productToStock(product)
+                      : null,
+            };
+          })
+          .toList(growable: false);
+    } catch (e) {
+      debugPrint('Personel hareketleri çekme hatası: $e');
+      return [];
+    }
+  }
+
+  /// Personel Yönetici Notlarını getirir.
+  Future<List<Map<String, dynamic>>> getPersonnelNotes(
+    String personnelId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('personnel_notes')
+          .select('*, profiles:created_by(id, full_name, email, role)')
+          .eq('personnel_id', personnelId)
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Personel notları çekme hatası: $e');
+      return [];
+    }
+  }
+
+  /// Personel Yönetici Notu ekler.
+  Future<void> addPersonnelNote({
+    required String personnelId,
+    required String note,
+  }) async {
+    final actorId = _supabase.auth.currentUser?.id;
+    await _supabase.from('personnel_notes').insert({
+      'personnel_id': personnelId,
+      'note': note.trim(),
+      'created_by': actorId,
+    });
+  }
+
+  /// Personel Yönetici Notu siler.
+  Future<void> deletePersonnelNote(int noteId) async {
+    await _supabase.from('personnel_notes').delete().eq('id', noteId);
   }
 
   /// Personel zimmetini esnek sarf (tüketim), iade ve arızalı miktarları ile işler/kapatır.
@@ -595,21 +1141,26 @@ class StockService {
   }) async {
     final totalAccounted = consumedQty + returnedQty + defectiveQty;
     if (totalAccounted <= 0) {
-      throw Exception('Lütfen en az 1 adet sarf, iade veya arızalı miktarı giriniz.');
+      throw Exception(
+        'Lütfen en az 1 adet sarf, iade veya arızalı miktarı giriniz.',
+      );
     }
     if (totalAccounted > totalLoanQty) {
-      throw Exception('Sarf ($consumedQty) + İade ($returnedQty) + Arızalı ($defectiveQty) toplam zimmetli miktardan ($totalLoanQty) fazla olamaz.');
+      throw Exception(
+        'Sarf ($consumedQty) + İade ($returnedQty) + Arızalı ($defectiveQty) toplam zimmetli miktardan ($totalLoanQty) fazla olamaz.',
+      );
     }
 
     final remainingQty = totalLoanQty - totalAccounted;
 
     // 1. İade Edilen Miktar -> Depo stokuna tekrar giriş yapılır (fiziksel stoğa geri katılır)
     if (returnedQty > 0) {
-      final current = await _supabase
-          .from(_table)
-          .select('stock_quantity')
-          .eq('id', productId)
-          .single();
+      final current =
+          await _supabase
+              .from(_table)
+              .select('stock_quantity')
+              .eq('id', productId)
+              .single();
       final curQty = (current['stock_quantity'] as num?)?.toInt() ?? 0;
       await updateQuantity(productId, curQty + returnedQty);
 
@@ -625,7 +1176,10 @@ class StockService {
 
     // 2. Sarf Edilen Miktar -> Zimmet verilirken fiziksel stoktan zaten düşüldüğü için tekrar stok düşülmez, sadece log tutulur
     if (consumedQty > 0) {
-      final jobDesc = (jobCode != null && jobCode.isNotEmpty) ? 'İş Kodu: $jobCode' : 'Personel Sarfı';
+      final jobDesc =
+          (jobCode != null && jobCode.isNotEmpty)
+              ? 'İş Kodu: $jobCode'
+              : 'Personel Sarfı';
       await logStockMovementAudit(
         productId: productId,
         movementType: 'out',
@@ -642,18 +1196,21 @@ class StockService {
         productId: productId,
         quantity: defectiveQty,
         reportedByName: personnelName,
-        faultDescription: faultDescription ?? 'Zimmet dönüşü arızalı bildirildi',
+        faultDescription:
+            faultDescription ?? 'Zimmet dönüşü arızalı bildirildi',
         jobCode: jobCode,
         notes: note,
-        deductFromWarehouseStock: false, // Zimmet verilirken zaten düşüldüğü için tekrar düşme!
+        deductFromWarehouseStock:
+            false, // Zimmet verilirken zaten düşüldüğü için tekrar düşme!
       );
     }
 
     // 4. Zimmet Kaydını Güncelle veya Kapat
     if (remainingQty <= 0) {
-      final resolution = consumedQty > 0 && returnedQty == 0 && defectiveQty == 0
-          ? 'consumed'
-          : 'returned';
+      final resolution =
+          consumedQty > 0 && returnedQty == 0 && defectiveQty == 0
+              ? 'consumed'
+              : 'returned';
       // quantity güncellemesi yapılmıyor: tabloda check (quantity > 0) kısıtı var,
       // migration ile >= 0 yapılana kadar 0 yazmak constraint ihlali oluşturuyordu.
       // getOpenPersonnelLoans() zaten .gt('quantity', 0) filtresi uyguluyor,
@@ -670,7 +1227,9 @@ class StockService {
           .from('product_stock_loans')
           .update({
             'quantity': remainingQty,
-            'note': '[İşlendi: $returnedQty İade / $consumedQty Sarf / $defectiveQty Arızalı] ${note ?? ''}'.trim(),
+            'note':
+                '[İşlendi: $returnedQty İade / $consumedQty Sarf / $defectiveQty Arızalı] ${note ?? ''}'
+                    .trim(),
           })
           .eq('id', loanId);
     }
@@ -692,14 +1251,21 @@ class StockService {
   // --- ARIZALI ÜRÜN VE RMA TAKİBİ (DEFECTIVE PRODUCTS) ---
 
   /// Arızalı ürün kayıtlarını çeker (varsayılan: sadece aktif takiptedekiler).
-  Future<List<Map<String, dynamic>>> getDefectiveProducts({bool onlyActive = true}) async {
+  Future<List<Map<String, dynamic>>> getDefectiveProducts({
+    bool onlyActive = true,
+  }) async {
     try {
       var query = _supabase
           .from('defective_products')
-          .select('*, products:product_id(id, code, name, category, brand, model, unit, stock_quantity, specifications)');
+          .select(
+            '*, products:product_id(id, code, name, category, brand, model, unit, stock_quantity, specifications)',
+          );
 
       if (onlyActive) {
-        query = query.inFilter('status', ['in_faulty_stock', 'shipped_to_supplier']);
+        query = query.inFilter('status', [
+          'in_faulty_stock',
+          'shipped_to_supplier',
+        ]);
       }
 
       final response = await query.order('created_at', ascending: false);
@@ -708,7 +1274,8 @@ class StockService {
         final product = def['products'];
         return {
           ...def,
-          'inventory': product is Map<String, dynamic> ? _productToStock(product) : null,
+          'inventory':
+              product is Map<String, dynamic> ? _productToStock(product) : null,
         };
       }).toList();
     } catch (e) {
@@ -727,7 +1294,8 @@ class StockService {
     String? notes,
     bool deductFromWarehouseStock = true,
   }) async {
-    if (quantity <= 0) throw Exception('Arızalı miktar 0\'dan büyük olmalıdır.');
+    if (quantity <= 0)
+      throw Exception('Arızalı miktar 0\'dan büyük olmalıdır.');
     await _supabase.from('defective_products').insert({
       'product_id': productId,
       'reported_by_name': reportedByName,
@@ -795,21 +1363,26 @@ class StockService {
       payload['notes'] = notes;
     }
 
-    await _supabase.from('defective_products').update(payload).eq('id', defectiveId);
+    await _supabase
+        .from('defective_products')
+        .update(payload)
+        .eq('id', defectiveId);
 
     // Eğer ürün Tamir Edildiyse veya Yenisi Geldiyse -> Tekrar depodaki sağlam stok miktarına katılır!
     if (newStatus == 'repaired_returned' || newStatus == 'replaced') {
-      final current = await _supabase
-          .from(_table)
-          .select('stock_quantity')
-          .eq('id', productId)
-          .single();
+      final current =
+          await _supabase
+              .from(_table)
+              .select('stock_quantity')
+              .eq('id', productId)
+              .single();
       final curQty = (current['stock_quantity'] as num?)?.toInt() ?? 0;
       await updateQuantity(productId, curQty + quantity);
 
-      final statusDesc = newStatus == 'repaired_returned'
-          ? 'Tedarikçiden tamir edildi - Sağlam depoya eklendi'
-          : 'Tedarikçiden yenisi geldi - Sağlam depoya eklendi';
+      final statusDesc =
+          newStatus == 'repaired_returned'
+              ? 'Tedarikçiden tamir edildi - Sağlam depoya eklendi'
+              : 'Tedarikçiden yenisi geldi - Sağlam depoya eklendi';
 
       await registerStockMovement(
         productId: productId,
@@ -833,7 +1406,7 @@ class StockService {
     final inv =
         await _supabase
             .from(_table)
-            .select('stock_quantity')
+            .select('stock_quantity, name')
             .eq('id', strProductId)
             .single();
     final currentQty = (inv['stock_quantity'] as num?)?.toInt() ?? 0;
@@ -842,25 +1415,57 @@ class StockService {
       throw Exception('Stok yetersiz! Mevcut stok: $currentQty');
     }
 
+    String? jobCode;
+    try {
+      final t =
+          await _supabase
+              .from('tickets')
+              .select('job_code, title')
+              .eq('id', ticketId)
+              .maybeSingle();
+      jobCode = t?['job_code']?.toString() ?? t?['title']?.toString();
+    } catch (_) {}
+
     await _supabase.from('ticket_parts').insert({
       'ticket_id': ticketId,
       'product_id': strProductId,
       'quantity': quantity,
     });
 
-    await updateQuantity(strProductId, currentQty - quantity);
+    await updateQuantity(
+      strProductId,
+      currentQty - quantity,
+      reason: 'İş emrine parça kullanıldı (${jobCode ?? 'İş Emri'})',
+      destination: jobCode ?? ticketId,
+      jobCode: jobCode,
+      note: 'İş emri parça listesine eklendi',
+    );
   }
 
   Future<void> removePartFromTicket(int partId) async {
     final part =
         await _supabase
             .from('ticket_parts')
-            .select('product_id, quantity')
+            .select('product_id, quantity, ticket_id')
             .eq('id', partId)
             .single();
 
     final productId = part['product_id']?.toString() ?? '';
     final qty = (part['quantity'] as num?)?.toInt() ?? 0;
+    final ticketId = part['ticket_id']?.toString();
+
+    String? jobCode;
+    if (ticketId != null) {
+      try {
+        final t =
+            await _supabase
+                .from('tickets')
+                .select('job_code')
+                .eq('id', ticketId)
+                .maybeSingle();
+        jobCode = t?['job_code']?.toString();
+      } catch (_) {}
+    }
 
     await _supabase.from('ticket_parts').delete().eq('id', partId);
 
@@ -873,7 +1478,15 @@ class StockService {
                 .eq('id', productId)
                 .single();
         final currentQty = (inv['stock_quantity'] as num?)?.toInt() ?? 0;
-        await updateQuantity(productId, currentQty + qty);
+        await updateQuantity(
+          productId,
+          currentQty + qty,
+          reason:
+              'İş emrinden parça çıkarıldı / İade (${jobCode ?? 'İş Emri'})',
+          destination: 'Depo',
+          jobCode: jobCode,
+          note: 'İş emrinden silinen parça sağlam depoya geri aktarıldı',
+        );
       } catch (e) {
         debugPrint('Stok iade edilirken hata: $e');
       }

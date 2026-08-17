@@ -11,6 +11,7 @@ import '../services/user_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_drawer.dart';
 import 'pdf_viewer_page.dart';
+import 'personnel_detail_page.dart';
 import 'ticket_detail_page.dart';
 
 class StockOverviewPage extends StatefulWidget {
@@ -34,11 +35,15 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   List<Map<String, dynamic>> _activeTickets = [];
 
   bool _isLoading = true;
-  bool _onlyTracked = true; // Varsayılan: Sadece depoda bulunan / takibi olan stoklar
+  bool _onlyTracked =
+      true; // Varsayılan: Sadece depoda bulunan / takibi olan stoklar
 
   String _searchQuery = '';
   String _selectedCategory = 'Tümü';
-  int _activeTab = 0; // 0: Depodaki Stoklar, 1: Kritik Stoklar, 2: Tüm Katalog, 3: Zimmetler, 4: Hareketler, 5: Eksik İşler, 6: Arızalı Ürünler
+  String _movementSearchQuery = '';
+  String _movementTypeFilter = 'all'; // 'all', 'in', 'out'
+  int _activeTab =
+      0; // 0: Depodaki Stoklar, 1: Kritik Stoklar, 2: Tüm Katalog, 3: Zimmetler, 4: Hareketler, 5: Eksik İşler, 6: Arızalı Ürünler
 
   // SAYFALAMA (PAGINATION) STATE
   int _currentPage = 0;
@@ -53,7 +58,12 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       PermissionService.hasPermission(_userProfile, AppPermission.viewStock);
 
   bool get _canManageStock =>
-      _userProfile == null ? true : PermissionService.hasPermission(_userProfile, AppPermission.manageStock);
+      _userProfile == null
+          ? true
+          : PermissionService.hasPermission(
+            _userProfile,
+            AppPermission.manageStock,
+          );
 
   bool get _canUseScanner =>
       kIsWeb ||
@@ -163,13 +173,15 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       final code = (item['code'] ?? '').toString().toLowerCase();
       final name = (item['name'] ?? '').toString().toLowerCase();
       final displayName = (item['displayName'] ?? '').toString().toLowerCase();
-      final displaySubtitle = (item['displaySubtitle'] ?? '').toString().toLowerCase();
+      final displaySubtitle =
+          (item['displaySubtitle'] ?? '').toString().toLowerCase();
       final brand = (item['brand'] ?? '').toString().toLowerCase();
       final model = (item['model'] ?? '').toString().toLowerCase();
       final barcode = (item['barcode'] ?? '').toString().toLowerCase();
       final shelf = (item['shelf_location'] ?? '').toString().toLowerCase();
       final specs = (item['specifications'] ?? '').toString().toLowerCase();
-      final note = (item['note'] ?? item['notes'] ?? '').toString().toLowerCase();
+      final note =
+          (item['note'] ?? item['notes'] ?? '').toString().toLowerCase();
 
       return code.contains(query) ||
           name.contains(query) ||
@@ -198,21 +210,30 @@ class _StockOverviewPageState extends State<StockOverviewPage>
         _openPdfViewer(
           'DEPO STOK RAPORU',
           'depo_stok_raporu.pdf',
-          () => StockPdfService.generateWarehouseStockPdfBytesFromList(filtered, title: 'DEPO FİZİKSEL STOK RAPORU'),
+          () => StockPdfService.generateWarehouseStockPdfBytesFromList(
+            filtered,
+            title: 'DEPO FİZİKSEL STOK RAPORU',
+          ),
         );
         break;
       case 1:
         _openPdfViewer(
           'KRİTİK STOK RAPORU',
           'kritik_stok_raporu.pdf',
-          () => StockPdfService.generateWarehouseStockPdfBytesFromList(critical, title: 'KRİTİK DEPO STOK RAPORU'),
+          () => StockPdfService.generateWarehouseStockPdfBytesFromList(
+            critical,
+            title: 'KRİTİK DEPO STOK RAPORU',
+          ),
         );
         break;
       case 2:
         _openPdfViewer(
           'ÜRÜN KATALOĞU RAPORU',
           'urun_katalogu_raporu.pdf',
-          () => StockPdfService.generateWarehouseStockPdfBytesFromList(filtered, title: 'TÜM ÜRÜN KATALOĞU RAPORU'),
+          () => StockPdfService.generateWarehouseStockPdfBytesFromList(
+            filtered,
+            title: 'TÜM ÜRÜN KATALOĞU RAPORU',
+          ),
         );
         break;
       case 3:
@@ -226,7 +247,9 @@ class _StockOverviewPageState extends State<StockOverviewPage>
         _openPdfViewer(
           'ARIZALI ÜRÜN (RMA) RAPORU',
           'arizali_urunler_raporu.pdf',
-          () => StockPdfService.generateDefectiveProductsPdfBytes(_defectiveProducts),
+          () => StockPdfService.generateDefectiveProductsPdfBytes(
+            _defectiveProducts,
+          ),
         );
         break;
       case 4:
@@ -240,20 +263,26 @@ class _StockOverviewPageState extends State<StockOverviewPage>
         _openPdfViewer(
           'DEPO STOK RAPORU',
           'depo_stok_raporu.pdf',
-          () => StockPdfService.generateWarehouseStockPdfBytesFromList(filtered),
+          () =>
+              StockPdfService.generateWarehouseStockPdfBytesFromList(filtered),
         );
     }
   }
 
-  void _openPdfViewer(String title, String filename, Future<Uint8List> Function() generator) {
+  void _openPdfViewer(
+    String title,
+    String filename,
+    Future<Uint8List> Function() generator,
+  ) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PdfViewerPage(
-          title: title,
-          pdfFileName: filename,
-          pdfGenerator: generator,
-        ),
+        builder:
+            (_) => PdfViewerPage(
+              title: title,
+              pdfFileName: filename,
+              pdfGenerator: generator,
+            ),
       ),
     );
   }
@@ -274,99 +303,125 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   void _showResetCatalogTrackingConfirmDialog() {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.cleaning_services, color: AppColors.brass),
-            SizedBox(width: 8),
-            Text('Sanal Katalog Stoklarını Temizle'),
-          ],
-        ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Veritabanındaki sanal katalog stok takipleri temizlenecektir.\n',
-              style: TextStyle(fontWeight: FontWeight.bold),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.cleaning_services, color: AppColors.brass),
+                SizedBox(width: 8),
+                Text('Sanal Katalog Stoklarını Temizle'),
+              ],
             ),
-            Text(
-              '• GÜVENLİ İŞLEM: Fiyat teklifleri kataloğunuzdaki 2.000+ ürün ASLA SİLİNMEZ.\n'
-              '• Sadece stok sayfasındaki sanal gösterimler temizlenir.\n'
-              '• Fiziksel depodaki ürünlerinizi "Stoğa Al" butonu ile ekleyebilirsiniz.',
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.check, color: Colors.white),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brass),
-            label: const Text('Depo Listesini Temizle'),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _stockService.resetCatalogStockTracking();
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Sanal katalog stokları temizlendi. Ürün kataloğunuz aynen korunuyor.'),
-                  backgroundColor: AppColors.mint,
+            content: const Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Veritabanındaki sanal katalog stok takipleri temizlenecektir.\n',
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-              );
-              _loadStocks();
-            },
+                Text(
+                  '• GÜVENLİ İŞLEM: Fiyat teklifleri kataloğunuzdaki 2.000+ ürün ASLA SİLİNMEZ.\n'
+                  '• Sadece stok sayfasındaki sanal gösterimler temizlenir.\n'
+                  '• Fiziksel depodaki ürünlerinizi "Stoğa Al" butonu ile ekleyebilirsiniz.',
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('İptal'),
+              ),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.check, color: Colors.white),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brass,
+                ),
+                label: const Text('Depo Listesini Temizle'),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await _stockService.resetCatalogStockTracking();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Sanal katalog stokları temizlendi. Ürün kataloğunuz aynen korunuyor.',
+                      ),
+                      backgroundColor: AppColors.mint,
+                    ),
+                  );
+                  _loadStocks();
+                },
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
   void _showStopTrackingConfirmDialog(Map<String, dynamic> stock) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Stok Takibini Durdur (Depodan Çıkar)'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Ürün: ${stock['displayName'] ?? stock['name']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: AppColors.surfaceAccent, borderRadius: BorderRadius.circular(6)),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, color: AppColors.ink, size: 20),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Bu işlem ürünü Fiyat Teklifleri Kataloğundan SİLMES. Ürün teklif verirken hazır bulunur, sadece depodaki stok listesinden çıkarılır.',
-                      style: TextStyle(fontSize: 12),
-                    ),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Stok Takibini Durdur (Depodan Çıkar)'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ürün: ${stock['displayName'] ?? stock['name']}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceAccent,
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                ],
-              ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, color: AppColors.ink, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Bu işlem ürünü Fiyat Teklifleri Kataloğundan SİLMES. Ürün teklif verirken hazır bulunur, sadece depodaki stok listesinden çıkarılır.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.corporateRed, foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _stockService.stopStockTracking(stock['id'].toString());
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Ürün stok takibinden çıkarıldı. Katalogda korunuyor.'), backgroundColor: AppColors.brass),
-              );
-              _loadStocks();
-            },
-            child: const Text('Depodan Çıkar'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Vazgeç'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.corporateRed,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await _stockService.stopStockTracking(stock['id'].toString());
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Ürün stok takibinden çıkarıldı. Katalogda korunuyor.',
+                      ),
+                      backgroundColor: AppColors.brass,
+                    ),
+                  );
+                  _loadStocks();
+                },
+                child: const Text('Depodan Çıkar'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -389,170 +444,189 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   }
 
   void _showEditStockDialog(Map<String, dynamic> stock) {
-    final nameCtrl = TextEditingController(text: stock['displayName'] ?? stock['name'] ?? '');
+    final nameCtrl = TextEditingController(
+      text: stock['displayName'] ?? stock['name'] ?? '',
+    );
     final brandCtrl = TextEditingController(text: stock['brand'] ?? '');
     final modelCtrl = TextEditingController(text: stock['model'] ?? '');
     final unitCtrl = TextEditingController(text: stock['unit'] ?? 'Adet');
-    final qtyCtrl = TextEditingController(text: (stock['quantity'] ?? 0).toString());
-    final minCtrl = TextEditingController(text: (stock['critical_level'] ?? 0).toString());
+    final qtyCtrl = TextEditingController(
+      text: (stock['quantity'] ?? 0).toString(),
+    );
+    final minCtrl = TextEditingController(
+      text: (stock['critical_level'] ?? 0).toString(),
+    );
     final barcodeCtrl = TextEditingController(text: stock['barcode'] ?? '');
-    final shelfCtrl = TextEditingController(text: stock['shelf_location'] ?? '');
+    final shelfCtrl = TextEditingController(
+      text: stock['shelf_location'] ?? '',
+    );
     String category = stock['category'] ?? StockService.categories.first;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Stok Ürününü Düzenle'),
-        content: SingleChildScrollView(
-          child: Container(
-            width: 450,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Ürün Adı (Anlaşılır Başlık) *',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Stok Ürününü Düzenle'),
+            content: SingleChildScrollView(
+              child: Container(
+                width: 450,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: StockService.categories.contains(category)
-                            ? category
-                            : StockService.categories.first,
-                        decoration: const InputDecoration(
-                          labelText: 'Kategori',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: StockService.categories
-                            .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                            .toList(),
-                        onChanged: (val) => category = val!,
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Ürün Adı (Anlaşılır Başlık) *',
+                        border: OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: unitCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Birim (Adet/m/kg)',
-                          border: OutlineInputBorder(),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value:
+                                StockService.categories.contains(category)
+                                    ? category
+                                    : StockService.categories.first,
+                            decoration: const InputDecoration(
+                              labelText: 'Kategori',
+                              border: OutlineInputBorder(),
+                            ),
+                            items:
+                                StockService.categories
+                                    .map(
+                                      (c) => DropdownMenuItem(
+                                        value: c,
+                                        child: Text(c),
+                                      ),
+                                    )
+                                    .toList(),
+                            onChanged: (val) => category = val!,
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: unitCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Birim (Adet/m/kg)',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: brandCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Marka',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: modelCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Model',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: qtyCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Stok Miktarı',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: minCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Kritik Seviye',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: barcodeCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Barkod / Karekod',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: shelfCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Raf / Kasa No',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: brandCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Marka',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: modelCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Model',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: qtyCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Stok Miktarı',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: minCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Kritik Seviye',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: barcodeCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Barkod / Karekod',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: shelfCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Raf / Kasa No',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('İptal'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.ink,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () async {
+                  if (nameCtrl.text.trim().isEmpty) return;
+                  final payload = {
+                    'name': nameCtrl.text.trim(),
+                    'category': category,
+                    'unit': unitCtrl.text.trim(),
+                    'brand': brandCtrl.text.trim(),
+                    'model': modelCtrl.text.trim(),
+                    'quantity': int.tryParse(qtyCtrl.text.trim()) ?? 0,
+                    'critical_level': int.tryParse(minCtrl.text.trim()) ?? 0,
+                    'barcode': barcodeCtrl.text.trim(),
+                    'shelf_location': shelfCtrl.text.trim(),
+                  };
+                  Navigator.pop(ctx);
+                  await _stockService.updateStock(stock['id'], payload);
+                  _loadStocks();
+                },
+                child: const Text('Kaydet'),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('İptal'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
-            onPressed: () async {
-              if (nameCtrl.text.trim().isEmpty) return;
-              final payload = {
-                'name': nameCtrl.text.trim(),
-                'category': category,
-                'unit': unitCtrl.text.trim(),
-                'brand': brandCtrl.text.trim(),
-                'model': modelCtrl.text.trim(),
-                'quantity': int.tryParse(qtyCtrl.text.trim()) ?? 0,
-                'critical_level': int.tryParse(minCtrl.text.trim()) ?? 0,
-                'barcode': barcodeCtrl.text.trim(),
-                'shelf_location': shelfCtrl.text.trim(),
-              };
-              Navigator.pop(ctx);
-              await _stockService.updateStock(stock['id'], payload);
-              _loadStocks();
-            },
-            child: const Text('Kaydet'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -560,118 +634,146 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     if (!_canManageStock) return;
     final qtyCtrl = TextEditingController(text: '1');
     final minCtrl = TextEditingController(text: '5');
-    final shelfCtrl = TextEditingController(text: catalogItem['shelf_location'] ?? '');
-    final barcodeCtrl = TextEditingController(text: catalogItem['barcode'] ?? '');
+    final shelfCtrl = TextEditingController(
+      text: catalogItem['shelf_location'] ?? '',
+    );
+    final barcodeCtrl = TextEditingController(
+      text: catalogItem['barcode'] ?? '',
+    );
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.add_shopping_cart, color: AppColors.ink),
-            const SizedBox(width: 8),
-            Expanded(child: Text('Stoğa Al: ${catalogItem['displayName'] ?? catalogItem['name']}')),
-          ],
-        ),
-        content: Container(
-          width: 420,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Ürün Kodu: ${catalogItem['code'] ?? '-'}', style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text('Kategori: ${catalogItem['category'] ?? '-'} | Marka: ${catalogItem['brand'] ?? '-'}'),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: qtyCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'İlk Stok Miktarı *',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
+      builder:
+          (ctx) => AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.add_shopping_cart, color: AppColors.ink),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Stoğa Al: ${catalogItem['displayName'] ?? catalogItem['name']}',
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: minCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Kritik Seviye',
-                        border: OutlineInputBorder(),
+                ),
+              ],
+            ),
+            content: Container(
+              width: 420,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Ürün Kodu: ${catalogItem['code'] ?? '-'}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'Kategori: ${catalogItem['category'] ?? '-'} | Marka: ${catalogItem['brand'] ?? '-'}',
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: qtyCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'İlk Stok Miktarı *',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: minCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Kritik Seviye',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: shelfCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Raf / Kasa No',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: barcodeCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Barkod',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: shelfCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Raf / Kasa No',
-                        border: OutlineInputBorder(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('İptal'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.ink,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () async {
+                  final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+                  final min = int.tryParse(minCtrl.text.trim()) ?? 0;
+                  Navigator.pop(ctx);
+                  try {
+                    await _stockService.startStockTracking(
+                      productId: catalogItem['id'].toString(),
+                      initialQuantity: qty,
+                      minimumStock: min,
+                      shelfLocation: shelfCtrl.text.trim(),
+                      barcode: barcodeCtrl.text.trim(),
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Ürün stok takibine alındı ve depoya eklendi.',
+                        ),
+                        backgroundColor: AppColors.mint,
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: barcodeCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Barkod',
-                        border: OutlineInputBorder(),
+                    );
+                    _loadStocks();
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Hata: $e'),
+                        backgroundColor: AppColors.corporateRed,
                       ),
-                    ),
-                  ),
-                ],
+                    );
+                  }
+                },
+                child: const Text('Stoğa Ekle ve Takip Başlat'),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
-            onPressed: () async {
-              final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
-              final min = int.tryParse(minCtrl.text.trim()) ?? 0;
-              Navigator.pop(ctx);
-              try {
-                await _stockService.startStockTracking(
-                  productId: catalogItem['id'].toString(),
-                  initialQuantity: qty,
-                  minimumStock: min,
-                  shelfLocation: shelfCtrl.text.trim(),
-                  barcode: barcodeCtrl.text.trim(),
-                );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Ürün stok takibine alındı ve depoya eklendi.'),
-                    backgroundColor: AppColors.mint,
-                  ),
-                );
-                _loadStocks();
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Hata: $e'), backgroundColor: AppColors.corporateRed),
-                );
-              }
-            },
-            child: const Text('Stoğa Ekle ve Takip Başlat'),
-          ),
-        ],
-      ),
     );
   }
 
-  void _showStockMovementModal(Map<String, dynamic> stock, String movementType) {
+  void _showStockMovementModal(
+    Map<String, dynamic> stock,
+    String movementType,
+  ) {
     if (!_canManageStock) return;
     final qtyCtrl = TextEditingController(text: '1');
     final reasonCtrl = TextEditingController();
@@ -681,445 +783,717 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(
-              isIn ? Icons.arrow_circle_down_rounded : Icons.arrow_circle_up_rounded,
-              color: isIn ? AppColors.mint : AppColors.brass,
+      builder:
+          (ctx) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(
+                  isIn
+                      ? Icons.arrow_circle_down_rounded
+                      : Icons.arrow_circle_up_rounded,
+                  color: isIn ? AppColors.mint : AppColors.brass,
+                ),
+                const SizedBox(width: 8),
+                Text(isIn ? 'Stok Girişi Yap (IN)' : 'Stok Çıkışı Yap (OUT)'),
+              ],
             ),
-            const SizedBox(width: 8),
-            Text(isIn ? 'Stok Girişi Yap (IN)' : 'Stok Çıkışı Yap (OUT)'),
-          ],
-        ),
-        content: Container(
-          width: 400,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Ürün: ${stock['displayName'] ?? stock['name']} (${stock['code']})', style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text('Mevcut Stok: ${stock['quantity']} ${stock['unit'] ?? 'Adet'}'),
-              const SizedBox(height: 16),
-              TextField(
-                controller: qtyCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Miktar *', border: OutlineInputBorder()),
+            content: Container(
+              width: 400,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Ürün: ${stock['displayName'] ?? stock['name']} (${stock['code']})',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'Mevcut Stok: ${stock['quantity']} ${stock['unit'] ?? 'Adet'}',
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: qtyCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Miktar *',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: reasonCtrl,
+                    decoration: InputDecoration(
+                      labelText:
+                          isIn ? 'Geliş Nedeni / Fatura No' : 'Çıkış Nedeni',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: destCtrl,
+                    decoration: InputDecoration(
+                      labelText:
+                          isIn
+                              ? 'Tedarikçi Firma'
+                              : 'Teslim Edilen Yer / Müşteri',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: noteCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Açıklama / Not',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: reasonCtrl,
-                decoration: InputDecoration(
-                  labelText: isIn ? 'Geliş Nedeni / Fatura No' : 'Çıkış Nedeni',
-                  border: const OutlineInputBorder(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('İptal'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isIn ? AppColors.mint : AppColors.brass,
+                  foregroundColor: Colors.white,
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: destCtrl,
-                decoration: InputDecoration(
-                  labelText: isIn ? 'Tedarikçi Firma' : 'Teslim Edilen Yer / Müşteri',
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: noteCtrl,
-                decoration: const InputDecoration(labelText: 'Açıklama / Not', border: OutlineInputBorder()),
+                onPressed: () async {
+                  final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+                  if (qty <= 0) return;
+                  Navigator.pop(ctx);
+                  try {
+                    await _stockService.registerStockMovement(
+                      productId: stock['id'],
+                      movementType: movementType,
+                      quantity: qty,
+                      reason: reasonCtrl.text.trim(),
+                      destination: destCtrl.text.trim(),
+                      note: noteCtrl.text.trim(),
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          isIn
+                              ? 'Stok girişi kaydedildi.'
+                              : 'Stok çıkışı kaydedildi.',
+                        ),
+                        backgroundColor: AppColors.mint,
+                      ),
+                    );
+                    _loadStocks();
+                    _loadStockMovements();
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Hata: $e'),
+                        backgroundColor: AppColors.corporateRed,
+                      ),
+                    );
+                  }
+                },
+                child: const Text('İşlemi Kaydet'),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isIn ? AppColors.mint : AppColors.brass,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () async {
-              final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
-              if (qty <= 0) return;
-              Navigator.pop(ctx);
-              try {
-                await _stockService.registerStockMovement(
-                  productId: stock['id'],
-                  movementType: movementType,
-                  quantity: qty,
-                  reason: reasonCtrl.text.trim(),
-                  destination: destCtrl.text.trim(),
-                  note: noteCtrl.text.trim(),
-                );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(isIn ? 'Stok girişi kaydedildi.' : 'Stok çıkışı kaydedildi.'),
-                    backgroundColor: AppColors.mint,
-                  ),
-                );
-                _loadStocks();
-                _loadStockMovements();
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Hata: $e'), backgroundColor: AppColors.corporateRed),
-                );
-              }
-            },
-            child: const Text('İşlemi Kaydet'),
-          ),
-        ],
-      ),
     );
   }
 
-  // --- PERSONELE ZİMMET VERME MODALI ---
+  // --- PERSONELE ZİMMET VERME MODALI (SERİ NO ZORUNLU) ---
 
-  void _showPersonnelLoanModal([Map<String, dynamic>? preselectedStock, String? preselectedPersonnelId]) async {
+  void _showPersonnelLoanModal([
+    Map<String, dynamic>? preselectedStock,
+    String? preselectedPersonnelId,
+  ]) async {
     if (!_canManageStock) return;
     final personnelList = await _stockService.listStockPersonnel();
     if (!mounted) return;
 
     if (personnelList.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Zimmet verilebilecek yetkili personel bulunamadı.')),
+        const SnackBar(
+          content: Text('Zimmet verilebilecek yetkili personel bulunamadı.'),
+        ),
       );
       return;
     }
 
-    String? selectedPersonnelId = preselectedPersonnelId ?? personnelList.first['id']?.toString();
+    String? selectedPersonnelId =
+        preselectedPersonnelId ?? personnelList.first['id']?.toString();
     Map<String, dynamic>? selectedStock = preselectedStock;
     String? selectedJobCode;
     final qtyCtrl = TextEditingController(text: '1');
+    final serialsCtrl = TextEditingController();
     final noteCtrl = TextEditingController();
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) {
-          return AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.badge_outlined, color: AppColors.ink),
-                SizedBox(width: 8),
-                Text('Personele Zimmet Ver'),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Container(
-                width: 480,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      builder:
+          (ctx) => StatefulBuilder(
+            builder: (ctx, setModalState) {
+              final qty = int.tryParse(qtyCtrl.text.trim()) ?? 1;
+              final lines =
+                  serialsCtrl.text
+                      .split(RegExp(r'[\n,]'))
+                      .map((s) => s.trim())
+                      .where((s) => s.isNotEmpty)
+                      .toList();
+
+              return AlertDialog(
+                title: const Row(
                   children: [
-                    if (selectedStock != null) ...[
-                      Text('Ürün: ${selectedStock!['displayName'] ?? selectedStock!['name']} (${selectedStock!['code']})', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text('Mevcut Depo Stok: ${selectedStock!['quantity']} ${selectedStock!['unit'] ?? 'Adet'}', style: const TextStyle(color: AppColors.ink)),
-                    ] else ...[
-                      DropdownButtonFormField<String>(
-                        value: selectedStock?['id']?.toString(),
-                        decoration: const InputDecoration(labelText: 'Zimmet Edilecek Depo Ürünü *', border: OutlineInputBorder()),
-                        items: _allStocks.where((s) => (s['quantity'] as num? ?? 0) > 0).map((s) {
-                          return DropdownMenuItem<String>(
-                            value: s['id'].toString(),
-                            child: Text('${s['displayName'] ?? s['name']} (${s['quantity']} ${s['unit'] ?? 'Adet'})', overflow: TextOverflow.ellipsis),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          final found = _allStocks.firstWhere((s) => s['id'].toString() == val, orElse: () => {});
-                          setModalState(() => selectedStock = found);
-                        },
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-
-                    DropdownButtonFormField<String>(
-                      value: selectedPersonnelId,
-                      decoration: const InputDecoration(labelText: 'Teknik Personel *', border: OutlineInputBorder()),
-                      items: personnelList
-                          .map((p) => DropdownMenuItem(value: p['id'].toString(), child: Text(p['full_name'] ?? p['email'] ?? p['id'])))
-                          .toList(),
-                      onChanged: (val) => setModalState(() => selectedPersonnelId = val),
-                    ),
-                    const SizedBox(height: 12),
-
-                    DropdownButtonFormField<String>(
-                      value: selectedJobCode,
-                      decoration: const InputDecoration(labelText: 'İlişkili İş Kodu / Proje (İsteğe Bağlı)', border: OutlineInputBorder()),
-                      items: [
-                        const DropdownMenuItem<String>(value: null, child: Text('Seçilmedi (İş Kodsuz)')),
-                        ..._activeTickets.map((t) {
-                          final code = t['job_code'] ?? t['id'];
-                          final cust = t['customers'] is Map ? (t['customers']['name'] ?? '') : '';
-                          return DropdownMenuItem<String>(
-                            value: code.toString(),
-                            child: Text('$code - $cust (${t['title'] ?? ''})', overflow: TextOverflow.ellipsis),
-                          );
-                        }),
-                      ],
-                      onChanged: (val) => setModalState(() => selectedJobCode = val),
-                    ),
-                    const SizedBox(height: 12),
-
-                    TextField(
-                      controller: qtyCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Zimmet Edilecek Miktar *', border: OutlineInputBorder()),
-                    ),
-                    const SizedBox(height: 12),
-
-                    TextField(
-                      controller: noteCtrl,
-                      decoration: const InputDecoration(labelText: 'Zimmet Açıklaması / Not', border: OutlineInputBorder()),
-                    ),
+                    Icon(Icons.badge_outlined, color: AppColors.ink),
+                    SizedBox(width: 8),
+                    Text('Personele Seri No ile Zimmet Ver'),
                   ],
                 ),
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
-                onPressed: () async {
-                  if (selectedPersonnelId == null || selectedStock == null) return;
-                  final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
-                  if (qty <= 0) return;
-                  Navigator.pop(ctx);
-                  try {
-                    await _stockService.registerPersonnelLoan(
-                      productId: selectedStock!['id'].toString(),
-                      personnelId: selectedPersonnelId!,
-                      quantity: qty,
-                      jobCode: selectedJobCode,
-                      note: noteCtrl.text.trim(),
-                    );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Zimmet kaydı oluşturuldu.'), backgroundColor: AppColors.mint),
-                    );
-                    _loadStocks();
-                    _loadPersonnelLoans();
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Hata: $e'), backgroundColor: AppColors.corporateRed),
-                    );
-                  }
-                },
-                child: const Text('Zimmetle'),
-              ),
-            ],
-          );
-        },
-      ),
+                content: SingleChildScrollView(
+                  child: Container(
+                    width: 480,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (selectedStock != null) ...[
+                          Text(
+                            'Ürün: ${selectedStock!['displayName'] ?? selectedStock!['name']} (${selectedStock!['code']})',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            'Mevcut Depo Stok: ${selectedStock!['quantity']} ${selectedStock!['unit'] ?? 'Adet'}',
+                            style: const TextStyle(color: AppColors.ink),
+                          ),
+                        ] else ...[
+                          DropdownButtonFormField<String>(
+                            value: selectedStock?['id']?.toString(),
+                            decoration: const InputDecoration(
+                              labelText: 'Zimmet Edilecek Depo Ürünü *',
+                              border: OutlineInputBorder(),
+                            ),
+                            items:
+                                _allStocks
+                                    .where(
+                                      (s) => (s['quantity'] as num? ?? 0) > 0,
+                                    )
+                                    .map((s) {
+                                      return DropdownMenuItem<String>(
+                                        value: s['id'].toString(),
+                                        child: Text(
+                                          '${s['displayName'] ?? s['name']} (${s['quantity']} ${s['unit'] ?? 'Adet'})',
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      );
+                                    })
+                                    .toList(),
+                            onChanged: (val) {
+                              final found = _allStocks.firstWhere(
+                                (s) => s['id'].toString() == val,
+                                orElse: () => {},
+                              );
+                              setModalState(() => selectedStock = found);
+                            },
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+
+                        DropdownButtonFormField<String>(
+                          value: selectedPersonnelId,
+                          decoration: const InputDecoration(
+                            labelText: 'Teknik Personel *',
+                            border: OutlineInputBorder(),
+                          ),
+                          items:
+                              personnelList
+                                  .map(
+                                    (p) => DropdownMenuItem(
+                                      value: p['id'].toString(),
+                                      child: Text(
+                                        p['full_name'] ?? p['email'] ?? p['id'],
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged:
+                              (val) => setModalState(
+                                () => selectedPersonnelId = val,
+                              ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        DropdownButtonFormField<String>(
+                          value: selectedJobCode,
+                          decoration: const InputDecoration(
+                            labelText:
+                                'İlişkili İş Kodu / Proje (İsteğe Bağlı)',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: null,
+                              child: Text('Seçilmedi (Genel Zimmet)'),
+                            ),
+                            ..._activeTickets.map((t) {
+                              final code = t['job_code'] ?? t['id'];
+                              final cust =
+                                  t['customers'] is Map
+                                      ? (t['customers']['name'] ?? '')
+                                      : '';
+                              return DropdownMenuItem<String>(
+                                value: code.toString(),
+                                child: Text(
+                                  '$code - $cust (${t['title'] ?? ''})',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }),
+                          ],
+                          onChanged:
+                              (val) =>
+                                  setModalState(() => selectedJobCode = val),
+                        ),
+                        const SizedBox(height: 12),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 1,
+                              child: TextField(
+                                controller: qtyCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Zimmet Miktarı *',
+                                  border: OutlineInputBorder(),
+                                ),
+                                onChanged: (_) => setModalState(() {}),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                qty > 1
+                                    ? '$qty adet tekil cihaz satırı açılacak'
+                                    : '1 tekil cihaz kaydı',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF5A6E82),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        TextField(
+                          controller: serialsCtrl,
+                          maxLines: 3,
+                          decoration: InputDecoration(
+                            labelText: 'Seri Numaraları (Çıkışta Zorunlu) *',
+                            hintText:
+                                qty > 1
+                                    ? 'Her satıra bir seri no yazın veya barkod okutun:\nSN-101\nSN-102\nSN-103'
+                                    : 'Cihaz seri numarasını girin veya okutun',
+                            helperText:
+                                '${lines.length} adet seri no girildi (Gereken: $qty)',
+                            helperStyle: TextStyle(
+                              color:
+                                  lines.length == qty
+                                      ? AppColors.mint
+                                      : AppColors.brass,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            border: const OutlineInputBorder(),
+                          ),
+                          onChanged: (_) => setModalState(() {}),
+                        ),
+                        const SizedBox(height: 12),
+
+                        TextField(
+                          controller: noteCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Zimmet Açıklaması / Not',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('İptal'),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.ink,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () async {
+                      if (selectedPersonnelId == null || selectedStock == null)
+                        return;
+                      final rawSerials =
+                          serialsCtrl.text
+                              .split(RegExp(r'[\n,]'))
+                              .map((s) => s.trim())
+                              .where((s) => s.isNotEmpty)
+                              .toList();
+
+                      if (rawSerials.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Depodan personele çıkış yaparken Seri No girişi şarttır.',
+                            ),
+                            backgroundColor: AppColors.corporateRed,
+                          ),
+                        );
+                        return;
+                      }
+
+                      Navigator.pop(ctx);
+                      try {
+                        await _stockService.registerBatchSerialLoans(
+                          productId: selectedStock!['id'].toString(),
+                          personnelId: selectedPersonnelId!,
+                          serialNumbers: rawSerials,
+                          jobCode: selectedJobCode,
+                          note: noteCtrl.text.trim(),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '${rawSerials.length} adet cihaz seri numaralarıyla tekil olarak zimmetlendi.',
+                            ),
+                            backgroundColor: AppColors.mint,
+                          ),
+                        );
+                        _loadStocks();
+                        _loadPersonnelLoans();
+                        _loadStockMovements();
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Hata: $e'),
+                            backgroundColor: AppColors.corporateRed,
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text('Zimmetle'),
+                  ),
+                ],
+              );
+            },
+          ),
     );
   }
 
   // --- ZİMMET İŞLEME & KAPATMA MODALI ---
 
-  void _showCloseLoanModal(Map<String, dynamic> loan, {String defaultAction = 'all'}) {
+  void _showCloseLoanModal(
+    Map<String, dynamic> loan, {
+    String defaultAction = 'all',
+  }) {
     if (!_canManageStock) return;
     final loanId = loan['id'];
     final totalLoanQty = _asInt(loan['quantity']);
-    final productId = loan['product_id']?.toString() ?? loan['inventory']?['id']?.toString() ?? '';
+    final productId =
+        loan['product_id']?.toString() ??
+        loan['inventory']?['id']?.toString() ??
+        '';
     final personnelName = loan['personnel_name'] ?? 'Personel';
     final productObj = loan['inventory'] ?? {};
-    final productName = productObj['displayName'] ?? productObj['name'] ?? 'Ürün';
+    final productName =
+        productObj['displayName'] ?? productObj['name'] ?? 'Ürün';
 
-    final consumedCtrl = TextEditingController(text: defaultAction == 'consumed' ? totalLoanQty.toString() : '0');
-    final returnedCtrl = TextEditingController(text: defaultAction == 'returned' || defaultAction == 'all' ? totalLoanQty.toString() : '0');
-    final defectiveCtrl = TextEditingController(text: defaultAction == 'defective' ? totalLoanQty.toString() : '0');
+    final consumedCtrl = TextEditingController(
+      text: defaultAction == 'consumed' ? totalLoanQty.toString() : '0',
+    );
+    final returnedCtrl = TextEditingController(
+      text:
+          defaultAction == 'returned' || defaultAction == 'all'
+              ? totalLoanQty.toString()
+              : '0',
+    );
+    final defectiveCtrl = TextEditingController(
+      text: defaultAction == 'defective' ? totalLoanQty.toString() : '0',
+    );
     final faultDescCtrl = TextEditingController();
     String? selectedJobCode;
     final noteCtrl = TextEditingController();
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) {
-          final consumed = int.tryParse(consumedCtrl.text.trim()) ?? 0;
-          final returned = int.tryParse(returnedCtrl.text.trim()) ?? 0;
-          final defective = int.tryParse(defectiveCtrl.text.trim()) ?? 0;
-          final totalAccounted = consumed + returned + defective;
-          final remaining = totalLoanQty - totalAccounted;
-          final isValid = totalAccounted > 0 && totalAccounted <= totalLoanQty;
+      builder:
+          (ctx) => StatefulBuilder(
+            builder: (ctx, setModalState) {
+              final consumed = int.tryParse(consumedCtrl.text.trim()) ?? 0;
+              final returned = int.tryParse(returnedCtrl.text.trim()) ?? 0;
+              final defective = int.tryParse(defectiveCtrl.text.trim()) ?? 0;
+              final totalAccounted = consumed + returned + defective;
+              final remaining = totalLoanQty - totalAccounted;
+              final isValid =
+                  totalAccounted > 0 && totalAccounted <= totalLoanQty;
 
-          return AlertDialog(
-            title: Row(
-              children: [
-                const Icon(Icons.assignment_turned_in, color: AppColors.ink),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Zimmeti İşle / Kapat: $personnelName')),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Container(
-                width: 500,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              return AlertDialog(
+                title: Row(
                   children: [
-                    Text('Ürün: $productName (${productObj['code'] ?? ''})', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    Text('Personeldeki Zimmetli Miktar: $totalLoanQty ${productObj['unit'] ?? 'Adet'}', style: const TextStyle(color: AppColors.ink, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: consumedCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Sarf Edilen *',
-                              helperText: 'Projede kullanılan',
-                              border: OutlineInputBorder(),
-                            ),
-                            onChanged: (_) => setModalState(() {}),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: returnedCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Sağlam İade *',
-                              helperText: 'Stoğa geri teslim',
-                              border: OutlineInputBorder(),
-                            ),
-                            onChanged: (_) => setModalState(() {}),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: defectiveCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Arızalı Ayrılan *',
-                              helperText: 'Bozuk bildirilen',
-                              border: OutlineInputBorder(),
-                            ),
-                            onChanged: (_) => setModalState(() {}),
-                          ),
-                        ),
-                      ],
+                    const Icon(
+                      Icons.assignment_turned_in,
+                      color: AppColors.ink,
                     ),
-                    const SizedBox(height: 12),
-
-                    if (defective > 0) ...[
-                      TextField(
-                        controller: faultDescCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Arıza Sebebi / Açıklaması *',
-                          hintText: 'Örn: Açılmıyor, röle çıkışı yanmış vb.',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-
-                    DropdownButtonFormField<String>(
-                      value: selectedJobCode,
-                      decoration: const InputDecoration(
-                        labelText: 'Sarf/Arıza Yapılan İş Kodu (İş Emri Bağlantısı)',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem<String>(value: null, child: Text('Seçilmedi (Genel İşlemler)')),
-                        ..._activeTickets.map((t) {
-                          final code = t['job_code'] ?? t['id'];
-                          final cust = t['customers'] is Map ? (t['customers']['name'] ?? '') : '';
-                          return DropdownMenuItem<String>(
-                            value: code.toString(),
-                            child: Text('$code - $cust (${t['title'] ?? ''})', overflow: TextOverflow.ellipsis),
-                          );
-                        }),
-                      ],
-                      onChanged: (val) => setModalState(() => selectedJobCode = val),
-                    ),
-                    const SizedBox(height: 12),
-
-                    TextField(
-                      controller: noteCtrl,
-                      decoration: const InputDecoration(labelText: 'Açıklama / Not', border: OutlineInputBorder()),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // KISMI HESAPLAMA ÖZETİ
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: isValid ? (remaining == 0 ? AppColors.mint.withOpacity(0.1) : AppColors.brass.withOpacity(0.1)) : Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: isValid ? (remaining == 0 ? AppColors.mint : AppColors.brass) : Colors.red,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Sarf: $consumed | İade: $returned | Arızalı: $defective | Toplam İşlenen: $totalAccounted / $totalLoanQty',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                          ),
-                          if (remaining > 0)
-                            Text('• $remaining ${productObj['unit'] ?? 'Adet'} ürün personelin zimmetinde kalmaya devam edecek.', style: const TextStyle(fontSize: 12, color: AppColors.ink))
-                          else if (remaining == 0)
-                            const Text('• Bu zimmet kaydı tamamen kapatılacaktır.', style: const TextStyle(fontSize: 12, color: AppColors.mint))
-                          else
-                            const Text('• HATA: Sarf + İade + Arızalı miktarı toplam zimmetli miktardan fazla olamaz!', style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text('Zimmeti İşle / Kapat: $personnelName'),
                     ),
                   ],
                 ),
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.ink,
-                  foregroundColor: Colors.white,
+                content: SingleChildScrollView(
+                  child: Container(
+                    width: 500,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Ürün: $productName (${productObj['code'] ?? ''})',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'Personeldeki Zimmetli Miktar: $totalLoanQty ${productObj['unit'] ?? 'Adet'}',
+                          style: const TextStyle(
+                            color: AppColors.ink,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: consumedCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Sarf Edilen *',
+                                  helperText: 'Projede kullanılan',
+                                  border: OutlineInputBorder(),
+                                ),
+                                onChanged: (_) => setModalState(() {}),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: returnedCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Sağlam İade *',
+                                  helperText: 'Stoğa geri teslim',
+                                  border: OutlineInputBorder(),
+                                ),
+                                onChanged: (_) => setModalState(() {}),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: defectiveCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Arızalı Ayrılan *',
+                                  helperText: 'Bozuk bildirilen',
+                                  border: OutlineInputBorder(),
+                                ),
+                                onChanged: (_) => setModalState(() {}),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        if (defective > 0) ...[
+                          TextField(
+                            controller: faultDescCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Arıza Sebebi / Açıklaması *',
+                              hintText:
+                                  'Örn: Açılmıyor, röle çıkışı yanmış vb.',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+
+                        DropdownButtonFormField<String>(
+                          value: selectedJobCode,
+                          decoration: const InputDecoration(
+                            labelText:
+                                'Sarf/Arıza Yapılan İş Kodu (İş Emri Bağlantısı)',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: null,
+                              child: Text('Seçilmedi (Genel İşlemler)'),
+                            ),
+                            ..._activeTickets.map((t) {
+                              final code = t['job_code'] ?? t['id'];
+                              final cust =
+                                  t['customers'] is Map
+                                      ? (t['customers']['name'] ?? '')
+                                      : '';
+                              return DropdownMenuItem<String>(
+                                value: code.toString(),
+                                child: Text(
+                                  '$code - $cust (${t['title'] ?? ''})',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }),
+                          ],
+                          onChanged:
+                              (val) =>
+                                  setModalState(() => selectedJobCode = val),
+                        ),
+                        const SizedBox(height: 12),
+
+                        TextField(
+                          controller: noteCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Açıklama / Not',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // KISMI HESAPLAMA ÖZETİ
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color:
+                                isValid
+                                    ? (remaining == 0
+                                        ? AppColors.mint.withOpacity(0.1)
+                                        : AppColors.brass.withOpacity(0.1))
+                                    : Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color:
+                                  isValid
+                                      ? (remaining == 0
+                                          ? AppColors.mint
+                                          : AppColors.brass)
+                                      : Colors.red,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Sarf: $consumed | İade: $returned | Arızalı: $defective | Toplam İşlenen: $totalAccounted / $totalLoanQty',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              if (remaining > 0)
+                                Text(
+                                  '• $remaining ${productObj['unit'] ?? 'Adet'} ürün personelin zimmetinde kalmaya devam edecek.',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.ink,
+                                  ),
+                                )
+                              else if (remaining == 0)
+                                const Text(
+                                  '• Bu zimmet kaydı tamamen kapatılacaktır.',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.mint,
+                                  ),
+                                )
+                              else
+                                const Text(
+                                  '• HATA: Sarf + İade + Arızalı miktarı toplam zimmetli miktardan fazla olamaz!',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                onPressed: isValid
-                    ? () async {
-                        Navigator.pop(ctx);
-                        try {
-                          await _stockService.processPersonnelLoanResolution(
-                            loanId: loanId,
-                            productId: productId,
-                            personnelName: personnelName,
-                            totalLoanQty: totalLoanQty,
-                            consumedQty: consumed,
-                            returnedQty: returned,
-                            defectiveQty: defective,
-                            faultDescription: faultDescCtrl.text.trim(),
-                            jobCode: selectedJobCode,
-                            note: noteCtrl.text.trim(),
-                          );
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Zimmet işlemi başarıyla kaydedildi.'), backgroundColor: AppColors.mint),
-                          );
-                          _loadStocks();
-                          _loadPersonnelLoans();
-                          _loadDefectiveProducts();
-                          _loadStockMovements();
-                        } catch (e) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Hata: $e'), backgroundColor: AppColors.corporateRed),
-                          );
-                        }
-                      }
-                    : null,
-                child: const Text('Zimmet İşlemini Kaydet'),
-              ),
-            ],
-          );
-        },
-      ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('İptal'),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.ink,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed:
+                        isValid
+                            ? () async {
+                              Navigator.pop(ctx);
+                              try {
+                                await _stockService
+                                    .processPersonnelLoanResolution(
+                                      loanId: loanId,
+                                      productId: productId,
+                                      personnelName: personnelName,
+                                      totalLoanQty: totalLoanQty,
+                                      consumedQty: consumed,
+                                      returnedQty: returned,
+                                      defectiveQty: defective,
+                                      faultDescription:
+                                          faultDescCtrl.text.trim(),
+                                      jobCode: selectedJobCode,
+                                      note: noteCtrl.text.trim(),
+                                    );
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Zimmet işlemi başarıyla kaydedildi.',
+                                    ),
+                                    backgroundColor: AppColors.mint,
+                                  ),
+                                );
+                                _loadStocks();
+                                _loadPersonnelLoans();
+                                _loadDefectiveProducts();
+                                _loadStockMovements();
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Hata: $e'),
+                                    backgroundColor: AppColors.corporateRed,
+                                  ),
+                                );
+                              }
+                            }
+                            : null,
+                    child: const Text('Zimmet İşlemini Kaydet'),
+                  ),
+                ],
+              );
+            },
+          ),
     );
   }
 
@@ -1132,107 +1506,163 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     final qty = _asInt(defItem['quantity']);
     final currentStatus = defItem['status'] ?? 'in_faulty_stock';
     final productObj = defItem['inventory'] ?? {};
-    final productName = productObj['displayName'] ?? productObj['name'] ?? 'Ürün';
+    final productName =
+        productObj['displayName'] ?? productObj['name'] ?? 'Ürün';
 
     String newStatus = 'shipped_to_supplier';
-    final trackingCtrl = TextEditingController(text: defItem['tracking_number'] ?? '');
-    final supplierCtrl = TextEditingController(text: defItem['supplier_name'] ?? '');
+    final trackingCtrl = TextEditingController(
+      text: defItem['tracking_number'] ?? '',
+    );
+    final supplierCtrl = TextEditingController(
+      text: defItem['supplier_name'] ?? '',
+    );
     final noteCtrl = TextEditingController(text: defItem['notes'] ?? '');
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) {
-          return AlertDialog(
-            title: Row(
-              children: [
-                const Icon(Icons.build_circle_outlined, color: AppColors.brass),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Arızalı Ürün Süreci: $productName')),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Container(
-                width: 450,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      builder:
+          (ctx) => StatefulBuilder(
+            builder: (ctx, setModalState) {
+              return AlertDialog(
+                title: Row(
                   children: [
-                    Text('Arızalı Miktar: $qty ${productObj['unit'] ?? 'Adet'}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    Text('Mevcut Durum: ${_getDefectiveStatusLabel(currentStatus)}', style: const TextStyle(color: AppColors.ink)),
-                    const SizedBox(height: 16),
-
-                    DropdownButtonFormField<String>(
-                      value: newStatus,
-                      decoration: const InputDecoration(labelText: 'Yeni Süreç Durumu *', border: OutlineInputBorder()),
-                      items: const [
-                        DropdownMenuItem(value: 'shipped_to_supplier', child: Text('🚚 Tedarikçiye / Servise Kargolandı')),
-                        DropdownMenuItem(value: 'repaired_returned', child: Text('✅ Tamir Edildi (Sağlam Stoğa Ekle)')),
-                        DropdownMenuItem(value: 'replaced', child: Text('🔄 Yenisi Geldi (Sağlam Stoğa Ekle)')),
-                        DropdownMenuItem(value: 'scrapped', child: Text('❌ Hurdaya Ayrıldı (Çöp)')),
-                      ],
-                      onChanged: (val) => setModalState(() => newStatus = val!),
+                    const Icon(
+                      Icons.build_circle_outlined,
+                      color: AppColors.brass,
                     ),
-                    const SizedBox(height: 12),
-
-                    if (newStatus == 'shipped_to_supplier') ...[
-                      TextField(
-                        controller: supplierCtrl,
-                        decoration: const InputDecoration(labelText: 'Tedarikçi / Servis Firma Adı *', border: OutlineInputBorder()),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: trackingCtrl,
-                        decoration: const InputDecoration(labelText: 'Kargo Şirketi ve Takip Kodu *', border: OutlineInputBorder()),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-
-                    TextField(
-                      controller: noteCtrl,
-                      decoration: const InputDecoration(labelText: 'Not / Süreç Açıklaması', border: OutlineInputBorder()),
-                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text('Arızalı Ürün Süreci: $productName')),
                   ],
                 ),
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  try {
-                    await _stockService.updateDefectiveStatus(
-                      defectiveId: defectiveId,
-                      newStatus: newStatus,
-                      trackingNumber: trackingCtrl.text.trim(),
-                      supplierName: supplierCtrl.text.trim(),
-                      notes: noteCtrl.text.trim(),
-                      productId: productId,
-                      quantity: qty,
-                    );
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Arızalı ürün süreci güncellendi.'), backgroundColor: AppColors.mint),
-                    );
-                    _loadStocks();
-                    _loadDefectiveProducts();
-                    _loadStockMovements();
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Hata: $e'), backgroundColor: AppColors.corporateRed),
-                    );
-                  }
-                },
-                child: const Text('Durumu Güncelle'),
-              ),
-            ],
-          );
-        },
-      ),
+                content: SingleChildScrollView(
+                  child: Container(
+                    width: 450,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Arızalı Miktar: $qty ${productObj['unit'] ?? 'Adet'}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'Mevcut Durum: ${_getDefectiveStatusLabel(currentStatus)}',
+                          style: const TextStyle(color: AppColors.ink),
+                        ),
+                        const SizedBox(height: 16),
+
+                        DropdownButtonFormField<String>(
+                          value: newStatus,
+                          decoration: const InputDecoration(
+                            labelText: 'Yeni Süreç Durumu *',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'shipped_to_supplier',
+                              child: Text(
+                                '🚚 Tedarikçiye / Servise Kargolandı',
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'repaired_returned',
+                              child: Text('✅ Tamir Edildi (Sağlam Stoğa Ekle)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'replaced',
+                              child: Text(
+                                '🔄 Yenisi Geldi (Sağlam Stoğa Ekle)',
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'scrapped',
+                              child: Text('❌ Hurdaya Ayrıldı (Çöp)'),
+                            ),
+                          ],
+                          onChanged:
+                              (val) => setModalState(() => newStatus = val!),
+                        ),
+                        const SizedBox(height: 12),
+
+                        if (newStatus == 'shipped_to_supplier') ...[
+                          TextField(
+                            controller: supplierCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Tedarikçi / Servis Firma Adı *',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: trackingCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Kargo Şirketi ve Takip Kodu *',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+
+                        TextField(
+                          controller: noteCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Not / Süreç Açıklaması',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('İptal'),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.ink,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      try {
+                        await _stockService.updateDefectiveStatus(
+                          defectiveId: defectiveId,
+                          newStatus: newStatus,
+                          trackingNumber: trackingCtrl.text.trim(),
+                          supplierName: supplierCtrl.text.trim(),
+                          notes: noteCtrl.text.trim(),
+                          productId: productId,
+                          quantity: qty,
+                        );
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Arızalı ürün süreci güncellendi.'),
+                            backgroundColor: AppColors.mint,
+                          ),
+                        );
+                        _loadStocks();
+                        _loadDefectiveProducts();
+                        _loadStockMovements();
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Hata: $e'),
+                            backgroundColor: AppColors.corporateRed,
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text('Durumu Güncelle'),
+                  ),
+                ],
+              );
+            },
+          ),
     );
   }
 
@@ -1256,7 +1686,9 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   void _showBarcodeScannerModal() {
     if (!_canUseScanner) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bu cihazda barkod tarayıcı desteklenmiyor.')),
+        const SnackBar(
+          content: Text('Bu cihazda barkod tarayıcı desteklenmiyor.'),
+        ),
       );
       return;
     }
@@ -1273,7 +1705,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 title: const Text('Barkod / Karekod Taraması'),
                 automaticallyImplyLeading: false,
                 actions: [
-                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
                 ],
               ),
               Expanded(
@@ -1284,7 +1719,9 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                       final code = barcodes.first.rawValue ?? '';
                       if (code.isNotEmpty) {
                         Navigator.pop(ctx);
-                        final match = await _stockService.getStockByBarcode(code);
+                        final match = await _stockService.getStockByBarcode(
+                          code,
+                        );
                         if (!mounted) return;
                         if (match != null) {
                           setState(() {
@@ -1293,11 +1730,21 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                             _currentPage = 0;
                           });
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Eşleşen Ürün Bulundu: ${match['displayName'] ?? match['name']}'), backgroundColor: AppColors.mint),
+                            SnackBar(
+                              content: Text(
+                                'Eşleşen Ürün Bulundu: ${match['displayName'] ?? match['name']}',
+                              ),
+                              backgroundColor: AppColors.mint,
+                            ),
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Barkod ($code) stokta bulunamadı.'), backgroundColor: AppColors.brass),
+                            SnackBar(
+                              content: Text(
+                                'Barkod ($code) stokta bulunamadı.',
+                              ),
+                              backgroundColor: AppColors.brass,
+                            ),
                           );
                         }
                       }
@@ -1320,11 +1767,15 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PdfViewerPage(
-          title: 'Sipariş Listesi PDF',
-          pdfFileName: 'siparis_listesi.pdf',
-          pdfGenerator: () => StockPdfService.generateOrderListPdfBytesFromList(selectedItems),
-        ),
+        builder:
+            (_) => PdfViewerPage(
+              title: 'Sipariş Listesi PDF',
+              pdfFileName: 'siparis_listesi.pdf',
+              pdfGenerator:
+                  () => StockPdfService.generateOrderListPdfBytesFromList(
+                    selectedItems,
+                  ),
+            ),
       ),
     );
   }
@@ -1335,7 +1786,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       return Scaffold(
         appBar: AppBar(title: const Text('Stok Durumu')),
         body: const Center(
-          child: Text('Bu sayfaya erişim yetkiniz yok.', style: TextStyle(fontSize: 16)),
+          child: Text(
+            'Bu sayfaya erişim yetkiniz yok.',
+            style: TextStyle(fontSize: 16),
+          ),
         ),
       );
     }
@@ -1349,7 +1803,8 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: AppColors.sand, // UzalTeklif Warm Sand Background (#F4EFE7)
+      backgroundColor:
+          AppColors.sand, // UzalTeklif Warm Sand Background (#F4EFE7)
       drawer: AppDrawer(
         currentPage: AppDrawerPage.stock,
         userName: _userProfile?.displayName,
@@ -1357,8 +1812,9 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       ),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: AppColors.paper, // UzalTeklif Paper Surface (#FFFFFCF7)
-        foregroundColor: AppColors.ink,    // UzalTeklif Primary Ink (#15304A)
+        backgroundColor:
+            AppColors.paper, // UzalTeklif Paper Surface (#FFFFFCF7)
+        foregroundColor: AppColors.ink, // UzalTeklif Primary Ink (#15304A)
         leadingWidth: 100,
         leading: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1370,11 +1826,21 @@ class _StockOverviewPageState extends State<StockOverviewPage>
             SvgPicture.asset('assets/images/log.svg', width: 32, height: 32),
           ],
         ),
-        title: const Text('Stok Yönetimi ERP', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.ink)),
+        title: const Text(
+          'Stok Yönetimi ERP',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+            color: AppColors.ink,
+          ),
+        ),
         actions: [
           if (_canUseScanner)
             IconButton(
-              icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.ink),
+              icon: const Icon(
+                Icons.qr_code_scanner_rounded,
+                color: AppColors.ink,
+              ),
               tooltip: 'Barkod Okut',
               onPressed: _showBarcodeScannerModal,
             ),
@@ -1383,11 +1849,20 @@ class _StockOverviewPageState extends State<StockOverviewPage>
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brass,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
               ),
               icon: const Icon(Icons.picture_as_pdf, size: 16),
-              label: Text('Sipariş PDF (${_selectedProductIds.length})', style: const TextStyle(fontSize: 12)),
-              onPressed: _selectedProductIds.isEmpty ? null : _generateOrderPdfFromSelected,
+              label: Text(
+                'Sipariş PDF (${_selectedProductIds.length})',
+                style: const TextStyle(fontSize: 12),
+              ),
+              onPressed:
+                  _selectedProductIds.isEmpty
+                      ? null
+                      : _generateOrderPdfFromSelected,
             ),
             const SizedBox(width: 8),
           ],
@@ -1395,13 +1870,32 @@ class _StockOverviewPageState extends State<StockOverviewPage>
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
-                foregroundColor: _isSelectionMode ? AppColors.brass : AppColors.ink,
-                side: BorderSide(color: _isSelectionMode ? AppColors.brass : AppColors.mist, width: 1.5),
-                backgroundColor: _isSelectionMode ? AppColors.sand : Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                foregroundColor:
+                    _isSelectionMode ? AppColors.brass : AppColors.ink,
+                side: BorderSide(
+                  color: _isSelectionMode ? AppColors.brass : AppColors.mist,
+                  width: 1.5,
+                ),
+                backgroundColor:
+                    _isSelectionMode ? AppColors.sand : Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
               ),
-              icon: Icon(_isSelectionMode ? Icons.check_box : Icons.check_box_outline_blank, size: 18),
-              label: Text(_isSelectionMode ? 'Çoklu Seçim (AÇIK)' : 'Çoklu Seçim', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              icon: Icon(
+                _isSelectionMode
+                    ? Icons.check_box
+                    : Icons.check_box_outline_blank,
+                size: 18,
+              ),
+              label: Text(
+                _isSelectionMode ? 'Çoklu Seçim (AÇIK)' : 'Çoklu Seçim',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               onPressed: () {
                 setState(() {
                   _isSelectionMode = !_isSelectionMode;
@@ -1416,20 +1910,26 @@ class _StockOverviewPageState extends State<StockOverviewPage>
               icon: const Icon(Icons.more_vert, color: AppColors.ink),
               tooltip: 'Seçenekler',
               onSelected: (val) {
-                if (val == 'reset_catalog') _showResetCatalogTrackingConfirmDialog();
+                if (val == 'reset_catalog')
+                  _showResetCatalogTrackingConfirmDialog();
               },
-              itemBuilder: (ctx) => [
-                const PopupMenuItem(
-                  value: 'reset_catalog',
-                  child: Row(
-                    children: [
-                      Icon(Icons.cleaning_services, color: AppColors.brass, size: 20),
-                      SizedBox(width: 8),
-                      Text('Sanal Katalog Stoklarını Temizle'),
-                    ],
-                  ),
-                ),
-              ],
+              itemBuilder:
+                  (ctx) => [
+                    const PopupMenuItem(
+                      value: 'reset_catalog',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.cleaning_services,
+                            color: AppColors.brass,
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Text('Sanal Katalog Stoklarını Temizle'),
+                        ],
+                      ),
+                    ),
+                  ],
             ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: AppColors.ink),
@@ -1438,15 +1938,16 @@ class _StockOverviewPageState extends State<StockOverviewPage>
           ),
         ],
       ),
-      floatingActionButton: _canManageStock
-          ? FloatingActionButton.extended(
-              onPressed: () => _showAddOrTrackStockModal(),
-              backgroundColor: AppColors.ink,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add_box_rounded),
-              label: const Text('Stoğa Al / Ürün Ekle'),
-            )
-          : null,
+      floatingActionButton:
+          _canManageStock
+              ? FloatingActionButton.extended(
+                onPressed: () => _showAddOrTrackStockModal(),
+                backgroundColor: AppColors.ink,
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.add_box_rounded),
+                label: const Text('Stoğa Al / Ürün Ekle'),
+              )
+              : null,
       body: RefreshIndicator(
         onRefresh: _loadAllData,
         child: SingleChildScrollView(
@@ -1459,7 +1960,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 children: [
                   Expanded(
                     child: _buildKpiCard(
-                      title: _onlyTracked && _activeTab != 2 ? 'Depodaki Çeşit' : 'Katalog Çeşit',
+                      title:
+                          _onlyTracked && _activeTab != 2
+                              ? 'Depodaki Çeşit'
+                              : 'Katalog Çeşit',
                       value: '${_allStocks.length} Kalem',
                       icon: Icons.inventory_2_outlined,
                       color: AppColors.ink,
@@ -1480,7 +1984,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                       title: 'Kritik Stok',
                       value: '${criticalStocks.length} Ürün',
                       icon: Icons.warning_amber_rounded,
-                      color: criticalStocks.isNotEmpty ? AppColors.brass : const Color(0xFF5A6E82),
+                      color:
+                          criticalStocks.isNotEmpty
+                              ? AppColors.brass
+                              : const Color(0xFF5A6E82),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1498,7 +2005,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                       title: 'Arızalı Ürünler',
                       value: '${_defectiveProducts.length} Kayıt',
                       icon: Icons.build_circle_outlined,
-                      color: _defectiveProducts.isNotEmpty ? AppColors.corporateRed : const Color(0xFF5A6E82),
+                      color:
+                          _defectiveProducts.isNotEmpty
+                              ? AppColors.corporateRed
+                              : const Color(0xFF5A6E82),
                     ),
                   ),
                 ],
@@ -1517,31 +2027,50 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                   children: [
                     Expanded(
                       child: TextField(
-                        onChanged: (val) => setState(() {
-                          _searchQuery = val;
-                          _currentPage = 0;
-                        }),
-                        style: const TextStyle(color: AppColors.ink, fontSize: 14),
+                        onChanged:
+                            (val) => setState(() {
+                              _searchQuery = val;
+                              _currentPage = 0;
+                            }),
+                        style: const TextStyle(
+                          color: AppColors.ink,
+                          fontSize: 14,
+                        ),
                         decoration: InputDecoration(
-                          hintText: _activeTab == 2
-                              ? 'Katalogda Ürün Kodu, İsim, Seri No veya Marka Ara...'
-                              : 'Depoda Ürün Kodu, İsim, Barkod, Seri No veya Not Ara...',
+                          hintText:
+                              _activeTab == 2
+                                  ? 'Katalogda Ürün Kodu, İsim, Seri No veya Marka Ara...'
+                                  : 'Depoda Ürün Kodu, İsim, Barkod, Seri No veya Not Ara...',
                           hintStyle: const TextStyle(color: Color(0xFF8A9BAE)),
-                          prefixIcon: const Icon(Icons.search, color: AppColors.ink),
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            color: AppColors.ink,
+                          ),
                           filled: true,
                           fillColor: Colors.white,
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear, color: Color(0xFF8A9BAE)),
-                                  onPressed: () => setState(() {
-                                    _searchQuery = '';
-                                    _currentPage = 0;
-                                  }),
-                                )
-                              : null,
-                          border: const OutlineInputBorder(borderSide: BorderSide(color: AppColors.mist)),
-                          enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: AppColors.mist)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                          suffixIcon:
+                              _searchQuery.isNotEmpty
+                                  ? IconButton(
+                                    icon: const Icon(
+                                      Icons.clear,
+                                      color: Color(0xFF8A9BAE),
+                                    ),
+                                    onPressed:
+                                        () => setState(() {
+                                          _searchQuery = '';
+                                          _currentPage = 0;
+                                        }),
+                                  )
+                                  : null,
+                          border: const OutlineInputBorder(
+                            borderSide: BorderSide(color: AppColors.mist),
+                          ),
+                          enabledBorder: const OutlineInputBorder(
+                            borderSide: BorderSide(color: AppColors.mist),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                          ),
                         ),
                       ),
                     ),
@@ -1550,22 +2079,36 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                       width: 160,
                       child: DropdownButtonFormField<String>(
                         value: _selectedCategory,
-                        style: const TextStyle(color: AppColors.ink, fontSize: 14),
+                        style: const TextStyle(
+                          color: AppColors.ink,
+                          fontSize: 14,
+                        ),
                         decoration: const InputDecoration(
                           labelText: 'Kategori',
                           filled: true,
                           fillColor: Colors.white,
-                          border: OutlineInputBorder(borderSide: BorderSide(color: AppColors.mist)),
-                          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: AppColors.mist)),
+                          border: OutlineInputBorder(
+                            borderSide: BorderSide(color: AppColors.mist),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: AppColors.mist),
+                          ),
                           contentPadding: EdgeInsets.symmetric(horizontal: 12),
                         ),
-                        items: ['Tümü', ...StockService.categories]
-                            .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                            .toList(),
-                        onChanged: (val) => setState(() {
-                          _selectedCategory = val!;
-                          _currentPage = 0;
-                        }),
+                        items:
+                            ['Tümü', ...StockService.categories]
+                                .map(
+                                  (c) => DropdownMenuItem(
+                                    value: c,
+                                    child: Text(c),
+                                  ),
+                                )
+                                .toList(),
+                        onChanged:
+                            (val) => setState(() {
+                              _selectedCategory = val!;
+                              _currentPage = 0;
+                            }),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1573,13 +2116,28 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.ink,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                         elevation: 0,
                       ),
                       onPressed: _exportCurrentTabPdf,
-                      icon: const Icon(Icons.picture_as_pdf, size: 18, color: Colors.white),
-                      label: const Text('PDF Rapor Al', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      icon: const Icon(
+                        Icons.picture_as_pdf,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                      label: const Text(
+                        'PDF Rapor Al',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -1591,19 +2149,43 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildTabChip(0, 'Depodaki Stoklar (Fiziksel)', Icons.table_chart),
+                    _buildTabChip(
+                      0,
+                      'Depodaki Stoklar (Fiziksel)',
+                      Icons.table_chart,
+                    ),
                     const SizedBox(width: 8),
-                    _buildTabChip(1, 'Kritik Depo Stokları (${criticalStocks.length})', Icons.warning_amber),
+                    _buildTabChip(
+                      1,
+                      'Kritik Depo Stokları (${criticalStocks.length})',
+                      Icons.warning_amber,
+                    ),
                     const SizedBox(width: 8),
                     _buildTabChip(2, 'Tüm Ürün Kataloğu', Icons.menu_book),
                     const SizedBox(width: 8),
-                    _buildTabChip(3, 'Personel Zimmetleri (${_getGroupedLoansMap().length} Personel)', Icons.badge),
+                    _buildTabChip(
+                      3,
+                      'Personel Zimmetleri (${_getGroupedLoansMap().length} Personel)',
+                      Icons.badge,
+                    ),
                     const SizedBox(width: 8),
-                    _buildTabChip(6, 'Arızalı Ürünler (RMA) (${_defectiveProducts.length})', Icons.build_circle),
+                    _buildTabChip(
+                      6,
+                      'Arızalı Ürünler (RMA) (${_defectiveProducts.length})',
+                      Icons.build_circle,
+                    ),
                     const SizedBox(width: 8),
-                    _buildTabChip(4, 'Stok Hareket Logları (${_stockMovements.length})', Icons.history),
+                    _buildTabChip(
+                      4,
+                      'Stok Hareket Logları (${_stockMovements.length})',
+                      Icons.history,
+                    ),
                     const SizedBox(width: 8),
-                    _buildTabChip(5, 'Eksik Malzemeli İşler (${_missingTickets.length})', Icons.assignment_late),
+                    _buildTabChip(
+                      5,
+                      'Eksik Malzemeli İşler (${_missingTickets.length})',
+                      Icons.assignment_late,
+                    ),
                   ],
                 ),
               ),
@@ -1611,11 +2193,19 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
               // 4. İÇERİK TABLOSU (FULL-WIDTH STRETCHED DATAGRID)
               if (_isLoading)
-                const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator(color: AppColors.ink)))
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: CircularProgressIndicator(color: AppColors.ink),
+                  ),
+                )
               else ...[
-                if (_activeTab == 0) _buildStockDataGrid(filteredStocks, showTrackButton: false),
-                if (_activeTab == 1) _buildStockDataGrid(criticalStocks, showTrackButton: false),
-                if (_activeTab == 2) _buildStockDataGrid(filteredStocks, showTrackButton: true),
+                if (_activeTab == 0)
+                  _buildStockDataGrid(filteredStocks, showTrackButton: false),
+                if (_activeTab == 1)
+                  _buildStockDataGrid(criticalStocks, showTrackButton: false),
+                if (_activeTab == 2)
+                  _buildStockDataGrid(filteredStocks, showTrackButton: true),
                 if (_activeTab == 3) _buildPersonnelLoansTable(),
                 if (_activeTab == 6) _buildDefectiveProductsTable(),
                 if (_activeTab == 4) _buildMovementsTable(),
@@ -1683,7 +2273,11 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   Widget _buildTabChip(int index, String label, IconData icon) {
     final isSelected = _activeTab == index;
     return ChoiceChip(
-      avatar: Icon(icon, size: 18, color: isSelected ? Colors.white : AppColors.ink),
+      avatar: Icon(
+        icon,
+        size: 18,
+        color: isSelected ? Colors.white : AppColors.ink,
+      ),
       label: Text(label),
       selected: isSelected,
       selectedColor: AppColors.ink,
@@ -1712,7 +2306,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
   // --- TAM GENİŞLİK SAYFALAMALI DATAGRID STOK TABLOSU ---
 
-  Widget _buildStockDataGrid(List<Map<String, dynamic>> stocks, {required bool showTrackButton}) {
+  Widget _buildStockDataGrid(
+    List<Map<String, dynamic>> stocks, {
+    required bool showTrackButton,
+  }) {
     if (stocks.isEmpty) {
       return Container(
         decoration: BoxDecoration(
@@ -1724,11 +2321,17 @@ class _StockOverviewPageState extends State<StockOverviewPage>
         child: Center(
           child: Column(
             children: [
-              const Text('Kriterlere uygun stok kaydı bulunamadı.', style: TextStyle(color: Color(0xFF5A6E82))),
+              const Text(
+                'Kriterlere uygun stok kaydı bulunamadı.',
+                style: TextStyle(color: Color(0xFF5A6E82)),
+              ),
               const SizedBox(height: 12),
               if (_canManageStock && !showTrackButton)
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.ink,
+                    foregroundColor: Colors.white,
+                  ),
                   icon: const Icon(Icons.add_shopping_cart),
                   label: const Text('Katalogdan Ürün Stoğa Al'),
                   onPressed: () => _showAddOrTrackStockModal(),
@@ -1744,7 +2347,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     if (_currentPage >= totalPages) _currentPage = 0;
 
     final startIndex = _currentPage * _pageSize;
-    final endIndex = (startIndex + _pageSize < totalItems) ? startIndex + _pageSize : totalItems;
+    final endIndex =
+        (startIndex + _pageSize < totalItems)
+            ? startIndex + _pageSize
+            : totalItems;
     final pagedStocks = stocks.sublist(startIndex, endIndex);
 
     return Container(
@@ -1773,226 +2379,493 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                     horizontalMargin: 16,
                     columnSpacing: 20,
                     columns: [
-                      if (_isSelectionMode) const DataColumn(label: Text('Seç', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                      const DataColumn(label: Text('Ürün Kodu', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                      const DataColumn(label: Text('Ürün Adı', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                      const DataColumn(label: Text('Kategori', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                      const DataColumn(label: Text('Marka / Model', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                      const DataColumn(label: Text('Stok Miktarı', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                      const DataColumn(label: Text('Min. Stok', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                      const DataColumn(label: Text('Raf / Kasa', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                      const DataColumn(label: Text('Barkod', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                      if (_canManageStock) const DataColumn(label: Text('İşlemler', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                      if (_isSelectionMode)
+                        const DataColumn(
+                          label: Text(
+                            'Seç',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      const DataColumn(
+                        label: Text(
+                          'Ürün Kodu',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const DataColumn(
+                        label: Text(
+                          'Ürün Adı',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const DataColumn(
+                        label: Text(
+                          'Kategori',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const DataColumn(
+                        label: Text(
+                          'Marka / Model',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const DataColumn(
+                        label: Text(
+                          'Stok Miktarı',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const DataColumn(
+                        label: Text(
+                          'Min. Stok',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const DataColumn(
+                        label: Text(
+                          'Raf / Kasa',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const DataColumn(
+                        label: Text(
+                          'Barkod',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      if (_canManageStock)
+                        const DataColumn(
+                          label: Text(
+                            'İşlemler',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
                     ],
-                    rows: pagedStocks.map((item) {
-                      final id = item['id'].toString();
-                      final isSelected = _selectedProductIds.contains(id);
-                      final qty = _asInt(item['quantity']);
-                      final min = _asInt(item['critical_level']);
-                      final isTracked = item['stock_tracking_started'] == true;
-                      final isLow = isTracked && qty <= min;
-                      final isOut = isTracked && qty == 0;
-                      final titleDisplay = item['displayName'] ?? item['name'] ?? '-';
-                      final subtitleDisplay = (item['displaySubtitle'] ?? '').toString();
+                    rows:
+                        pagedStocks.map((item) {
+                          final id = item['id'].toString();
+                          final isSelected = _selectedProductIds.contains(id);
+                          final qty = _asInt(item['quantity']);
+                          final min = _asInt(item['critical_level']);
+                          final isTracked =
+                              item['stock_tracking_started'] == true;
+                          final isLow = isTracked && qty <= min;
+                          final isOut = isTracked && qty == 0;
+                          final titleDisplay =
+                              item['displayName'] ?? item['name'] ?? '-';
+                          final subtitleDisplay =
+                              (item['displaySubtitle'] ?? '').toString();
 
-                      return DataRow(
-                        selected: isSelected,
-                        onSelectChanged: _isSelectionMode
-                            ? (val) {
-                                setState(() {
-                                  if (val == true) {
-                                    _selectedProductIds.add(id);
-                                  } else {
-                                    _selectedProductIds.remove(id);
-                                  }
-                                });
-                              }
-                            : null,
-                        cells: [
-                          if (_isSelectionMode)
-                            DataCell(
-                              Checkbox(
-                                value: isSelected,
-                                activeColor: AppColors.brass,
-                                onChanged: (val) {
-                                  setState(() {
-                                    if (val == true) {
-                                      _selectedProductIds.add(id);
-                                    } else {
-                                      _selectedProductIds.remove(id);
+                          return DataRow(
+                            selected: isSelected,
+                            onSelectChanged:
+                                _isSelectionMode
+                                    ? (val) {
+                                      setState(() {
+                                        if (val == true) {
+                                          _selectedProductIds.add(id);
+                                        } else {
+                                          _selectedProductIds.remove(id);
+                                        }
+                                      });
                                     }
-                                  });
-                                },
-                              ),
-                            ),
-                          DataCell(Text(item['code'] ?? item['id'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.ink))),
-                          DataCell(
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  titleDisplay,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.ink),
-                                ),
-                                if (subtitleDisplay.isNotEmpty)
-                                  Text(
-                                    subtitleDisplay,
-                                    style: const TextStyle(fontSize: 11, color: Color(0xFF5A6E82), fontStyle: FontStyle.italic),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                    : null,
+                            cells: [
+                              if (_isSelectionMode)
+                                DataCell(
+                                  Checkbox(
+                                    value: isSelected,
+                                    activeColor: AppColors.brass,
+                                    onChanged: (val) {
+                                      setState(() {
+                                        if (val == true) {
+                                          _selectedProductIds.add(id);
+                                        } else {
+                                          _selectedProductIds.remove(id);
+                                        }
+                                      });
+                                    },
                                   ),
-                              ],
-                            ),
-                          ),
-                          DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: AppColors.sand,
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: AppColors.mist),
+                                ),
+                              DataCell(
+                                Text(
+                                  item['code'] ?? item['id'] ?? '-',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: AppColors.ink,
+                                  ),
+                                ),
                               ),
-                              child: Text(item['category'] ?? 'Diğer', style: const TextStyle(fontSize: 12, color: AppColors.ink, fontWeight: FontWeight.w600)),
-                            ),
-                          ),
-                          DataCell(Text('${item['brand'] ?? ''} ${item['model'] ?? ''}'.trim(), style: const TextStyle(fontSize: 13, color: AppColors.ink, fontWeight: FontWeight.w600))),
-                          DataCell(
-                            isTracked
-                                ? Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: isOut
-                                          ? const Color(0xFFFEE2E2)
-                                          : isLow
-                                              ? const Color(0xFFFEF3C7)
-                                              : const Color(0xFFDCFCE7),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      '$qty ${item['unit'] ?? 'Adet'}',
-                                      style: TextStyle(
+                              DataCell(
+                                Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      titleDisplay,
+                                      style: const TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                        color: isOut
-                                            ? const Color(0xFFB91C1C)
-                                            : isLow
-                                                ? const Color(0xFFB45309)
-                                                : const Color(0xFF15803D),
+                                        fontSize: 13,
+                                        color: AppColors.ink,
                                       ),
                                     ),
-                                  )
-                                : const Text('Depoda Yok', style: TextStyle(color: Color(0xFF8A9BAE), fontStyle: FontStyle.italic, fontSize: 12)),
-                          ),
-                          DataCell(Text('$min ${item['unit'] ?? 'Adet'}', style: const TextStyle(fontSize: 13, color: AppColors.ink))),
-                          DataCell(Text(item['shelf_location'] ?? '-', style: const TextStyle(fontSize: 13, color: AppColors.ink))),
-                          DataCell(Text(item['barcode'] ?? '-', style: const TextStyle(fontSize: 13, color: AppColors.ink))),
-                          if (_canManageStock)
-                            DataCell(
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (!isTracked || showTrackButton)
-                                    ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.brass,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                        elevation: 0,
+                                    if (subtitleDisplay.isNotEmpty)
+                                      Text(
+                                        subtitleDisplay,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: Color(0xFF5A6E82),
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      icon: const Icon(Icons.add_shopping_cart, size: 14),
-                                      label: const Text('Stoğa Al', style: TextStyle(fontSize: 12)),
-                                      onPressed: () => _showStartTrackingForCatalogItem(item),
+                                  ],
+                                ),
+                              ),
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.sand,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: AppColors.mist),
+                                  ),
+                                  child: Text(
+                                    item['category'] ?? 'Diğer',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.ink,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  '${item['brand'] ?? ''} ${item['model'] ?? ''}'
+                                      .trim(),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.ink,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                isTracked
+                                    ? Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            isOut
+                                                ? const Color(0xFFFEE2E2)
+                                                : isLow
+                                                ? const Color(0xFFFEF3C7)
+                                                : const Color(0xFFDCFCE7),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        '$qty ${item['unit'] ?? 'Adet'}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color:
+                                              isOut
+                                                  ? const Color(0xFFB91C1C)
+                                                  : isLow
+                                                  ? const Color(0xFFB45309)
+                                                  : const Color(0xFF15803D),
+                                        ),
+                                      ),
                                     )
-                                  else ...[
-                                    PopupMenuButton<String>(
-                                      tooltip: 'Stok İşlemleri',
-                                      offset: const Offset(0, 36),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.ink,
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: const Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.tune_outlined, size: 14, color: Colors.white),
-                                            SizedBox(width: 6),
-                                            Text('Stok İşlemleri', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                                            SizedBox(width: 4),
-                                            Icon(Icons.arrow_drop_down, size: 16, color: Colors.white),
-                                          ],
-                                        ),
+                                    : const Text(
+                                      'Depoda Yok',
+                                      style: TextStyle(
+                                        color: Color(0xFF8A9BAE),
+                                        fontStyle: FontStyle.italic,
+                                        fontSize: 12,
                                       ),
-                                      onSelected: (val) {
-                                        if (val == 'in') _showStockMovementModal(item, 'in');
-                                        if (val == 'out') _showStockMovementModal(item, 'out');
-                                        if (val == 'loan') _showPersonnelLoanModal(item);
-                                        if (val == 'edit') _showAddOrTrackStockModal(item);
-                                        if (val == 'untrack') _showStopTrackingConfirmDialog(item);
-                                      },
-                                      itemBuilder: (ctx) => [
-                                        const PopupMenuItem(
-                                          value: 'in',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.arrow_circle_down, color: AppColors.mint, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('Stok Girişi Yap (IN)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.ink)),
-                                            ],
+                                    ),
+                              ),
+                              DataCell(
+                                Text(
+                                  '$min ${item['unit'] ?? 'Adet'}',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.ink,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  item['shelf_location'] ?? '-',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.ink,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  item['barcode'] ?? '-',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.ink,
+                                  ),
+                                ),
+                              ),
+                              if (_canManageStock)
+                                DataCell(
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (!isTracked || showTrackButton)
+                                        ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppColors.brass,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 4,
+                                            ),
+                                            elevation: 0,
                                           ),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: 'out',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.arrow_circle_up, color: AppColors.brass, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('Stok Çıkışı Yap (OUT)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.ink)),
-                                            ],
+                                          icon: const Icon(
+                                            Icons.add_shopping_cart,
+                                            size: 14,
                                           ),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: 'loan',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.badge_outlined, color: AppColors.ink, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('Personele Zimmetle', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.ink)),
-                                            ],
+                                          label: const Text(
+                                            'Stoğa Al',
+                                            style: TextStyle(fontSize: 12),
                                           ),
-                                        ),
-                                        const PopupMenuDivider(),
-                                        const PopupMenuItem(
-                                          value: 'edit',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.edit_outlined, color: AppColors.ink, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('Ürün Bilgilerini Düzenle', style: TextStyle(fontSize: 13, color: AppColors.ink)),
-                                            ],
+                                          onPressed:
+                                              () =>
+                                                  _showStartTrackingForCatalogItem(
+                                                    item,
+                                                  ),
+                                        )
+                                      else ...[
+                                        PopupMenuButton<String>(
+                                          tooltip: 'Stok İşlemleri',
+                                          offset: const Offset(0, 36),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.ink,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.tune_outlined,
+                                                  size: 14,
+                                                  color: Colors.white,
+                                                ),
+                                                SizedBox(width: 6),
+                                                Text(
+                                                  'Stok İşlemleri',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                                SizedBox(width: 4),
+                                                Icon(
+                                                  Icons.arrow_drop_down,
+                                                  size: 16,
+                                                  color: Colors.white,
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: 'untrack',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.remove_shopping_cart_outlined, color: AppColors.corporateRed, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('Depodan Çıkar (Katalogda Sakla)', style: TextStyle(fontSize: 13, color: AppColors.corporateRed)),
-                                            ],
-                                          ),
+                                          onSelected: (val) {
+                                            if (val == 'in')
+                                              _showStockMovementModal(
+                                                item,
+                                                'in',
+                                              );
+                                            if (val == 'out')
+                                              _showStockMovementModal(
+                                                item,
+                                                'out',
+                                              );
+                                            if (val == 'loan')
+                                              _showPersonnelLoanModal(item);
+                                            if (val == 'edit')
+                                              _showAddOrTrackStockModal(item);
+                                            if (val == 'untrack')
+                                              _showStopTrackingConfirmDialog(
+                                                item,
+                                              );
+                                          },
+                                          itemBuilder:
+                                              (ctx) => [
+                                                const PopupMenuItem(
+                                                  value: 'in',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.arrow_circle_down,
+                                                        color: AppColors.mint,
+                                                        size: 18,
+                                                      ),
+                                                      SizedBox(width: 8),
+                                                      Text(
+                                                        'Stok Girişi Yap (IN)',
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 13,
+                                                          color: AppColors.ink,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'out',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.arrow_circle_up,
+                                                        color: AppColors.brass,
+                                                        size: 18,
+                                                      ),
+                                                      SizedBox(width: 8),
+                                                      Text(
+                                                        'Stok Çıkışı Yap (OUT)',
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 13,
+                                                          color: AppColors.ink,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'loan',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.badge_outlined,
+                                                        color: AppColors.ink,
+                                                        size: 18,
+                                                      ),
+                                                      SizedBox(width: 8),
+                                                      Text(
+                                                        'Personele Zimmetle',
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 13,
+                                                          color: AppColors.ink,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const PopupMenuDivider(),
+                                                const PopupMenuItem(
+                                                  value: 'edit',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.edit_outlined,
+                                                        color: AppColors.ink,
+                                                        size: 18,
+                                                      ),
+                                                      SizedBox(width: 8),
+                                                      Text(
+                                                        'Ürün Bilgilerini Düzenle',
+                                                        style: TextStyle(
+                                                          fontSize: 13,
+                                                          color: AppColors.ink,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'untrack',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons
+                                                            .remove_shopping_cart_outlined,
+                                                        color:
+                                                            AppColors
+                                                                .corporateRed,
+                                                        size: 18,
+                                                      ),
+                                                      SizedBox(width: 8),
+                                                      Text(
+                                                        'Depodan Çıkar (Katalogda Sakla)',
+                                                        style: TextStyle(
+                                                          fontSize: 13,
+                                                          color:
+                                                              AppColors
+                                                                  .corporateRed,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
                                         ),
                                       ],
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                        ],
-                      );
-                    }).toList(),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          );
+                        }).toList(),
                   ),
                 ),
               );
@@ -2011,7 +2884,11 @@ class _StockOverviewPageState extends State<StockOverviewPage>
               children: [
                 Text(
                   'Gösterilen: ${totalItems > 0 ? startIndex + 1 : 0} - $endIndex / $totalItems Ürün (Sayfa ${_currentPage + 1} / $totalPages)',
-                  style: const TextStyle(fontSize: 13, color: AppColors.ink, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.ink,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 Row(
                   children: [
@@ -2019,19 +2896,35 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                       width: 140,
                       child: DropdownButtonFormField<int>(
                         value: _pageSize,
-                        style: const TextStyle(color: AppColors.ink, fontSize: 13),
+                        style: const TextStyle(
+                          color: AppColors.ink,
+                          fontSize: 13,
+                        ),
                         decoration: const InputDecoration(
                           labelText: 'Sayfa Başına',
                           isDense: true,
                           filled: true,
                           fillColor: Colors.white,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                          border: OutlineInputBorder(borderSide: BorderSide(color: AppColors.mist)),
-                          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: AppColors.mist)),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          border: OutlineInputBorder(
+                            borderSide: BorderSide(color: AppColors.mist),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: AppColors.mist),
+                          ),
                         ),
-                        items: const [25, 50, 100]
-                            .map((sz) => DropdownMenuItem(value: sz, child: Text('$sz Ürün')))
-                            .toList(),
+                        items:
+                            const [25, 50, 100]
+                                .map(
+                                  (sz) => DropdownMenuItem(
+                                    value: sz,
+                                    child: Text('$sz Ürün'),
+                                  ),
+                                )
+                                .toList(),
                         onChanged: (val) {
                           if (val != null) {
                             setState(() {
@@ -2051,9 +2944,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                       ),
                       icon: const Icon(Icons.chevron_left, size: 18),
                       label: const Text('Önceki'),
-                      onPressed: _currentPage > 0
-                          ? () => setState(() => _currentPage--)
-                          : null,
+                      onPressed:
+                          _currentPage > 0
+                              ? () => setState(() => _currentPage--)
+                              : null,
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton.icon(
@@ -2064,9 +2958,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                       ),
                       icon: const Icon(Icons.chevron_right, size: 18),
                       label: const Text('Sonraki'),
-                      onPressed: _currentPage < totalPages - 1
-                          ? () => setState(() => _currentPage++)
-                          : null,
+                      onPressed:
+                          _currentPage < totalPages - 1
+                              ? () => setState(() => _currentPage++)
+                              : null,
                     ),
                   ],
                 ),
@@ -2090,7 +2985,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
         ),
         padding: const EdgeInsets.all(32),
         child: const Center(
-          child: Text('Arızalı stok veya servis takibinde ürün bulunmuyor.', style: TextStyle(color: Color(0xFF5A6E82))),
+          child: Text(
+            'Arızalı stok veya servis takibinde ürün bulunmuyor.',
+            style: TextStyle(color: Color(0xFF5A6E82)),
+          ),
         ),
       );
     }
@@ -2113,85 +3011,216 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 headingRowColor: WidgetStateProperty.all(AppColors.ink),
                 headingRowHeight: 44,
                 columns: const [
-                  DataColumn(label: Text('Tarih', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Ürün Adı / Kod', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Miktar', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Bildiren Personel', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('İş Kodu', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Arıza Sebebi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Süreç Durumu', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Tedarikçi / Kargo Takip', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('İşlem', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                ],
-                rows: _defectiveProducts.map((def) {
-                  final product = def['inventory'] ?? {};
-                  final status = def['status'] ?? 'in_faulty_stock';
-                  final tracking = (def['tracking_number'] ?? '').toString();
-                  final supplier = (def['supplier_name'] ?? '').toString();
-
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(_formatDate(def['created_at']), style: const TextStyle(color: AppColors.ink))),
-                      DataCell(Text('${product['displayName'] ?? product['name'] ?? 'Bilinmeyen'} (${product['code'] ?? ''})', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
-                      DataCell(
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(6)),
-                          child: Text('${def['quantity']} ${product['unit'] ?? 'Adet'}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFB91C1C))),
-                        ),
+                  DataColumn(
+                    label: Text(
+                      'Tarih',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                      DataCell(Text(def['reported_by_name'] ?? '-', style: const TextStyle(color: AppColors.ink))),
-                      DataCell(Text(def['job_code'] ?? '-', style: const TextStyle(color: AppColors.ink, fontWeight: FontWeight.bold))),
-                      DataCell(Text(def['fault_description'] ?? '-', style: const TextStyle(color: AppColors.ink))),
-                      DataCell(
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: status == 'in_faulty_stock'
-                                ? const Color(0xFFFEF3C7)
-                                : status == 'shipped_to_supplier'
-                                    ? AppColors.surfaceAccent
-                                    : status == 'repaired_returned' || status == 'replaced'
-                                        ? const Color(0xFFDCFCE7)
-                                        : const Color(0xFFFEE2E2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            _getDefectiveStatusLabel(status),
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              color: status == 'in_faulty_stock'
-                                  ? const Color(0xFFB45309)
-                                  : status == 'shipped_to_supplier'
-                                      ? AppColors.ink
-                                      : status == 'repaired_returned' || status == 'replaced'
-                                          ? const Color(0xFF15803D)
-                                          : const Color(0xFFB91C1C),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Ürün Adı / Kod',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Miktar',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Bildiren Personel',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'İş Kodu',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Arıza Sebebi',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Süreç Durumu',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Tedarikçi / Kargo Takip',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'İşlem',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+                rows:
+                    _defectiveProducts.map((def) {
+                      final product = def['inventory'] ?? {};
+                      final status = def['status'] ?? 'in_faulty_stock';
+                      final tracking =
+                          (def['tracking_number'] ?? '').toString();
+                      final supplier = (def['supplier_name'] ?? '').toString();
+
+                      return DataRow(
+                        cells: [
+                          DataCell(
+                            Text(
+                              _formatDate(def['created_at']),
+                              style: const TextStyle(color: AppColors.ink),
                             ),
                           ),
-                        ),
-                      ),
-                      DataCell(
-                        Text(
-                          [
-                            if (supplier.isNotEmpty) 'Firma: $supplier',
-                            if (tracking.isNotEmpty) 'Kargo: $tracking',
-                          ].join(' | ').ifEmpty('-'),
-                          style: const TextStyle(fontSize: 12, color: AppColors.ink),
-                        ),
-                      ),
-                      DataCell(
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
-                          icon: const Icon(Icons.build_circle, size: 16),
-                          label: const Text('Süreci Güncelle'),
-                          onPressed: () => _showUpdateDefectiveStatusModal(def),
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
+                          DataCell(
+                            Text(
+                              '${product['displayName'] ?? product['name'] ?? 'Bilinmeyen'} (${product['code'] ?? ''})',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.ink,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEE2E2),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '${def['quantity']} ${product['unit'] ?? 'Adet'}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFB91C1C),
+                                ),
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              def['reported_by_name'] ?? '-',
+                              style: const TextStyle(color: AppColors.ink),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              def['job_code'] ?? '-',
+                              style: const TextStyle(
+                                color: AppColors.ink,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              def['fault_description'] ?? '-',
+                              style: const TextStyle(color: AppColors.ink),
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color:
+                                    status == 'in_faulty_stock'
+                                        ? const Color(0xFFFEF3C7)
+                                        : status == 'shipped_to_supplier'
+                                        ? AppColors.surfaceAccent
+                                        : status == 'repaired_returned' ||
+                                            status == 'replaced'
+                                        ? const Color(0xFFDCFCE7)
+                                        : const Color(0xFFFEE2E2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                _getDefectiveStatusLabel(status),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color:
+                                      status == 'in_faulty_stock'
+                                          ? const Color(0xFFB45309)
+                                          : status == 'shipped_to_supplier'
+                                          ? AppColors.ink
+                                          : status == 'repaired_returned' ||
+                                              status == 'replaced'
+                                          ? const Color(0xFF15803D)
+                                          : const Color(0xFFB91C1C),
+                                ),
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              [
+                                if (supplier.isNotEmpty) 'Firma: $supplier',
+                                if (tracking.isNotEmpty) 'Kargo: $tracking',
+                              ].join(' | ').ifEmpty('-'),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.ink,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.ink,
+                                foregroundColor: Colors.white,
+                              ),
+                              icon: const Icon(Icons.build_circle, size: 16),
+                              label: const Text('Süreci Güncelle'),
+                              onPressed:
+                                  () => _showUpdateDefectiveStatusModal(def),
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
               ),
             ),
           );
@@ -2206,10 +3235,12 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     final Map<String, Map<String, dynamic>> grouped = {};
 
     for (final loan in _personnelLoans) {
-      final pName = (loan['personnel_name'] ?? 'Bilinmeyen Personel').toString().trim();
+      final pName =
+          (loan['personnel_name'] ?? 'Bilinmeyen Personel').toString().trim();
       final pId = (loan['personnel_id'] ?? pName).toString();
       final qty = _asInt(loan['quantity']);
-      if (qty <= 0) continue; // 0 adet kalmış ürünleri personelin zimmetinde kesinlikle gösterme
+      if (qty <= 0)
+        continue; // 0 adet kalmış ürünleri personelin zimmetinde kesinlikle gösterme
 
       if (!grouped.containsKey(pName)) {
         grouped[pName] = {
@@ -2246,11 +3277,17 @@ class _StockOverviewPageState extends State<StockOverviewPage>
         child: Center(
           child: Column(
             children: [
-              const Text('Aktif personel zimmeti bulunmuyor.', style: TextStyle(color: Color(0xFF5A6E82))),
+              const Text(
+                'Aktif personel zimmeti bulunmuyor.',
+                style: TextStyle(color: Color(0xFF5A6E82)),
+              ),
               const SizedBox(height: 12),
               if (_canManageStock)
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.ink,
+                    foregroundColor: Colors.white,
+                  ),
                   icon: const Icon(Icons.badge_outlined),
                   label: const Text('Personele Yeni Zimmet Ver'),
                   onPressed: () => _showPersonnelLoanModal(),
@@ -2286,80 +3323,211 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                     dataRowMinHeight: 52,
                     dataRowMaxHeight: 64,
                     columns: const [
-                      DataColumn(label: Text('Teknik Personel', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                      DataColumn(label: Text('Zimmetli Kalem Çeşidi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                      DataColumn(label: Text('Toplam Ürün Adedi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                      DataColumn(label: Text('Son Zimmet Tarihi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                      DataColumn(label: Text('Zimmet İşlemleri', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                      DataColumn(
+                        label: Text(
+                          'Teknik Personel',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Zimmetli Kalem Çeşidi',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Toplam Ürün Adedi',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Son Zimmet Tarihi',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Zimmet İşlemleri',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
                     ],
-                    rows: groupedList.map((group) {
-                      final pName = group['personnel_name'].toString();
-                      final pId = group['personnel_id'].toString();
-                      final itemCount = group['item_count'] as int;
-                      final totalQty = group['total_quantity'] as int;
-                      final latestDate = group['latest_date'];
-                      final loans = group['loans'] as List<Map<String, dynamic>>;
+                    rows:
+                        groupedList.map((group) {
+                          final pName = group['personnel_name'].toString();
+                          final pId = group['personnel_id'].toString();
+                          final itemCount = group['item_count'] as int;
+                          final totalQty = group['total_quantity'] as int;
+                          final latestDate = group['latest_date'];
+                          final loans =
+                              group['loans'] as List<Map<String, dynamic>>;
 
-                      return DataRow(
-                        cells: [
-                          DataCell(
-                            Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 16,
-                                  backgroundColor: AppColors.brass.withOpacity(0.2),
+                          return DataRow(
+                            cells: [
+                              DataCell(
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 16,
+                                      backgroundColor: AppColors.brass
+                                          .withOpacity(0.2),
+                                      child: Text(
+                                        pName.isNotEmpty
+                                            ? pName[0].toUpperCase()
+                                            : 'P',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.ink,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      pName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                        color: AppColors.ink,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.sand,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
                                   child: Text(
-                                    pName.isNotEmpty ? pName[0].toUpperCase() : 'P',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 13),
+                                    '$itemCount Çeşit Ürün',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.ink,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ),
-                                const SizedBox(width: 10),
-                                Text(pName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.ink)),
-                              ],
-                            ),
-                          ),
-                          DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(color: AppColors.sand, borderRadius: BorderRadius.circular(6)),
-                              child: Text('$itemCount Çeşit Ürün', style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.ink, fontSize: 13)),
-                            ),
-                          ),
-                          DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(color: AppColors.surfaceAccent, borderRadius: BorderRadius.circular(6)),
-                              child: Text('$totalQty Adet', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 13)),
-                            ),
-                          ),
-                          DataCell(Text(_formatDate(latestDate), style: const TextStyle(color: AppColors.ink))),
-                          DataCell(
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
-                                  icon: const Icon(Icons.receipt_long, size: 16),
-                                  label: Text('Zimmet Dökümü & İşle ($itemCount)'),
-                                  onPressed: () => _showPersonnelDetailModal(pName, pId, loans),
-                                ),
-                                const SizedBox(width: 8),
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppColors.ink,
-                                    side: const BorderSide(color: AppColors.mist),
-                                    backgroundColor: Colors.white,
+                              ),
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
                                   ),
-                                  icon: const Icon(Icons.add, size: 16),
-                                  label: const Text('Zimmet Ekle'),
-                                  onPressed: () => _showPersonnelLoanModal(null, pId),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceAccent,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '$totalQty Adet',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.ink,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                                 ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
+                              ),
+                              DataCell(
+                                Text(
+                                  _formatDate(latestDate),
+                                  style: const TextStyle(color: AppColors.ink),
+                                ),
+                              ),
+                              DataCell(
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.ink,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      icon: const Icon(
+                                        Icons.person_pin,
+                                        size: 16,
+                                      ),
+                                      label: const Text('Personel Kartı'),
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (_) => PersonnelDetailPage(
+                                                  personnelId: pId,
+                                                ),
+                                          ),
+                                        ).then((_) {
+                                          _loadStocks();
+                                          _loadPersonnelLoans();
+                                          _loadStockMovements();
+                                        });
+                                      },
+                                    ),
+                                    const SizedBox(width: 6),
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.brass,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      icon: const Icon(
+                                        Icons.receipt_long,
+                                        size: 16,
+                                      ),
+                                      label: Text('Zimmet Dökümü ($itemCount)'),
+                                      onPressed:
+                                          () => _showPersonnelDetailModal(
+                                            pName,
+                                            pId,
+                                            loans,
+                                          ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: AppColors.ink,
+                                        side: const BorderSide(
+                                          color: AppColors.mist,
+                                        ),
+                                        backgroundColor: Colors.white,
+                                      ),
+                                      icon: const Icon(Icons.add, size: 16),
+                                      label: const Text('+ Zimmet'),
+                                      onPressed:
+                                          () => _showPersonnelLoanModal(
+                                            null,
+                                            pId,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
                   ),
                 ),
               );
@@ -2372,272 +3540,1079 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
   // --- PERSONEL ZİMMET DETAY & EKSTRE MODALI (CARİ DÖKÜMÜ) ---
 
-  void _showPersonnelDetailModal(String personnelName, String personnelId, List<Map<String, dynamic>> loans) {
+  void _showPersonnelDetailModal(
+    String personnelName,
+    String personnelId,
+    List<Map<String, dynamic>> loans,
+  ) {
     final screenWidth = MediaQuery.of(context).size.width;
     final dialogWidth = (screenWidth * 0.95).clamp(900.0, 1400.0);
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.badge, color: AppColors.ink),
-            const SizedBox(width: 8),
-            Expanded(child: Text('$personnelName - Zimmetli Ürün Dökümü & Ekstresi')),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Container(
-            width: dialogWidth,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+      builder:
+          (ctx) => AlertDialog(
+            title: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceAccent,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.mist),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.inventory, color: AppColors.ink, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Toplam ${loans.length} Kalem / ${loans.fold<int>(0, (sum, l) => sum + _asInt(l['quantity']))} Adet Zimmetli Ürün Bulunuyor',
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 14),
-                          ),
-                        ],
-                      ),
-                      if (_canManageStock)
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white),
-                          icon: const Icon(Icons.add, size: 16),
-                          label: const Text('+ Bu Personele Zimmet Ekle'),
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _showPersonnelLoanModal(null, personnelId);
-                          },
-                        ),
-                    ],
+                const Icon(Icons.badge, color: AppColors.ink),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '$personnelName - Zimmetli Ürün Dökümü & Ekstresi',
                   ),
                 ),
-                const SizedBox(height: 16),
-
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.paper,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.mist),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.ink,
+                    foregroundColor: Colors.white,
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      return SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                          child: DataTable(
-                            headingRowColor: WidgetStateProperty.all(AppColors.ink),
-                            headingRowHeight: 40,
-                            dataRowMinHeight: 50,
-                            dataRowMaxHeight: 60,
-                            columnSpacing: 14,
-                            horizontalMargin: 12,
-                            columns: const [
-                              DataColumn(label: Text('Ürün Kodu', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                              DataColumn(label: Text('Ürün Adı', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                              DataColumn(label: Text('Zimmet Miktarı', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                              DataColumn(label: Text('Veriliş Tarihi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                              DataColumn(label: Text('İş Kodu / Zimmet Notu', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                              DataColumn(label: Text('Hızlı Zimmet İşlemleri', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                            ],
-                            rows: loans.map((loan) {
-                              final product = loan['inventory'] ?? {};
-                              final code = (product['code'] ?? '').toString();
-                              final name = (product['displayName'] ?? product['name'] ?? 'Bilinmeyen Ürün').toString();
-                              final qty = loan['quantity'];
-                              final unit = product['unit'] ?? 'Adet';
-
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(code.ifEmpty('-'), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 13))),
-                                  DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.ink, fontSize: 13))),
-                                  DataCell(
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(color: AppColors.sand, borderRadius: BorderRadius.circular(6), border: Border.all(color: AppColors.mist)),
-                                      child: Text('$qty $unit', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 13)),
-                                    ),
-                                  ),
-                                  DataCell(Text(_formatDate(loan['borrowed_at']), style: const TextStyle(color: AppColors.ink, fontSize: 12))),
-                                  DataCell(Text((loan['note'] ?? '-').toString(), style: const TextStyle(color: AppColors.ink, fontSize: 12))),
-                                  DataCell(
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppColors.ink,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          ),
-                                          icon: const Icon(Icons.tune_outlined, size: 14),
-                                          label: const Text('Zimmeti İşle', style: TextStyle(fontSize: 12)),
-                                          onPressed: () {
-                                            Navigator.pop(ctx);
-                                            _showCloseLoanModal(loan);
-                                          },
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Tooltip(
-                                          message: 'Tümünü Sarf Et (Projede Kullanıldı)',
-                                          child: OutlinedButton.icon(
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor: AppColors.mint,
-                                              side: const BorderSide(color: AppColors.mint, width: 1.2),
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                            ),
-                                            icon: const Icon(Icons.check_circle_outline, size: 14),
-                                            label: const Text('Sarf', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                            onPressed: () {
-                                              Navigator.pop(ctx);
-                                              _showCloseLoanModal(loan, defaultAction: 'consumed');
-                                            },
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Tooltip(
-                                          message: 'Arızaya Ayrıldı (RMA / Bozuk)',
-                                          child: OutlinedButton.icon(
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor: AppColors.corporateRed,
-                                              side: const BorderSide(color: AppColors.corporateRed, width: 1.2),
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                            ),
-                                            icon: const Icon(Icons.build_circle_outlined, size: 14),
-                                            label: const Text('Arızalı', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                            onPressed: () {
-                                              Navigator.pop(ctx);
-                                              _showCloseLoanModal(loan, defaultAction: 'defective');
-                                            },
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Tooltip(
-                                          message: 'Sağlam Şekilde Depoya İade Et',
-                                          child: OutlinedButton.icon(
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor: AppColors.ink,
-                                              side: const BorderSide(color: AppColors.mist, width: 1.2),
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                            ),
-                                            icon: const Icon(Icons.replay, size: 14),
-                                            label: const Text('İade', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                            onPressed: () {
-                                              Navigator.pop(ctx);
-                                              _showCloseLoanModal(loan, defaultAction: 'returned');
-                                            },
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  icon: const Icon(Icons.person, size: 16),
+                  label: const Text('Personel Kartını Aç'),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (_) =>
+                                PersonnelDetailPage(personnelId: personnelId),
+                      ),
+                    ).then((_) {
+                      _loadStocks();
+                      _loadPersonnelLoans();
+                      _loadStockMovements();
+                    });
+                  },
                 ),
               ],
             ),
+            content: SingleChildScrollView(
+              child: Container(
+                width: dialogWidth,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceAccent,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.mist),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.inventory,
+                                color: AppColors.ink,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Toplam ${loans.length} Kalem / ${loans.fold<int>(0, (sum, l) => sum + _asInt(l['quantity']))} Adet Zimmetli Ürün Bulunuyor',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.ink,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_canManageStock)
+                            Row(
+                              children: [
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.brass,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  icon: const Icon(Icons.fact_check, size: 16),
+                                  label: const Text(
+                                    'Checklist İle Dönüş / İade Al',
+                                  ),
+                                  onPressed: () {
+                                    Navigator.pop(ctx);
+                                    _showGroupChecklistModal(
+                                      personnelName,
+                                      personnelId,
+                                      loans,
+                                    );
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.ink,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text(
+                                    '+ Bu Personele Zimmet Ekle',
+                                  ),
+                                  onPressed: () {
+                                    Navigator.pop(ctx);
+                                    _showPersonnelLoanModal(null, personnelId);
+                                  },
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.paper,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.mist),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minWidth: constraints.maxWidth,
+                              ),
+                              child: DataTable(
+                                headingRowColor: WidgetStateProperty.all(
+                                  AppColors.ink,
+                                ),
+                                headingRowHeight: 40,
+                                dataRowMinHeight: 50,
+                                dataRowMaxHeight: 60,
+                                columnSpacing: 14,
+                                horizontalMargin: 12,
+                                columns: const [
+                                  DataColumn(
+                                    label: Text(
+                                      'Ürün Kodu',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'Ürün Adı',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'Seri Numarası',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'Zimmet Miktarı',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'Veriliş Tarihi',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'İş Kodu / Zimmet Notu',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'Hızlı Zimmet İşlemleri',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                rows:
+                                    loans.map((loan) {
+                                      final product = loan['inventory'] ?? {};
+                                      final code =
+                                          (product['code'] ?? '').toString();
+                                      final name =
+                                          (product['displayName'] ??
+                                                  product['name'] ??
+                                                  'Bilinmeyen Ürün')
+                                              .toString();
+                                      final sn =
+                                          (loan['serial_number'] ?? '-')
+                                              .toString();
+                                      final qty = loan['quantity'];
+                                      final unit = product['unit'] ?? 'Adet';
+
+                                      return DataRow(
+                                        cells: [
+                                          DataCell(
+                                            Text(
+                                              code.ifEmpty('-'),
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.ink,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Text(
+                                              name,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.ink,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Text(
+                                              sn,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color:
+                                                    sn != '-'
+                                                        ? AppColors.ink
+                                                        : Colors.grey,
+                                              ),
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 3,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.sand,
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                border: Border.all(
+                                                  color: AppColors.mist,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                '$qty $unit',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppColors.ink,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Text(
+                                              _formatDate(loan['borrowed_at']),
+                                              style: const TextStyle(
+                                                color: AppColors.ink,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Text(
+                                              (loan['note'] ?? '-').toString(),
+                                              style: const TextStyle(
+                                                color: AppColors.ink,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                ElevatedButton.icon(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        AppColors.ink,
+                                                    foregroundColor:
+                                                        Colors.white,
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 10,
+                                                          vertical: 4,
+                                                        ),
+                                                    tapTargetSize:
+                                                        MaterialTapTargetSize
+                                                            .shrinkWrap,
+                                                  ),
+                                                  icon: const Icon(
+                                                    Icons.tune_outlined,
+                                                    size: 14,
+                                                  ),
+                                                  label: const Text(
+                                                    'Zimmeti İşle',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                  onPressed: () {
+                                                    Navigator.pop(ctx);
+                                                    _showCloseLoanModal(loan);
+                                                  },
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Tooltip(
+                                                  message:
+                                                      'Tümünü Sarf Et (Projede Kullanıldı)',
+                                                  child: OutlinedButton.icon(
+                                                    style: OutlinedButton.styleFrom(
+                                                      foregroundColor:
+                                                          AppColors.mint,
+                                                      side: const BorderSide(
+                                                        color: AppColors.mint,
+                                                        width: 1.2,
+                                                      ),
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 4,
+                                                          ),
+                                                      tapTargetSize:
+                                                          MaterialTapTargetSize
+                                                              .shrinkWrap,
+                                                    ),
+                                                    icon: const Icon(
+                                                      Icons
+                                                          .check_circle_outline,
+                                                      size: 14,
+                                                    ),
+                                                    label: const Text(
+                                                      'Sarf',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                    onPressed: () {
+                                                      Navigator.pop(ctx);
+                                                      _showCloseLoanModal(
+                                                        loan,
+                                                        defaultAction:
+                                                            'consumed',
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Tooltip(
+                                                  message:
+                                                      'Arızaya Ayrıldı (RMA / Bozuk)',
+                                                  child: OutlinedButton.icon(
+                                                    style: OutlinedButton.styleFrom(
+                                                      foregroundColor:
+                                                          AppColors
+                                                              .corporateRed,
+                                                      side: const BorderSide(
+                                                        color:
+                                                            AppColors
+                                                                .corporateRed,
+                                                        width: 1.2,
+                                                      ),
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 4,
+                                                          ),
+                                                      tapTargetSize:
+                                                          MaterialTapTargetSize
+                                                              .shrinkWrap,
+                                                    ),
+                                                    icon: const Icon(
+                                                      Icons
+                                                          .build_circle_outlined,
+                                                      size: 14,
+                                                    ),
+                                                    label: const Text(
+                                                      'Arızalı',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                    onPressed: () {
+                                                      Navigator.pop(ctx);
+                                                      _showCloseLoanModal(
+                                                        loan,
+                                                        defaultAction:
+                                                            'defective',
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Tooltip(
+                                                  message:
+                                                      'Sağlam Şekilde Depoya İade Et',
+                                                  child: OutlinedButton.icon(
+                                                    style: OutlinedButton.styleFrom(
+                                                      foregroundColor:
+                                                          AppColors.ink,
+                                                      side: const BorderSide(
+                                                        color: AppColors.mist,
+                                                        width: 1.2,
+                                                      ),
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 4,
+                                                          ),
+                                                      tapTargetSize:
+                                                          MaterialTapTargetSize
+                                                              .shrinkWrap,
+                                                    ),
+                                                    icon: const Icon(
+                                                      Icons.replay,
+                                                      size: 14,
+                                                    ),
+                                                    label: const Text(
+                                                      'İade',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                    onPressed: () {
+                                                      Navigator.pop(ctx);
+                                                      _showCloseLoanModal(
+                                                        loan,
+                                                        defaultAction:
+                                                            'returned',
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    }).toList(),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Kapat'),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Kapat')),
-        ],
-      ),
+    );
+  }
+
+  void _showGroupChecklistModal(
+    String personnelName,
+    String personnelId,
+    List<Map<String, dynamic>> loans,
+  ) {
+    final Set<int> selectedConsumedIds = {};
+    String? selectedJobCode;
+    final noteCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder:
+          (ctx) => StatefulBuilder(
+            builder: (ctx, setModalState) {
+              final returnedCount = loans.length - selectedConsumedIds.length;
+
+              return AlertDialog(
+                title: Row(
+                  children: [
+                    const Icon(Icons.fact_check, color: AppColors.ink),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '$personnelName - Sahadan Dönüş / Checklist İade',
+                      ),
+                    ),
+                  ],
+                ),
+                content: SingleChildScrollView(
+                  child: Container(
+                    width: 560,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Kullanılan veya montajı tamamlanan seri numaralarını işaretleyiniz. Seçilmeyen cihazlar depoya sağlam iade edilecektir.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF5A6E82),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        DropdownButtonFormField<String>(
+                          value: selectedJobCode,
+                          decoration: const InputDecoration(
+                            labelText: 'Sarf Edilen İş Kodu',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: null,
+                              child: Text('Seçilmedi (Genel Sarf)'),
+                            ),
+                            ..._activeTickets.map((t) {
+                              final code = t['job_code'] ?? t['id'];
+                              final cust =
+                                  t['customers'] is Map
+                                      ? (t['customers']['name'] ?? '')
+                                      : '';
+                              return DropdownMenuItem<String>(
+                                value: code.toString(),
+                                child: Text(
+                                  '$code - $cust (${t['title'] ?? ''})',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }),
+                          ],
+                          onChanged:
+                              (val) =>
+                                  setModalState(() => selectedJobCode = val),
+                        ),
+                        const SizedBox(height: 12),
+
+                        Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: AppColors.mist),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: loans.length,
+                            separatorBuilder:
+                                (_, __) => const Divider(height: 1),
+                            itemBuilder: (ctx, idx) {
+                              final loan = loans[idx];
+                              final loanId = loan['id'] as int;
+                              final product = loan['inventory'] ?? {};
+                              final name =
+                                  product['displayName'] ??
+                                  product['name'] ??
+                                  'Cihaz';
+                              final sn = loan['serial_number'] ?? '-';
+                              final isConsumed = selectedConsumedIds.contains(
+                                loanId,
+                              );
+
+                              return CheckboxListTile(
+                                value: isConsumed,
+                                title: Text(
+                                  name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'Seri No: $sn | Veriliş: ${_formatDate(loan['borrowed_at'])}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                secondary:
+                                    isConsumed
+                                        ? const Chip(
+                                          label: Text(
+                                            'Sarf',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          backgroundColor: const Color(
+                                            0xFF2563EB,
+                                          ),
+                                        )
+                                        : const Chip(
+                                          label: Text(
+                                            'İade',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          backgroundColor: AppColors.mint,
+                                        ),
+                                onChanged: (val) {
+                                  setModalState(() {
+                                    if (val == true) {
+                                      selectedConsumedIds.add(loanId);
+                                    } else {
+                                      selectedConsumedIds.remove(loanId);
+                                    }
+                                  });
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.paper,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              Text(
+                                '🔵 Sarf Edilen: ${selectedConsumedIds.length}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF2563EB),
+                                ),
+                              ),
+                              Text(
+                                '🟢 Depoya İade: $returnedCount',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.mint,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        TextField(
+                          controller: noteCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Açıklama / Not',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('İptal'),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.ink,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () async {
+                      final returnedIds =
+                          loans
+                              .map((l) => l['id'] as int)
+                              .where((id) => !selectedConsumedIds.contains(id))
+                              .toList();
+
+                      Navigator.pop(ctx);
+                      try {
+                        await _stockService.processLoanChecklistResolution(
+                          consumedLoanIds: selectedConsumedIds.toList(),
+                          returnedLoanIds: returnedIds,
+                          personnelName: personnelName,
+                          jobCode: selectedJobCode,
+                          note: noteCtrl.text.trim(),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Zimmet dönüşü işlendi (${selectedConsumedIds.length} Sarf / ${returnedIds.length} İade).',
+                            ),
+                            backgroundColor: AppColors.mint,
+                          ),
+                        );
+                        _loadStocks();
+                        _loadPersonnelLoans();
+                        _loadStockMovements();
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Hata: $e'),
+                            backgroundColor: AppColors.corporateRed,
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text('Checklist İle Kapat'),
+                  ),
+                ],
+              );
+            },
+          ),
     );
   }
 
   Widget _buildMovementsTable() {
-    if (_stockMovements.isEmpty) {
-      return Container(
-        decoration: BoxDecoration(
-          color: AppColors.paper,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.mist),
-        ),
-        padding: const EdgeInsets.all(32),
-        child: const Center(child: Text('Stok hareket kaydı bulunamadı.', style: TextStyle(color: Color(0xFF5A6E82)))),
-      );
-    }
+    // Arama ve Filtreleme
+    final q = _movementSearchQuery.trim().toLowerCase();
+    final filteredMovements =
+        _stockMovements.where((mov) {
+          if (_movementTypeFilter == 'in' && mov['movement_type'] != 'in')
+            return false;
+          if (_movementTypeFilter == 'out' && mov['movement_type'] != 'out')
+            return false;
 
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.paper,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.mist),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minWidth: constraints.maxWidth),
-              child: DataTable(
-                headingRowColor: WidgetStateProperty.all(AppColors.ink),
-                headingRowHeight: 44,
-                columns: const [
-                  DataColumn(label: Text('Tarih', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Ürün Adı', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('İşlem Tipi', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Miktar', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Önce / Sonra', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Neden / Hedef', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Açıklama', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                ],
-                rows: _stockMovements.map((mov) {
-                  final isIn = mov['movement_type'] == 'in';
-                  final product = mov['inventory'] ?? {};
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(_formatDate(mov['created_at']), style: const TextStyle(color: AppColors.ink))),
-                      DataCell(Text(product['displayName'] ?? product['name'] ?? '-', style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.ink))),
-                      DataCell(
-                        Chip(
-                          avatar: Icon(isIn ? Icons.arrow_downward : Icons.arrow_upward, size: 14, color: Colors.white),
-                          label: Text(isIn ? 'Stok Girişi (IN)' : 'Stok Çıkışı (OUT)'),
-                          backgroundColor: isIn ? AppColors.mint : AppColors.brass,
-                          labelStyle: const TextStyle(color: Colors.white, fontSize: 11),
-                        ),
-                      ),
-                      DataCell(Text('${mov['quantity']}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
-                      DataCell(Text('${mov['quantity_before']} ➔ ${mov['quantity_after']}', style: const TextStyle(color: AppColors.ink))),
-                      DataCell(Text('${mov['reason'] ?? ''} ${mov['destination'] ?? ''}'.trim(), style: const TextStyle(color: AppColors.ink))),
-                      DataCell(Text(mov['note'] ?? '-', style: const TextStyle(color: AppColors.ink))),
-                    ],
-                  );
-                }).toList(),
+          if (q.isEmpty) return true;
+          final product = mov['inventory'] ?? {};
+          final prodName =
+              (product['displayName'] ?? product['name'] ?? '')
+                  .toString()
+                  .toLowerCase();
+          final sn = (mov['serial_number'] ?? '').toString().toLowerCase();
+          final reason = (mov['reason'] ?? '').toString().toLowerCase();
+          final dest = (mov['destination'] ?? '').toString().toLowerCase();
+          final note = (mov['note'] ?? '').toString().toLowerCase();
+          final creator =
+              (mov['profiles'] is Map
+                      ? (mov['profiles']['full_name'] ??
+                          mov['profiles']['email'] ??
+                          '')
+                      : '')
+                  .toString()
+                  .toLowerCase();
+          final jobCode = (mov['job_code'] ?? '').toString().toLowerCase();
+
+          return prodName.contains(q) ||
+              sn.contains(q) ||
+              reason.contains(q) ||
+              dest.contains(q) ||
+              note.contains(q) ||
+              creator.contains(q) ||
+              jobCode.contains(q);
+        }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ARAMA VE FİLTRE BAR
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.paper,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.mist),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  decoration: const InputDecoration(
+                    hintText:
+                        'Stok hareketlerinde ara (Ürün adı, seri no, personel, iş kodu, neden)...',
+                    prefixIcon: Icon(Icons.search, size: 20),
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged:
+                      (val) => setState(() => _movementSearchQuery = val),
+                ),
+              ),
+              const SizedBox(width: 12),
+              ChoiceChip(
+                label: const Text('Tümü'),
+                selected: _movementTypeFilter == 'all',
+                onSelected: (_) => setState(() => _movementTypeFilter = 'all'),
+              ),
+              const SizedBox(width: 6),
+              ChoiceChip(
+                label: const Text('Girişler (IN)'),
+                selected: _movementTypeFilter == 'in',
+                selectedColor: AppColors.mint.withOpacity(0.2),
+                onSelected: (_) => setState(() => _movementTypeFilter = 'in'),
+              ),
+              const SizedBox(width: 6),
+              ChoiceChip(
+                label: const Text('Çıkışlar (OUT)'),
+                selected: _movementTypeFilter == 'out',
+                selectedColor: AppColors.brass.withOpacity(0.2),
+                onSelected: (_) => setState(() => _movementTypeFilter = 'out'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        if (filteredMovements.isEmpty)
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.paper,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.mist),
+            ),
+            padding: const EdgeInsets.all(32),
+            child: const Center(
+              child: Text(
+                'Kriterlere uygun stok hareket kaydı bulunamadı.',
+                style: TextStyle(color: Color(0xFF5A6E82)),
               ),
             ),
-          );
-        },
-      ),
+          )
+        else
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.paper,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.mist),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                    child: DataTable(
+                      headingRowColor: WidgetStateProperty.all(AppColors.ink),
+                      headingRowHeight: 44,
+                      columns: const [
+                        DataColumn(
+                          label: Text(
+                            'Tarih',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Ürün Adı',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Seri No',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'İşlem Tipi',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Miktar',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Önce ➔ Sonra',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'İşlemi Yapan',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Neden / Hedef',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Açıklama',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                      rows:
+                          filteredMovements.map((mov) {
+                            final isIn = mov['movement_type'] == 'in';
+                            final product = mov['inventory'] ?? {};
+                            final sn = (mov['serial_number'] ?? '-').toString();
+                            final creator =
+                                mov['profiles'] is Map
+                                    ? (mov['profiles']['full_name'] ??
+                                        mov['profiles']['email'] ??
+                                        '-')
+                                    : '-';
+
+                            return DataRow(
+                              cells: [
+                                DataCell(
+                                  Text(
+                                    _formatDate(mov['created_at']),
+                                    style: const TextStyle(
+                                      color: AppColors.ink,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    product['displayName'] ??
+                                        product['name'] ??
+                                        '-',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.ink,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    sn,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color:
+                                          sn != '-'
+                                              ? AppColors.ink
+                                              : Colors.grey,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Chip(
+                                    avatar: Icon(
+                                      isIn
+                                          ? Icons.arrow_downward
+                                          : Icons.arrow_upward,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                    label: Text(
+                                      isIn ? 'GİRİŞ (IN)' : 'ÇIKIŞ (OUT)',
+                                    ),
+                                    backgroundColor:
+                                        isIn ? AppColors.mint : AppColors.brass,
+                                    labelStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${mov['quantity']}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.ink,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${mov['quantity_before']} ➔ ${mov['quantity_after']}',
+                                    style: const TextStyle(
+                                      color: AppColors.ink,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    creator.toString(),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.ink,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${mov['reason'] ?? ''} ${mov['destination'] ?? ''}'
+                                        .trim(),
+                                    style: const TextStyle(
+                                      color: AppColors.ink,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    mov['note'] ?? '-',
+                                    style: const TextStyle(
+                                      color: AppColors.ink,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 
@@ -2650,7 +4625,12 @@ class _StockOverviewPageState extends State<StockOverviewPage>
           border: Border.all(color: AppColors.mist),
         ),
         padding: const EdgeInsets.all(32),
-        child: const Center(child: Text('Eksik malzemesi olan iş emri kaydı bulunmuyor.', style: TextStyle(color: Color(0xFF5A6E82)))),
+        child: const Center(
+          child: Text(
+            'Eksik malzemesi olan iş emri kaydı bulunmuyor.',
+            style: TextStyle(color: Color(0xFF5A6E82)),
+          ),
+        ),
       );
     }
 
@@ -2672,44 +4652,126 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 headingRowColor: WidgetStateProperty.all(AppColors.ink),
                 headingRowHeight: 44,
                 columns: const [
-                  DataColumn(label: Text('İş Kodu', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('İş Başlığı', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Müşteri', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Cihaz / Model', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('Eksik Malzeme Notu', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                  DataColumn(label: Text('İş Detayı', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                  DataColumn(
+                    label: Text(
+                      'İş Kodu',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'İş Başlığı',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Müşteri',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Cihaz / Model',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Eksik Malzeme Notu',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'İş Detayı',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
                 ],
-                rows: _missingTickets.map((t) {
-                  final customer = t['customers'];
-                  final custName = customer is Map ? customer['name'] : '-';
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(t['job_code'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink))),
-                      DataCell(Text(t['title'] ?? '-', style: const TextStyle(color: AppColors.ink))),
-                      DataCell(Text(custName, style: const TextStyle(color: AppColors.ink))),
-                      DataCell(Text('${t['device_brand'] ?? ''} ${t['device_model'] ?? ''}'.trim(), style: const TextStyle(color: AppColors.ink))),
-                      DataCell(
-                        Text(
-                          t['missing_parts'] ?? '',
-                          style: const TextStyle(color: AppColors.corporateRed, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      DataCell(
-                        IconButton(
-                          icon: const Icon(Icons.open_in_new, color: AppColors.brass),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => TicketDetailPage(ticketId: t['id'].toString()),
+                rows:
+                    _missingTickets.map((t) {
+                      final customer = t['customers'];
+                      final custName = customer is Map ? customer['name'] : '-';
+                      return DataRow(
+                        cells: [
+                          DataCell(
+                            Text(
+                              t['job_code'] ?? '-',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.ink,
                               ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              t['title'] ?? '-',
+                              style: const TextStyle(color: AppColors.ink),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              custName,
+                              style: const TextStyle(color: AppColors.ink),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              '${t['device_brand'] ?? ''} ${t['device_model'] ?? ''}'
+                                  .trim(),
+                              style: const TextStyle(color: AppColors.ink),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              t['missing_parts'] ?? '',
+                              style: const TextStyle(
+                                color: AppColors.corporateRed,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            IconButton(
+                              icon: const Icon(
+                                Icons.open_in_new,
+                                color: AppColors.brass,
+                              ),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (_) => TicketDetailPage(
+                                          ticketId: t['id'].toString(),
+                                        ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
               ),
             ),
           );
@@ -2785,7 +4847,10 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
     return AlertDialog(
       title: Column(
         children: [
-          const Text('Stok Kaydı / Depoya Ürün Ekleme', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink)),
+          const Text(
+            'Stok Kaydı / Depoya Ürün Ekleme',
+            style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink),
+          ),
           const SizedBox(height: 12),
           SegmentedButton<int>(
             segments: const [
@@ -2811,7 +4876,10 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
         child: Container(
           width: 500,
           padding: const EdgeInsets.symmetric(vertical: 8),
-          child: _selectedTab == 0 ? _buildCatalogTrackTab() : _buildNewProductTab(),
+          child:
+              _selectedTab == 0
+                  ? _buildCatalogTrackTab()
+                  : _buildNewProductTab(),
         ),
       ),
       actions: [
@@ -2825,7 +4893,11 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
             foregroundColor: Colors.white,
           ),
           onPressed: _submit,
-          child: Text(_selectedTab == 0 ? 'Stoğa Al ve Takip Başlat' : 'Ürünü ve Stoğu Kaydet'),
+          child: Text(
+            _selectedTab == 0
+                ? 'Stoğa Al ve Takip Başlat'
+                : 'Ürünü ve Stoğu Kaydet',
+          ),
         ),
       ],
     );
@@ -2852,11 +4924,18 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
         const SizedBox(height: 12),
 
         if (_loadingCatalog)
-          const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator(color: AppColors.ink)))
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(color: AppColors.ink),
+            ),
+          )
         else if (_catalogProducts.isEmpty)
           const Padding(
             padding: EdgeInsets.all(12),
-            child: Text('Katalogda eşleşen ürün bulunamadı. "Sıfırdan Özel Ürün Ekle" sekmesini kullanabilirsiniz.'),
+            child: Text(
+              'Katalogda eşleşen ürün bulunamadı. "Sıfırdan Özel Ürün Ekle" sekmesini kullanabilirsiniz.',
+            ),
           )
         else
           Container(
@@ -2874,8 +4953,16 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
                   dense: true,
                   selected: isSelected,
                   selectedTileColor: AppColors.surfaceAccent,
-                  title: Text(item['displayName'] ?? item['name'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink)),
-                  subtitle: Text('Kod: ${item['code']} | Kat: ${item['category']} | Marka: ${item['brand']}'),
+                  title: Text(
+                    item['displayName'] ?? item['name'] ?? '-',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Kod: ${item['code']} | Kat: ${item['category']} | Marka: ${item['brand']}',
+                  ),
                   onTap: () {
                     setState(() {
                       _selectedCatalogProduct = item;
@@ -2892,7 +4979,10 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: AppColors.surfaceAccent, borderRadius: BorderRadius.circular(6)),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceAccent,
+              borderRadius: BorderRadius.circular(6),
+            ),
             child: Row(
               children: [
                 const Icon(Icons.check_circle, color: AppColors.ink),
@@ -2900,7 +4990,10 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
                 Expanded(
                   child: Text(
                     'Seçilen Ürün: ${_selectedCatalogProduct!['displayName'] ?? _selectedCatalogProduct!['name']}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.ink,
+                    ),
                   ),
                 ),
               ],
@@ -2913,7 +5006,10 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
                 child: TextField(
                   controller: _trackQtyCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'İlk Stok Miktarı *', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'İlk Stok Miktarı *',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -2921,7 +5017,10 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
                 child: TextField(
                   controller: _trackMinCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Kritik Seviye', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'Kritik Seviye',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
               ),
             ],
@@ -2932,14 +5031,20 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
               Expanded(
                 child: TextField(
                   controller: _trackShelfCtrl,
-                  decoration: const InputDecoration(labelText: 'Raf / Kasa No', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'Raf / Kasa No',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: TextField(
                   controller: _trackBarcodeCtrl,
-                  decoration: const InputDecoration(labelText: 'Barkod / Karekod', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'Barkod / Karekod',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
               ),
             ],
@@ -2955,7 +5060,10 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
       children: [
         TextField(
           controller: _nameCtrl,
-          decoration: const InputDecoration(labelText: 'Ürün Adı *', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            labelText: 'Ürün Adı *',
+            border: OutlineInputBorder(),
+          ),
         ),
         const SizedBox(height: 12),
         Row(
@@ -2963,10 +5071,14 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
             Expanded(
               child: DropdownButtonFormField<String>(
                 value: _category,
-                decoration: const InputDecoration(labelText: 'Kategori', border: OutlineInputBorder()),
-                items: StockService.categories
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
+                decoration: const InputDecoration(
+                  labelText: 'Kategori',
+                  border: OutlineInputBorder(),
+                ),
+                items:
+                    StockService.categories
+                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
                 onChanged: (val) => setState(() => _category = val!),
               ),
             ),
@@ -2974,7 +5086,10 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
             Expanded(
               child: TextField(
                 controller: _unitCtrl,
-                decoration: const InputDecoration(labelText: 'Birim (Adet/m/kg)', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Birim (Adet/m/kg)',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
           ],
@@ -2985,14 +5100,20 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
             Expanded(
               child: TextField(
                 controller: _brandCtrl,
-                decoration: const InputDecoration(labelText: 'Marka', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Marka',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: TextField(
                 controller: _modelCtrl,
-                decoration: const InputDecoration(labelText: 'Model', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Model',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
           ],
@@ -3004,7 +5125,10 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
               child: TextField(
                 controller: _qtyCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'İlk Stok Miktarı', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'İlk Stok Miktarı',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -3012,7 +5136,10 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
               child: TextField(
                 controller: _minCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Kritik Seviye', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Kritik Seviye',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
           ],
@@ -3023,14 +5150,20 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
             Expanded(
               child: TextField(
                 controller: _barcodeCtrl,
-                decoration: const InputDecoration(labelText: 'Barkod / Karekod', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Barkod / Karekod',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: TextField(
                 controller: _shelfCtrl,
-                decoration: const InputDecoration(labelText: 'Raf / Kasa No', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Raf / Kasa No',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
           ],
@@ -3043,7 +5176,11 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
     if (_selectedTab == 0) {
       if (_selectedCatalogProduct == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Lütfen listeden stoğa alınacak bir katalog ürünü seçiniz.')),
+          const SnackBar(
+            content: Text(
+              'Lütfen listeden stoğa alınacak bir katalog ürünü seçiniz.',
+            ),
+          ),
         );
         return;
       }
@@ -3063,7 +5200,10 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Hata: $e'), backgroundColor: AppColors.corporateRed),
+            SnackBar(
+              content: Text('Hata: $e'),
+              backgroundColor: AppColors.corporateRed,
+            ),
           );
         }
       }
@@ -3093,7 +5233,10 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Hata: $e'), backgroundColor: AppColors.corporateRed),
+            SnackBar(
+              content: Text('Hata: $e'),
+              backgroundColor: AppColors.corporateRed,
+            ),
           );
         }
       }

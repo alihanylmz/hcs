@@ -319,6 +319,79 @@ class _PersonnelDetailPageState extends State<PersonnelDetailPage>
                           ),
                           onChanged: (_) => setModalState(() {}),
                         ),
+                        if (selectedStock != null &&
+                            (selectedStock!['serial_numbers'] as List? ?? [])
+                                .isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Depodaki Kayıtlı Seri No\'lardan Hızlıca Seç:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children:
+                                (selectedStock!['serial_numbers'] as List).map((
+                                  snObj,
+                                ) {
+                                  final sn = snObj.toString().trim();
+                                  final isAlreadyAdded = lines.contains(sn);
+                                  return ActionChip(
+                                    avatar: Icon(
+                                      isAlreadyAdded
+                                          ? Icons.check_circle
+                                          : Icons.add_circle_outline,
+                                      size: 14,
+                                      color:
+                                          isAlreadyAdded
+                                              ? AppColors.mint
+                                              : AppColors.ink,
+                                    ),
+                                    label: Text(
+                                      sn,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight:
+                                            isAlreadyAdded
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
+                                      ),
+                                    ),
+                                    backgroundColor:
+                                        isAlreadyAdded
+                                            ? AppColors.mint.withValues(
+                                              alpha: 0.15,
+                                            )
+                                            : AppColors.sand,
+                                    onPressed: () {
+                                      setModalState(() {
+                                        if (isAlreadyAdded) {
+                                          final newLines =
+                                              lines
+                                                  .where((s) => s != sn)
+                                                  .toList();
+                                          serialsCtrl.text = newLines.join(
+                                            '\n',
+                                          );
+                                        } else {
+                                          final newLines = List<String>.from(
+                                            lines,
+                                          )..add(sn);
+                                          serialsCtrl.text = newLines.join(
+                                            '\n',
+                                          );
+                                        }
+                                      });
+                                    },
+                                  );
+                                }).toList(),
+                          ),
+                        ],
                         const SizedBox(height: 12),
 
                         TextField(

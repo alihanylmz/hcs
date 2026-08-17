@@ -743,15 +743,36 @@ class StockService {
               : (profile['email'] ?? 'Personel');
       final actorId = _supabase.auth.currentUser?.id;
 
-      // 1. Depo stok miktarını düşür
+      // 1. Depo stok miktarını düşür ve depodaki seri numaralarından çıkar
       final newQty = curQty - totalQty;
-      await _supabase
-          .from(_table)
-          .update({
-            'stock_quantity': newQty,
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('id', productId);
+      final updatePayload = <String, dynamic>{
+        'stock_quantity': newQty,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      };
+      try {
+        final currentProd =
+            await _supabase
+                .from(_table)
+                .select('specifications')
+                .eq('id', productId)
+                .maybeSingle();
+        if (currentProd != null && currentProd['specifications'] is Map) {
+          final specs = Map<String, dynamic>.from(
+            currentProd['specifications'] as Map,
+          );
+          final rawSerials = specs['serial_numbers'];
+          if (rawSerials is List) {
+            final updatedSerials = List<String>.from(rawSerials)
+              ..removeWhere((sn) => validSerials.contains(sn.trim()));
+            specs['serial_numbers'] = updatedSerials;
+            updatePayload['specifications'] = specs;
+          }
+        }
+      } catch (e) {
+        debugPrint('Seri no düşürme hatası: $e');
+      }
+
+      await _supabase.from(_table).update(updatePayload).eq('id', productId);
 
       // 2. Her seri no için tek tek satır oluştur
       for (final sn in validSerials) {
@@ -973,6 +994,7 @@ class StockService {
 
     // 2. İade Edilenleri Kapat ve Stoğa Ekle (returned)
     final Map<String, int> returnCountsByProduct = {};
+    final Map<String, List<String>> returnSerialsByProduct = {};
     for (final loanId in returnedLoanIds) {
       final loan =
           await _supabase
@@ -982,11 +1004,14 @@ class StockService {
               .maybeSingle();
       if (loan == null) continue;
       final prodId = loan['product_id'].toString();
-      final sn = loan['serial_number']?.toString();
+      final sn = loan['serial_number']?.toString().trim();
       final qty = (loan['quantity'] as num?)?.toInt() ?? 1;
 
       returnCountsByProduct[prodId] =
           (returnCountsByProduct[prodId] ?? 0) + qty;
+      if (sn != null && sn.isNotEmpty) {
+        returnSerialsByProduct.putIfAbsent(prodId, () => []).add(sn);
+      }
 
       await _supabase
           .from('product_stock_loans')
@@ -1009,23 +1034,41 @@ class StockService {
       );
     }
 
-    // Sağlam iade edilen miktarları depo stoğuna tekrar ekle
+    // Sağlam iade edilen miktarları ve seri numaralarını depo stoğuna tekrar ekle
     for (final entry in returnCountsByProduct.entries) {
       try {
         final inv =
             await _supabase
                 .from(_table)
-                .select('stock_quantity')
+                .select('stock_quantity, specifications')
                 .eq('id', entry.key)
                 .single();
         final curQty = (inv['stock_quantity'] as num?)?.toInt() ?? 0;
-        await _supabase
-            .from(_table)
-            .update({
-              'stock_quantity': curQty + entry.value,
-              'updated_at': nowUtc,
-            })
-            .eq('id', entry.key);
+        final updatePayload = <String, dynamic>{
+          'stock_quantity': curQty + entry.value,
+          'updated_at': nowUtc,
+        };
+
+        final newReturnedSerials = returnSerialsByProduct[entry.key] ?? [];
+        if (newReturnedSerials.isNotEmpty) {
+          final specs =
+              inv['specifications'] is Map
+                  ? Map<String, dynamic>.from(inv['specifications'] as Map)
+                  : <String, dynamic>{};
+          final currentSerials =
+              specs['serial_numbers'] is List
+                  ? List<String>.from(specs['serial_numbers'] as List)
+                  : <String>[];
+          for (final sn in newReturnedSerials) {
+            if (!currentSerials.contains(sn)) {
+              currentSerials.add(sn);
+            }
+          }
+          specs['serial_numbers'] = currentSerials;
+          updatePayload['specifications'] = specs;
+        }
+
+        await _supabase.from(_table).update(updatePayload).eq('id', entry.key);
       } catch (e) {
         debugPrint('İade stok artırma hatası (${entry.key}): $e');
       }

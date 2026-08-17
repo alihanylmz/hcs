@@ -25,6 +25,21 @@ class StockService {
       model: model,
     );
 
+    final rawSerials = specifications['serial_numbers'];
+    final List<String> serialNumbers =
+        rawSerials is List
+            ? rawSerials
+                .map((s) => s.toString().trim())
+                .where((s) => s.isNotEmpty)
+                .toList()
+            : rawSerials is String
+            ? rawSerials
+                .split(RegExp(r'[\n,]'))
+                .map((s) => s.trim())
+                .where((s) => s.isNotEmpty)
+                .toList()
+            : <String>[];
+
     return {
       ...product,
       'displayName': formatted['title'],
@@ -34,6 +49,7 @@ class StockService {
       'stock_tracking_started': product['stock_tracking_started'] == true,
       'barcode': specifications['barcode'] ?? product['code'] ?? '',
       'shelf_location': specifications['shelf_location'] ?? '',
+      'serial_numbers': serialNumbers,
     };
   }
 
@@ -113,6 +129,24 @@ class StockService {
         specifications.remove('shelf_location');
       } else {
         specifications['shelf_location'] = shelf;
+      }
+    }
+
+    if (data.containsKey('serial_numbers')) {
+      final rawSerials = data['serial_numbers'];
+      if (rawSerials is List) {
+        specifications['serial_numbers'] =
+            rawSerials
+                .map((s) => s.toString().trim())
+                .where((s) => s.isNotEmpty)
+                .toList();
+      } else if (rawSerials is String) {
+        specifications['serial_numbers'] =
+            rawSerials
+                .split(RegExp(r'[\n,]'))
+                .map((s) => s.trim())
+                .where((s) => s.isNotEmpty)
+                .toList();
       }
     }
 
@@ -247,6 +281,7 @@ class StockService {
     int minimumStock = 0,
     String? shelfLocation,
     String? barcode,
+    List<String> serialNumbers = const [],
   }) async {
     final current =
         await _supabase
@@ -265,10 +300,14 @@ class StockService {
     if (barcode != null && barcode.trim().isNotEmpty) {
       specifications['barcode'] = barcode.trim();
     }
+    if (serialNumbers.isNotEmpty) {
+      specifications['serial_numbers'] = serialNumbers;
+    }
 
     await _supabase
         .from(_table)
         .update({
+          'stock_quantity': initialQuantity,
           'stock_tracking_started': true,
           'minimum_stock': minimumStock,
           'specifications': specifications,
@@ -882,9 +921,14 @@ class StockService {
   /// Checklist ile seçilen zimmet kayıtlarını kapatır:
   /// - Seçilenler -> 'consumed' (Sarf edildi / Projede kullanıldı)
   /// - Seçilmeyenler (veya iade olarak belirtilenler) -> 'returned' (Depoya sağlam iade, stok +1 artar)
+  /// Checklist ile seçilen zimmet kayıtlarını 3 farklı duruma göre kapatır:
+  /// - consumedLoanIds -> 'consumed' (Sahada sarf edildi / Projede kullanıldı)
+  /// - returnedLoanIds -> 'returned' (Depoya sağlam iade, stok +1 artar)
+  /// - defectiveLoanIds / defectiveLoans -> 'defective' (Arızaya ayrıldı, defective_products tablosuna aktarılır, depoya sağlam stok olarak girmez)
   Future<void> processLoanChecklistResolution({
     required List<int> consumedLoanIds,
     required List<int> returnedLoanIds,
+    List<int> defectiveLoanIds = const [],
     List<Map<String, dynamic>> defectiveLoans = const [],
     required String personnelName,
     String? jobCode,
@@ -928,7 +972,6 @@ class StockService {
     }
 
     // 2. İade Edilenleri Kapat ve Stoğa Ekle (returned)
-    // Ürün bazında kaç adet iade edildiğini topla
     final Map<String, int> returnCountsByProduct = {};
     for (final loanId in returnedLoanIds) {
       final loan =
@@ -988,9 +1031,47 @@ class StockService {
       }
     }
 
-    // 3. Arızalı Bildirilenleri İşle
+    // 3. Arızalı Bildirilenleri İşle (defectiveLoanIds ve defectiveLoans)
+    final Set<int> processedDefectiveIds = {};
+
+    for (final loanId in defectiveLoanIds) {
+      processedDefectiveIds.add(loanId);
+      final loan =
+          await _supabase
+              .from('product_stock_loans')
+              .select()
+              .eq('id', loanId)
+              .maybeSingle();
+      if (loan == null) continue;
+      final prodId = loan['product_id'].toString();
+      final sn = loan['serial_number']?.toString();
+
+      await _supabase
+          .from('product_stock_loans')
+          .update({
+            'status': 'defective',
+            'closed_at': nowUtc,
+            'closed_by': actorId,
+            'note':
+                '[ARIZALI] ${note ?? loan['note'] ?? 'Sahadan arızalı döndü'}',
+          })
+          .eq('id', loanId);
+
+      await reportDefectiveProduct(
+        productId: prodId,
+        quantity: 1,
+        reportedByName: personnelName,
+        faultDescription: 'Sahadan arızalı döndü (Seri No: ${sn ?? '-'})',
+        serialNumber: sn,
+        jobCode: jobCode ?? loan['job_code'],
+        notes: note ?? loan['note'],
+        deductFromWarehouseStock: false,
+      );
+    }
+
     for (final def in defectiveLoans) {
       final loanId = def['loanId'] as int;
+      if (processedDefectiveIds.contains(loanId)) continue;
       final prodId = def['productId'].toString();
       final sn = def['serialNumber']?.toString();
       final faultDesc =
@@ -999,7 +1080,7 @@ class StockService {
       await _supabase
           .from('product_stock_loans')
           .update({
-            'status': 'returned',
+            'status': 'defective',
             'closed_at': nowUtc,
             'closed_by': actorId,
             'note': '[ARIZALI] $faultDesc',
@@ -1011,6 +1092,7 @@ class StockService {
         quantity: 1,
         reportedByName: personnelName,
         faultDescription: 'Seri No: ${sn ?? '-'} - $faultDesc',
+        serialNumber: sn,
         jobCode: jobCode,
         notes: note,
         deductFromWarehouseStock: false,
@@ -1290,6 +1372,7 @@ class StockService {
     required int quantity,
     String? reportedByName,
     String? faultDescription,
+    String? serialNumber,
     String? jobCode,
     String? notes,
     bool deductFromWarehouseStock = true,
@@ -1301,6 +1384,7 @@ class StockService {
       'reported_by_name': reportedByName,
       'quantity': quantity,
       'fault_description': faultDescription,
+      'serial_number': serialNumber,
       'job_code': jobCode,
       'notes': notes,
       'status': 'in_faulty_stock',
@@ -1314,6 +1398,7 @@ class StockService {
         reason: 'Arızalıya ayrıldı (Arızalı Depoda)',
         destination: jobCode ?? reportedByName,
         note: faultDescription,
+        serialNumber: serialNumber,
       );
     } else {
       await logStockMovementAudit(
@@ -1323,6 +1408,7 @@ class StockService {
         reason: 'Zimmetten arızalıya ayrıldı (Arızalı Depoda)',
         destination: jobCode ?? reportedByName,
         note: faultDescription,
+        serialNumber: serialNumber,
       );
     }
   }

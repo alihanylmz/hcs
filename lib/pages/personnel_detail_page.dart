@@ -403,8 +403,10 @@ class _PersonnelDetailPageState extends State<PersonnelDetailPage>
   void _showChecklistResolutionModal() {
     if (!_canManageStock || _activeLoans.isEmpty || _profile == null) return;
 
-    final Set<int> selectedConsumedIds = {};
-    final Set<int> selectedDefectiveIds = {};
+    // 3 Durumlu Aksiyon Haritası: Her cihaz 'returned' (Sağlam İade), 'consumed' (Sarf) veya 'defective' (Arızalı) olabilir.
+    final Map<int, String> loanActions = {
+      for (var l in _activeLoans) (l['id'] as int): 'returned',
+    };
     String? selectedJobCode;
     final noteCtrl = TextEditingController();
 
@@ -414,9 +416,17 @@ class _PersonnelDetailPageState extends State<PersonnelDetailPage>
           (ctx) => StatefulBuilder(
             builder: (ctx, setModalState) {
               final returnedCount =
-                  _activeLoans.length -
-                  selectedConsumedIds.length -
-                  selectedDefectiveIds.length;
+                  _activeLoans
+                      .where((l) => loanActions[l['id'] as int] == 'returned')
+                      .length;
+              final consumedCount =
+                  _activeLoans
+                      .where((l) => loanActions[l['id'] as int] == 'consumed')
+                      .length;
+              final defectiveCount =
+                  _activeLoans
+                      .where((l) => loanActions[l['id'] as int] == 'defective')
+                      .length;
 
               return AlertDialog(
                 title: Row(
@@ -425,21 +435,21 @@ class _PersonnelDetailPageState extends State<PersonnelDetailPage>
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${_profile!.displayName} - Sahadan Dönüş / Checklist İade',
+                        '${_profile!.displayName} - Sahadan Dönüş / Zimmet Kapatma',
                       ),
                     ),
                   ],
                 ),
                 content: SingleChildScrollView(
                   child: Container(
-                    width: 580,
+                    width: 650,
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Sahada kullanılan veya montajı yapılan seri numaralarını işaretleyiniz. Seçilmeyen tüm cihazlar otomatik olarak depoya sağlam iade edilecektir.',
+                          'Her bir cihaz için sahadan dönüş durumunu belirleyiniz (Sağlam İade, Sarf Edildi veya Arızalı).',
                           style: TextStyle(
                             fontSize: 12,
                             color: Color(0xFF5A6E82),
@@ -450,13 +460,13 @@ class _PersonnelDetailPageState extends State<PersonnelDetailPage>
                         DropdownButtonFormField<String>(
                           value: selectedJobCode,
                           decoration: const InputDecoration(
-                            labelText: 'Kullanılan İş Kodu (İş Emri)',
+                            labelText: 'Kullanılan İş Kodu (İş Emri / Proje)',
                             border: OutlineInputBorder(),
                           ),
                           items: [
                             const DropdownMenuItem<String>(
                               value: null,
-                              child: Text('Seçilmedi (Genel Sarf)'),
+                              child: Text('Seçilmedi (Genel Dönüş)'),
                             ),
                             ..._activeTicketsList.map((t) {
                               final code = t['job_code'] ?? t['id'];
@@ -500,81 +510,139 @@ class _PersonnelDetailPageState extends State<PersonnelDetailPage>
                                   product['name'] ??
                                   'Cihaz';
                               final sn = loan['serial_number'] ?? 'Seri No Yok';
-                              final isConsumed = selectedConsumedIds.contains(
-                                loanId,
-                              );
-                              final isDefective = selectedDefectiveIds.contains(
-                                loanId,
-                              );
+                              final currentAction =
+                                  loanActions[loanId] ?? 'returned';
 
                               return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
                                 color:
-                                    isConsumed
+                                    currentAction == 'consumed'
                                         ? const Color(
                                           0xFF2563EB,
-                                        ).withOpacity(0.08)
-                                        : isDefective
-                                        ? AppColors.corporateRed.withOpacity(
-                                          0.08,
+                                        ).withValues(alpha: 0.05)
+                                        : currentAction == 'defective'
+                                        ? AppColors.corporateRed.withValues(
+                                          alpha: 0.05,
                                         )
-                                        : Colors.transparent,
-                                child: CheckboxListTile(
-                                  value: isConsumed,
-                                  title: Text(
-                                    '$name',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    'Seri No: $sn | Veriliş: ${_formatDate(loan['borrowed_at'])} ${loan['job_code'] != null ? '(${loan['job_code']})' : ''}',
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  secondary:
-                                      isConsumed
-                                          ? const Chip(
-                                            label: Text(
-                                              'Sarf Edildi',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: Colors.white,
-                                              ),
+                                        : AppColors.mint.withValues(
+                                          alpha: 0.05,
+                                        ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            name,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
                                             ),
-                                            backgroundColor: Color(0xFF2563EB),
-                                          )
-                                          : isDefective
-                                          ? const Chip(
-                                            label: Text(
-                                              'Arızalı',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                            backgroundColor:
-                                                AppColors.corporateRed,
-                                          )
-                                          : const Chip(
-                                            label: Text(
-                                              'Stoğa İade',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                            backgroundColor: AppColors.mint,
                                           ),
-                                  onChanged: (val) {
-                                    setModalState(() {
-                                      if (val == true) {
-                                        selectedConsumedIds.add(loanId);
-                                        selectedDefectiveIds.remove(loanId);
-                                      } else {
-                                        selectedConsumedIds.remove(loanId);
-                                      }
-                                    });
-                                  },
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Seri No: $sn | Veriliş: ${_formatDate(loan['borrowed_at'])} ${loan['job_code'] != null ? '(${loan['job_code']})' : ''}',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF5A6E82),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Wrap(
+                                      spacing: 4,
+                                      children: [
+                                        ChoiceChip(
+                                          avatar: Icon(
+                                            Icons.keyboard_return,
+                                            size: 13,
+                                            color:
+                                                currentAction == 'returned'
+                                                    ? Colors.white
+                                                    : AppColors.mint,
+                                          ),
+                                          label: const Text('Sağlam İade'),
+                                          selected: currentAction == 'returned',
+                                          selectedColor: AppColors.mint,
+                                          labelStyle: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color:
+                                                currentAction == 'returned'
+                                                    ? Colors.white
+                                                    : AppColors.ink,
+                                          ),
+                                          onSelected: (_) {
+                                            setModalState(() {
+                                              loanActions[loanId] = 'returned';
+                                            });
+                                          },
+                                        ),
+                                        ChoiceChip(
+                                          avatar: Icon(
+                                            Icons.check_circle_outline,
+                                            size: 13,
+                                            color:
+                                                currentAction == 'consumed'
+                                                    ? Colors.white
+                                                    : const Color(0xFF2563EB),
+                                          ),
+                                          label: const Text('Sarf Edildi'),
+                                          selected: currentAction == 'consumed',
+                                          selectedColor: const Color(
+                                            0xFF2563EB,
+                                          ),
+                                          labelStyle: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color:
+                                                currentAction == 'consumed'
+                                                    ? Colors.white
+                                                    : AppColors.ink,
+                                          ),
+                                          onSelected: (_) {
+                                            setModalState(() {
+                                              loanActions[loanId] = 'consumed';
+                                            });
+                                          },
+                                        ),
+                                        ChoiceChip(
+                                          avatar: Icon(
+                                            Icons.build_circle_outlined,
+                                            size: 13,
+                                            color:
+                                                currentAction == 'defective'
+                                                    ? Colors.white
+                                                    : AppColors.corporateRed,
+                                          ),
+                                          label: const Text('Arızalı'),
+                                          selected:
+                                              currentAction == 'defective',
+                                          selectedColor: AppColors.corporateRed,
+                                          labelStyle: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color:
+                                                currentAction == 'defective'
+                                                    ? Colors.white
+                                                    : AppColors.ink,
+                                          ),
+                                          onSelected: (_) {
+                                            setModalState(() {
+                                              loanActions[loanId] = 'defective';
+                                            });
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               );
                             },
@@ -588,22 +656,30 @@ class _PersonnelDetailPageState extends State<PersonnelDetailPage>
                           decoration: BoxDecoration(
                             color: AppColors.paper,
                             borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppColors.mist),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: [
                               Text(
-                                '🔵 Sarf: ${selectedConsumedIds.length}',
+                                '🟢 Sağlam İade: $returnedCount',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.mint,
+                                ),
+                              ),
+                              Text(
+                                '🔵 Sarf: $consumedCount',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFF2563EB),
                                 ),
                               ),
                               Text(
-                                '🟢 Depoya İade: $returnedCount',
+                                '🔴 Arızalı: $defectiveCount',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: AppColors.mint,
+                                  color: AppColors.corporateRed,
                                 ),
                               ),
                             ],
@@ -633,21 +709,28 @@ class _PersonnelDetailPageState extends State<PersonnelDetailPage>
                       foregroundColor: Colors.white,
                     ),
                     onPressed: () async {
+                      final consumedIds =
+                          _activeLoans
+                              .map((l) => l['id'] as int)
+                              .where((id) => loanActions[id] == 'consumed')
+                              .toList();
                       final returnedIds =
                           _activeLoans
                               .map((l) => l['id'] as int)
-                              .where(
-                                (id) =>
-                                    !selectedConsumedIds.contains(id) &&
-                                    !selectedDefectiveIds.contains(id),
-                              )
+                              .where((id) => loanActions[id] == 'returned')
+                              .toList();
+                      final defectiveIds =
+                          _activeLoans
+                              .map((l) => l['id'] as int)
+                              .where((id) => loanActions[id] == 'defective')
                               .toList();
 
                       Navigator.pop(ctx);
                       try {
                         await _stockService.processLoanChecklistResolution(
-                          consumedLoanIds: selectedConsumedIds.toList(),
+                          consumedLoanIds: consumedIds,
                           returnedLoanIds: returnedIds,
+                          defectiveLoanIds: defectiveIds,
                           personnelName: _profile!.displayName,
                           jobCode: selectedJobCode,
                           note: noteCtrl.text.trim(),
@@ -655,7 +738,7 @@ class _PersonnelDetailPageState extends State<PersonnelDetailPage>
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              'Zimmet dönüşü işlendi (${selectedConsumedIds.length} Sarf / ${returnedIds.length} İade).',
+                              'Zimmet dönüşü işlendi (${returnedIds.length} Sağlam İade / ${consumedIds.length} Sarf / ${defectiveIds.length} Arızalı).',
                             ),
                             backgroundColor: AppColors.mint,
                           ),

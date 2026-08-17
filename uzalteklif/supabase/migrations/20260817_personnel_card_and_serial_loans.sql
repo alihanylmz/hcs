@@ -203,3 +203,11 @@ begin
     return v_batch_id;
 end;
 $$;
+
+-- 5. defective_products tablosunu genişletme
+alter table public.defective_products
+add column if not exists serial_number text;
+
+create index if not exists defective_products_serial_idx
+on public.defective_products (serial_number);
+

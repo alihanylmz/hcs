@@ -460,6 +460,12 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     final shelfCtrl = TextEditingController(
       text: stock['shelf_location'] ?? '',
     );
+    final serialsCtrl = TextEditingController(
+      text:
+          (stock['serial_numbers'] is List
+              ? (stock['serial_numbers'] as List).join('\n')
+              : ''),
+    );
     String category = stock['category'] ?? StockService.categories.first;
 
     showDialog(
@@ -592,6 +598,18 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: serialsCtrl,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText:
+                            'Depo Seri Numaraları (Opsiyonel / İsteğe Bağlı)',
+                        hintText:
+                            'Her satıra bir seri no yazın veya barkod okutun:\nSN-101\nSN-102',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -608,6 +626,12 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 ),
                 onPressed: () async {
                   if (nameCtrl.text.trim().isEmpty) return;
+                  final serialList =
+                      serialsCtrl.text
+                          .split(RegExp(r'[\n,]'))
+                          .map((s) => s.trim())
+                          .where((s) => s.isNotEmpty)
+                          .toList();
                   final payload = {
                     'name': nameCtrl.text.trim(),
                     'category': category,
@@ -618,6 +642,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                     'critical_level': int.tryParse(minCtrl.text.trim()) ?? 0,
                     'barcode': barcodeCtrl.text.trim(),
                     'shelf_location': shelfCtrl.text.trim(),
+                    'serial_numbers': serialList,
                   };
                   Navigator.pop(ctx);
                   await _stockService.updateStock(stock['id'], payload);
@@ -898,6 +923,206 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 child: const Text('İşlemi Kaydet'),
               ),
             ],
+          ),
+    );
+  }
+
+  // --- ÜRÜN DEPO SERİ NUMARALARI YÖNETİM MODALI ---
+  void _showProductSerialsModal(Map<String, dynamic> stock) {
+    final List<String> currentSerials = List<String>.from(
+      stock['serial_numbers'] is List ? (stock['serial_numbers'] as List) : [],
+    );
+    final addCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder:
+          (ctx) => StatefulBuilder(
+            builder: (ctx, setModalState) {
+              return AlertDialog(
+                title: Row(
+                  children: [
+                    const Icon(Icons.qr_code_2, color: AppColors.ink),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Seri Numaraları: ${stock['displayName'] ?? stock['name']}',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  ],
+                ),
+                content: SizedBox(
+                  width: 480,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Bu ürüne ait depoda kayıtlı ${currentSerials.length} adet seri numarası bulunmaktadır. Çıkış yapmadan da buradan seri no ekleyip çıkarabilirsiniz.',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF5A6E82),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: addCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Yeni Seri No (veya virgülle çoklu)',
+                                hintText: 'Örn: SN-101, SN-102',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onSubmitted: (val) {
+                                final parts = val
+                                    .split(RegExp(r'[\n,]'))
+                                    .map((s) => s.trim())
+                                    .where((s) => s.isNotEmpty);
+                                if (parts.isNotEmpty) {
+                                  setModalState(() {
+                                    for (final p in parts) {
+                                      if (!currentSerials.contains(p)) {
+                                        currentSerials.add(p);
+                                      }
+                                    }
+                                    addCtrl.clear();
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.ink,
+                              foregroundColor: Colors.white,
+                            ),
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Ekle'),
+                            onPressed: () {
+                              final parts = addCtrl.text
+                                  .split(RegExp(r'[\n,]'))
+                                  .map((s) => s.trim())
+                                  .where((s) => s.isNotEmpty);
+                              if (parts.isNotEmpty) {
+                                setModalState(() {
+                                  for (final p in parts) {
+                                    if (!currentSerials.contains(p)) {
+                                      currentSerials.add(p);
+                                    }
+                                  }
+                                  addCtrl.clear();
+                                });
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 220),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.mist),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child:
+                            currentSerials.isEmpty
+                                ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Text(
+                                      'Kayıtlı seri numarası bulunmuyor.',
+                                    ),
+                                  ),
+                                )
+                                : ListView.separated(
+                                  shrinkWrap: true,
+                                  itemCount: currentSerials.length,
+                                  separatorBuilder:
+                                      (_, __) => const Divider(height: 1),
+                                  itemBuilder: (ctx, i) {
+                                    final sn = currentSerials[i];
+                                    return ListTile(
+                                      dense: true,
+                                      leading: const Icon(
+                                        Icons.confirmation_number_outlined,
+                                        size: 16,
+                                        color: AppColors.brass,
+                                      ),
+                                      title: Text(
+                                        sn,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      trailing: IconButton(
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          size: 18,
+                                          color: AppColors.corporateRed,
+                                        ),
+                                        onPressed: () {
+                                          setModalState(() {
+                                            currentSerials.removeAt(i);
+                                          });
+                                        },
+                                      ),
+                                    );
+                                  },
+                                ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('İptal'),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.ink,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      try {
+                        await _stockService.updateStock(
+                          stock['id'].toString(),
+                          {'serial_numbers': currentSerials},
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Seri numaraları başarıyla güncellendi.',
+                              ),
+                              backgroundColor: AppColors.mint,
+                            ),
+                          );
+                          _loadStocks();
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Hata: $e'),
+                              backgroundColor: AppColors.corporateRed,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Kaydet'),
+                  ),
+                ],
+              );
+            },
           ),
     );
   }
@@ -2552,6 +2777,43 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
+                                    if ((item['serial_numbers'] as List? ?? [])
+                                        .isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 3),
+                                        child: InkWell(
+                                          onTap:
+                                              () => _showProductSerialsModal(
+                                                item,
+                                              ),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 1.5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(
+                                                0xFF2563EB,
+                                              ).withValues(alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                color: const Color(
+                                                  0xFF2563EB,
+                                                ).withValues(alpha: 0.3),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              '🔢 ${(item['serial_numbers'] as List).length} Seri No',
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                color: Color(0xFF2563EB),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -2736,6 +2998,8 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                                               );
                                             if (val == 'loan')
                                               _showPersonnelLoanModal(item);
+                                            if (val == 'serials')
+                                              _showProductSerialsModal(item);
                                             if (val == 'edit')
                                               _showAddOrTrackStockModal(item);
                                             if (val == 'untrack')
@@ -2801,6 +3065,30 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                                                       SizedBox(width: 8),
                                                       Text(
                                                         'Personele Zimmetle',
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 13,
+                                                          color: AppColors.ink,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'serials',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.qr_code_2,
+                                                        color: Color(
+                                                          0xFF2563EB,
+                                                        ),
+                                                        size: 18,
+                                                      ),
+                                                      SizedBox(width: 8),
+                                                      Text(
+                                                        'Depo Seri Numaraları',
                                                         style: TextStyle(
                                                           fontWeight:
                                                               FontWeight.bold,
@@ -4046,7 +4334,10 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     String personnelId,
     List<Map<String, dynamic>> loans,
   ) {
-    final Set<int> selectedConsumedIds = {};
+    // 3 Durumlu Aksiyon Haritası: Her cihaz 'returned' (Sağlam İade), 'consumed' (Sarf) veya 'defective' (Arızalı) olabilir.
+    final Map<int, String> loanActions = {
+      for (var l in loans) (l['id'] as int): 'returned',
+    };
     String? selectedJobCode;
     final noteCtrl = TextEditingController();
 
@@ -4055,7 +4346,18 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       builder:
           (ctx) => StatefulBuilder(
             builder: (ctx, setModalState) {
-              final returnedCount = loans.length - selectedConsumedIds.length;
+              final returnedCount =
+                  loans
+                      .where((l) => loanActions[l['id'] as int] == 'returned')
+                      .length;
+              final consumedCount =
+                  loans
+                      .where((l) => loanActions[l['id'] as int] == 'consumed')
+                      .length;
+              final defectiveCount =
+                  loans
+                      .where((l) => loanActions[l['id'] as int] == 'defective')
+                      .length;
 
               return AlertDialog(
                 title: Row(
@@ -4064,21 +4366,21 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '$personnelName - Sahadan Dönüş / Checklist İade',
+                        '$personnelName - Sahadan Dönüş / Zimmet Kapatma',
                       ),
                     ),
                   ],
                 ),
                 content: SingleChildScrollView(
                   child: Container(
-                    width: 560,
+                    width: 650,
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Kullanılan veya montajı tamamlanan seri numaralarını işaretleyiniz. Seçilmeyen cihazlar depoya sağlam iade edilecektir.',
+                          'Her bir cihaz için dönüş durumunu seçiniz (Sağlam İade, Sarf Edildi veya Arızalı).',
                           style: TextStyle(
                             fontSize: 12,
                             color: Color(0xFF5A6E82),
@@ -4089,13 +4391,13 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                         DropdownButtonFormField<String>(
                           value: selectedJobCode,
                           decoration: const InputDecoration(
-                            labelText: 'Sarf Edilen İş Kodu',
+                            labelText: 'İlişkili İş Kodu / Proje',
                             border: OutlineInputBorder(),
                           ),
                           items: [
                             const DropdownMenuItem<String>(
                               value: null,
-                              child: Text('Seçilmedi (Genel Sarf)'),
+                              child: Text('Seçilmedi (Genel Dönüş)'),
                             ),
                             ..._activeTickets.map((t) {
                               final code = t['job_code'] ?? t['id'];
@@ -4138,56 +4440,140 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                                   product['name'] ??
                                   'Cihaz';
                               final sn = loan['serial_number'] ?? '-';
-                              final isConsumed = selectedConsumedIds.contains(
-                                loanId,
-                              );
+                              final currentAction =
+                                  loanActions[loanId] ?? 'returned';
 
-                              return CheckboxListTile(
-                                value: isConsumed,
-                                title: Text(
-                                  name,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
                                 ),
-                                subtitle: Text(
-                                  'Seri No: $sn | Veriliş: ${_formatDate(loan['borrowed_at'])}',
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                secondary:
-                                    isConsumed
-                                        ? const Chip(
-                                          label: Text(
-                                            'Sarf',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.white,
+                                color:
+                                    currentAction == 'consumed'
+                                        ? const Color(
+                                          0xFF2563EB,
+                                        ).withValues(alpha: 0.05)
+                                        : currentAction == 'defective'
+                                        ? AppColors.corporateRed.withValues(
+                                          alpha: 0.05,
+                                        )
+                                        : AppColors.mint.withValues(
+                                          alpha: 0.05,
+                                        ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            name,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
                                             ),
                                           ),
-                                          backgroundColor: const Color(
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Seri No: $sn | Veriliş: ${_formatDate(loan['borrowed_at'])}',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF5A6E82),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Wrap(
+                                      spacing: 4,
+                                      children: [
+                                        ChoiceChip(
+                                          avatar: Icon(
+                                            Icons.keyboard_return,
+                                            size: 13,
+                                            color:
+                                                currentAction == 'returned'
+                                                    ? Colors.white
+                                                    : AppColors.mint,
+                                          ),
+                                          label: const Text('Sağlam İade'),
+                                          selected: currentAction == 'returned',
+                                          selectedColor: AppColors.mint,
+                                          labelStyle: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color:
+                                                currentAction == 'returned'
+                                                    ? Colors.white
+                                                    : AppColors.ink,
+                                          ),
+                                          onSelected: (_) {
+                                            setModalState(() {
+                                              loanActions[loanId] = 'returned';
+                                            });
+                                          },
+                                        ),
+                                        ChoiceChip(
+                                          avatar: Icon(
+                                            Icons.check_circle_outline,
+                                            size: 13,
+                                            color:
+                                                currentAction == 'consumed'
+                                                    ? Colors.white
+                                                    : const Color(0xFF2563EB),
+                                          ),
+                                          label: const Text('Sarf Edildi'),
+                                          selected: currentAction == 'consumed',
+                                          selectedColor: const Color(
                                             0xFF2563EB,
                                           ),
-                                        )
-                                        : const Chip(
-                                          label: Text(
-                                            'İade',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.white,
-                                            ),
+                                          labelStyle: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color:
+                                                currentAction == 'consumed'
+                                                    ? Colors.white
+                                                    : AppColors.ink,
                                           ),
-                                          backgroundColor: AppColors.mint,
+                                          onSelected: (_) {
+                                            setModalState(() {
+                                              loanActions[loanId] = 'consumed';
+                                            });
+                                          },
                                         ),
-                                onChanged: (val) {
-                                  setModalState(() {
-                                    if (val == true) {
-                                      selectedConsumedIds.add(loanId);
-                                    } else {
-                                      selectedConsumedIds.remove(loanId);
-                                    }
-                                  });
-                                },
+                                        ChoiceChip(
+                                          avatar: Icon(
+                                            Icons.build_circle_outlined,
+                                            size: 13,
+                                            color:
+                                                currentAction == 'defective'
+                                                    ? Colors.white
+                                                    : AppColors.corporateRed,
+                                          ),
+                                          label: const Text('Arızalı'),
+                                          selected:
+                                              currentAction == 'defective',
+                                          selectedColor: AppColors.corporateRed,
+                                          labelStyle: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color:
+                                                currentAction == 'defective'
+                                                    ? Colors.white
+                                                    : AppColors.ink,
+                                          ),
+                                          onSelected: (_) {
+                                            setModalState(() {
+                                              loanActions[loanId] = 'defective';
+                                            });
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               );
                             },
                           ),
@@ -4199,22 +4585,30 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                           decoration: BoxDecoration(
                             color: AppColors.paper,
                             borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppColors.mist),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: [
                               Text(
-                                '🔵 Sarf Edilen: ${selectedConsumedIds.length}',
+                                '🟢 Sağlam İade: $returnedCount',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.mint,
+                                ),
+                              ),
+                              Text(
+                                '🔵 Sarf Edilen: $consumedCount',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFF2563EB),
                                 ),
                               ),
                               Text(
-                                '🟢 Depoya İade: $returnedCount',
+                                '🔴 Arızalı Ayrılan: $defectiveCount',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: AppColors.mint,
+                                  color: AppColors.corporateRed,
                                 ),
                               ),
                             ],
@@ -4244,17 +4638,28 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                       foregroundColor: Colors.white,
                     ),
                     onPressed: () async {
+                      final consumedIds =
+                          loans
+                              .map((l) => l['id'] as int)
+                              .where((id) => loanActions[id] == 'consumed')
+                              .toList();
                       final returnedIds =
                           loans
                               .map((l) => l['id'] as int)
-                              .where((id) => !selectedConsumedIds.contains(id))
+                              .where((id) => loanActions[id] == 'returned')
+                              .toList();
+                      final defectiveIds =
+                          loans
+                              .map((l) => l['id'] as int)
+                              .where((id) => loanActions[id] == 'defective')
                               .toList();
 
                       Navigator.pop(ctx);
                       try {
                         await _stockService.processLoanChecklistResolution(
-                          consumedLoanIds: selectedConsumedIds.toList(),
+                          consumedLoanIds: consumedIds,
                           returnedLoanIds: returnedIds,
+                          defectiveLoanIds: defectiveIds,
                           personnelName: personnelName,
                           jobCode: selectedJobCode,
                           note: noteCtrl.text.trim(),
@@ -4262,7 +4667,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              'Zimmet dönüşü işlendi (${selectedConsumedIds.length} Sarf / ${returnedIds.length} İade).',
+                              'Zimmet dönüşü işlendi (${returnedIds.length} Sağlam İade / ${consumedIds.length} Sarf / ${defectiveIds.length} Arızalı).',
                             ),
                             backgroundColor: AppColors.mint,
                           ),
@@ -4270,6 +4675,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                         _loadStocks();
                         _loadPersonnelLoans();
                         _loadStockMovements();
+                        _loadDefectiveProducts();
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -4809,6 +5215,7 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
   final _trackMinCtrl = TextEditingController(text: '5');
   final _trackShelfCtrl = TextEditingController();
   final _trackBarcodeCtrl = TextEditingController();
+  final _trackSerialsCtrl = TextEditingController();
 
   // Tab 2 State: Sıfırdan Ürün Ekle
   final _nameCtrl = TextEditingController();
@@ -4819,6 +5226,7 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
   final _minCtrl = TextEditingController(text: '5');
   final _barcodeCtrl = TextEditingController();
   final _shelfCtrl = TextEditingController();
+  final _serialsCtrl = TextEditingController();
   String _category = StockService.categories.first;
 
   @override
@@ -5049,6 +5457,17 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _trackSerialsCtrl,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Cihaz Seri Numaraları (Opsiyonel / İsteğe Bağlı)',
+              hintText:
+                  'Her satıra bir seri no yazın veya barkod okutun:\nSN-101\nSN-102',
+              border: OutlineInputBorder(),
+            ),
+          ),
         ],
       ],
     );
@@ -5168,6 +5587,17 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _serialsCtrl,
+          maxLines: 2,
+          decoration: const InputDecoration(
+            labelText: 'Cihaz Seri Numaraları (Opsiyonel / İsteğe Bağlı)',
+            hintText:
+                'Her satıra bir seri no yazın veya barkod okutun:\nSN-101\nSN-102',
+            border: OutlineInputBorder(),
+          ),
+        ),
       ],
     );
   }
@@ -5187,6 +5617,12 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
 
       final qty = int.tryParse(_trackQtyCtrl.text.trim()) ?? 0;
       final min = int.tryParse(_trackMinCtrl.text.trim()) ?? 0;
+      final serialList =
+          _trackSerialsCtrl.text
+              .split(RegExp(r'[\n,]'))
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
 
       try {
         await _stockService.startStockTracking(
@@ -5195,6 +5631,7 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
           minimumStock: min,
           shelfLocation: _trackShelfCtrl.text.trim(),
           barcode: _trackBarcodeCtrl.text.trim(),
+          serialNumbers: serialList,
         );
         if (mounted) Navigator.pop(context, true);
       } catch (e) {
@@ -5215,6 +5652,13 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
         return;
       }
 
+      final serialList =
+          _serialsCtrl.text
+              .split(RegExp(r'[\n,]'))
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+
       final payload = {
         'name': _nameCtrl.text.trim(),
         'category': _category,
@@ -5225,6 +5669,7 @@ class _StockAddOrTrackDialogState extends State<_StockAddOrTrackDialog> {
         'critical_level': int.tryParse(_minCtrl.text.trim()) ?? 0,
         'barcode': _barcodeCtrl.text.trim(),
         'shelf_location': _shelfCtrl.text.trim(),
+        'serial_numbers': serialList,
       };
 
       try {

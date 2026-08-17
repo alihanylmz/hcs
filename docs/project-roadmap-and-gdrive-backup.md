@@ -62,7 +62,13 @@ Supabase veritabanını veya Storage alanını kazaen veya kota olarak **şişir
 1. ⏳ **Google Drive Otomatik PDF Arşivleme Entegrasyonu** *(Yukarıdaki rehbere göre kurulacak)*.
 2. ⏳ **Atölye Ustası Fotoğraflı İş Bitirme Onayı:** Atölye imalat kartında ustanın tamamlanan panonun fotoğrafını yükleyerek kalite kontrolü tamamlaması.
 3. ⏳ **Cari Hesap Ekstresi & Genel Raporlama:** Müşteriye kesilen teklif ve iş emirlerinin toplu PDF ekstresi.
+4. ⏳ **İş Emri Kullanılan Malzeme & Parça Profesyonel Entegrasyonu:**
+   - `ticket_parts` tablosunun seri numarası (`serial_number`), faturalandırma/garanti durumu (`is_billable`, `warranty`), birim fiyat/maliyet ve kaynak türü (`source_type`: Depo / Teknisyen Zimmeti) ile genişletilmesi.
+   - `TicketDetailPage` (İş Emri Detay) ekranına doğrudan tek tıkla **"Parça / Malzeme Ekle"** modalı (`Kendi Zimmetimden Kullan` veya `Depo Stoğundan Kullan`).
+   - Personel zimmetindeki seri numaralı cihazlar (`product_stock_loans`) ile iş emrinin çift yönlü senkronizasyonu (sarf edildiğinde zimmetten otomatik düşme).
+   - Resmi Müşteri Servis Formu ve Onay PDF çıktısına (`TicketPdfService`) kullanılan malzemeler / yedek parçalar tablosunun eklenmesi.
 
 ---
 
 > **NOT:** Bu doküman kullanıcının talebi üzerine oluşturulmuştur ve gelecekteki tüm AI sohbetlerinde referans doküman olarak kabul edilecektir.
+

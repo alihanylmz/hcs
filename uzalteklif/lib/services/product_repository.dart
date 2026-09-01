@@ -442,6 +442,61 @@ class ProductRepository {
     return updated.length;
   }
 
+  Future<int> applyBulkPriceChange({
+    String brand = '',
+    String category = '',
+    String query = '',
+    required double percentage,
+  }) async {
+    final normalizedBrand = brand.trim().toLowerCase();
+    final normalizedCategory = category.trim().toLowerCase();
+    final normalizedQuery = query.trim().toLowerCase();
+    final now = DateTime.now().toUtc();
+    final multiplier = 1 + (percentage / 100);
+
+    final products = await fetchProducts();
+    final updated = products
+        .where((product) {
+          final matchesBrand =
+              normalizedBrand.isEmpty ||
+              product.brand.trim().toLowerCase() == normalizedBrand;
+          final matchesCategory =
+              normalizedCategory.isEmpty ||
+              product.category.trim().toLowerCase() == normalizedCategory;
+          final matchesQuery =
+              normalizedQuery.isEmpty ||
+              product.code.toLowerCase().contains(normalizedQuery) ||
+              product.name.toLowerCase().contains(normalizedQuery);
+          return matchesBrand && matchesCategory && matchesQuery;
+        })
+        .map(
+          (product) => product.copyWith(
+            salePrice: _roundedPrice(product.salePrice * multiplier),
+            updatedAt: now,
+          ),
+        )
+        .toList(growable: false);
+
+    if (updated.isEmpty) {
+      return 0;
+    }
+
+    if (_client != null) {
+      await _client
+          .from('products')
+          .upsert(
+            updated.map((product) => product.toJson()).toList(growable: false),
+            onConflict: 'code',
+          );
+    }
+
+    for (final product in updated) {
+      _upsertMemoryProduct(product);
+    }
+
+    return updated.length;
+  }
+
   List<Product> _sortedMemoryProducts() {
     final products = List<Product>.from(_memoryProducts);
     products.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));

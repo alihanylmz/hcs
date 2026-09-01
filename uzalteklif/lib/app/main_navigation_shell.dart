@@ -250,6 +250,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
             ownCompanyRepository: widget.bootstrap.ownCompanyRepository,
             priceAdjustmentRuleRepository:
                 widget.bootstrap.priceAdjustmentRuleRepository,
+            productRepository: widget.bootstrap.productRepository,
           );
         }
         return ProfileSettingsPage(

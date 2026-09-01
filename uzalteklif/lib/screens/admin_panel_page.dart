@@ -5,12 +5,15 @@ import 'package:intl/intl.dart';
 
 import '../models/own_company.dart';
 import '../models/price_adjustment_rule.dart';
+import '../models/product.dart';
 import '../models/user_quote_profile.dart';
 import '../services/admin_repository.dart';
 import '../services/company_stamp_service.dart';
 import '../services/own_company_repository.dart';
 import '../services/price_adjustment_rule_repository.dart';
+import '../services/product_repository.dart';
 import '../services/user_profile_repository.dart';
+import '../utils/product_category_labels.dart';
 import '../widgets/workspace_background.dart';
 
 class AdminPanelPage extends StatefulWidget {
@@ -20,12 +23,14 @@ class AdminPanelPage extends StatefulWidget {
     required this.adminRepository,
     required this.ownCompanyRepository,
     required this.priceAdjustmentRuleRepository,
+    required this.productRepository,
   });
 
   final UserProfileRepository userProfileRepository;
   final AdminRepository adminRepository;
   final OwnCompanyRepository ownCompanyRepository;
   final PriceAdjustmentRuleRepository priceAdjustmentRuleRepository;
+  final ProductRepository productRepository;
 
   @override
   State<AdminPanelPage> createState() => _AdminPanelPageState();
@@ -39,10 +44,16 @@ class _AdminPanelPageState extends State<AdminPanelPage>
   List<Map<String, dynamic>> _revisions = const [];
   List<PriceAdjustmentRule> _priceRules = const [];
   List<OwnCompany> _companies = const [];
+  List<Product> _products = const [];
   final _stampService = const CompanyStampService();
+  final _bulkSearchController = TextEditingController();
   String? _stampPath;
   bool _loading = true;
   bool _isPickingStamp = false;
+  bool _isApplyingBulkPriceUpdate = false;
+  String _bulkBrandFilter = '';
+  String _bulkCategoryFilter = '';
+  String _bulkQuery = '';
 
   @override
   void initState() {
@@ -54,28 +65,90 @@ class _AdminPanelPageState extends State<AdminPanelPage>
   @override
   void dispose() {
     _tabController.dispose();
+    _bulkSearchController.dispose();
     super.dispose();
   }
 
   Future<void> _reload() async {
     setState(() => _loading = true);
-    final users = await widget.userProfileRepository.fetchAll();
-    final logs = await widget.adminRepository.fetchAuditLogs();
-    final revisions = await widget.adminRepository.fetchQuoteRevisions();
-    final rules = await widget.priceAdjustmentRuleRepository.fetchRules();
-    final companies = await widget.ownCompanyRepository.fetchAll();
-    final stamp = await _stampService.getExistingStampPath();
-    if (!mounted) return;
-    setState(() {
-      _users = users;
-      _auditLogs = logs;
-      _revisions = revisions;
-      _priceRules = rules;
-      _companies = companies;
-      _stampPath = stamp;
-      _loading = false;
-    });
+    try {
+      final users = _guardList(widget.userProfileRepository.fetchAll());
+      final logs = _guardMapList(widget.adminRepository.fetchAuditLogs());
+      final revisions = _guardMapList(
+        widget.adminRepository.fetchQuoteRevisions(),
+      );
+      final rules = _guardRuleList(
+        widget.priceAdjustmentRuleRepository.fetchRules(),
+      );
+      final companies = _guardCompanyList(
+        widget.ownCompanyRepository.fetchAll(),
+      );
+      final products = _guardProductList(
+        widget.productRepository.fetchProducts(),
+      );
+      final stamp = _guardString(_stampService.getExistingStampPath());
+
+      final results = await Future.wait<Object?>([
+        users,
+        logs,
+        revisions,
+        rules,
+        companies,
+        products,
+        stamp,
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _users = results[0]! as List<UserQuoteProfile>;
+        _auditLogs = results[1]! as List<Map<String, dynamic>>;
+        _revisions = results[2]! as List<Map<String, dynamic>>;
+        _priceRules = results[3]! as List<PriceAdjustmentRule>;
+        _companies = results[4]! as List<OwnCompany>;
+        _products = results[5]! as List<Product>;
+        _stampPath = results[6] as String?;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
   }
+
+  Future<List<UserQuoteProfile>> _guardList(
+    Future<List<UserQuoteProfile>> future,
+  ) async => future
+      .timeout(const Duration(seconds: 12), onTimeout: () => const [])
+      .catchError((_) => <UserQuoteProfile>[]);
+
+  Future<List<Map<String, dynamic>>> _guardMapList(
+    Future<List<Map<String, dynamic>>> future,
+  ) async => future
+      .timeout(const Duration(seconds: 12), onTimeout: () => const [])
+      .catchError((_) => <Map<String, dynamic>>[]);
+
+  Future<List<PriceAdjustmentRule>> _guardRuleList(
+    Future<List<PriceAdjustmentRule>> future,
+  ) async => future
+      .timeout(const Duration(seconds: 12), onTimeout: () => const [])
+      .catchError((_) => <PriceAdjustmentRule>[]);
+
+  Future<List<OwnCompany>> _guardCompanyList(
+    Future<List<OwnCompany>> future,
+  ) async => future
+      .timeout(
+        const Duration(seconds: 12),
+        onTimeout: () => [OwnCompany.fallback()],
+      )
+      .catchError((_) => [OwnCompany.fallback()]);
+
+  Future<List<Product>> _guardProductList(Future<List<Product>> future) async =>
+      future
+          .timeout(const Duration(seconds: 12), onTimeout: () => const [])
+          .catchError((_) => <Product>[]);
+
+  Future<String?> _guardString(Future<String?> future) async => future
+      .timeout(const Duration(seconds: 12), onTimeout: () => null)
+      .catchError((_) => null);
 
   Future<void> _changeRole(UserQuoteProfile user, String role) async {
     final confirmed = await showDialog<bool>(
@@ -155,6 +228,146 @@ class _AdminPanelPageState extends State<AdminPanelPage>
     if (ok != true) return;
     await widget.ownCompanyRepository.deleteById(company.id);
     await _reload();
+  }
+
+  List<String> get _availableBrands {
+    final brands =
+        _products
+            .map((product) => product.brand.trim())
+            .where((brand) => brand.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return brands;
+  }
+
+  List<String> get _availableCategories {
+    final categories =
+        _products
+            .map((product) => product.category.trim())
+            .where((category) => category.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return categories;
+  }
+
+  List<Product> get _bulkFilteredProducts {
+    final brand = _bulkBrandFilter.trim().toLowerCase();
+    final category = _bulkCategoryFilter.trim().toLowerCase();
+    final query = _bulkQuery.trim().toLowerCase();
+    return _products
+        .where((product) {
+          final matchesBrand =
+              brand.isEmpty || product.brand.trim().toLowerCase() == brand;
+          final matchesCategory =
+              category.isEmpty ||
+              product.category.trim().toLowerCase() == category;
+          final matchesQuery =
+              query.isEmpty ||
+              product.code.toLowerCase().contains(query) ||
+              product.name.toLowerCase().contains(query);
+          return matchesBrand && matchesCategory && matchesQuery;
+        })
+        .toList(growable: false);
+  }
+
+  bool get _hasActiveBulkFilter =>
+      _bulkBrandFilter.trim().isNotEmpty ||
+      _bulkCategoryFilter.trim().isNotEmpty ||
+      _bulkQuery.trim().isNotEmpty;
+
+  void _clearBulkFilters() {
+    setState(() {
+      _bulkBrandFilter = '';
+      _bulkCategoryFilter = '';
+      _bulkQuery = '';
+      _bulkSearchController.clear();
+    });
+  }
+
+  String _bulkFilterSummary() {
+    final filters = <String>[];
+    if (_bulkBrandFilter.trim().isNotEmpty) {
+      filters.add('Marka: $_bulkBrandFilter');
+    }
+    if (_bulkCategoryFilter.trim().isNotEmpty) {
+      filters.add(
+        'Kategori: ${productCategoryTurkishLabel(_bulkCategoryFilter)}',
+      );
+    }
+    if (_bulkQuery.trim().isNotEmpty) {
+      filters.add('Arama: ${_bulkQuery.trim()}');
+    }
+    return filters.isEmpty ? 'Filtre yok' : filters.join(' | ');
+  }
+
+  Future<void> _openBulkPriceUpdateDialog() async {
+    if (!_hasActiveBulkFilter) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Toplu guncelleme icin once filtre secin.'),
+        ),
+      );
+      return;
+    }
+
+    final products = _bulkFilteredProducts;
+    if (products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Filtrelere uyan urun bulunamadi.')),
+      );
+      return;
+    }
+
+    final request = await showDialog<_BulkPriceUpdateRequest>(
+      context: context,
+      builder: (context) => _BulkPriceUpdateDialog(
+        products: products,
+        brand: _bulkBrandFilter,
+        category: _bulkCategoryFilter,
+        query: _bulkQuery,
+        filterSummary: _bulkFilterSummary(),
+      ),
+    );
+    if (request == null || !mounted) return;
+
+    setState(() => _isApplyingBulkPriceUpdate = true);
+    try {
+      final affected = await widget.productRepository.applyBulkPriceChange(
+        brand: request.brand,
+        category: request.category,
+        query: request.query,
+        percentage: request.percentage,
+      );
+      final refreshedProducts = await _guardProductList(
+        widget.productRepository.fetchProducts(),
+      );
+      final refreshedRules = await _guardRuleList(
+        widget.priceAdjustmentRuleRepository.fetchRules(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _products = refreshedProducts;
+        _priceRules = refreshedRules;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '$affected urunun fiyati ${request.percentage >= 0 ? 'guncellendi' : 'azaltildi'}.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Toplu fiyat guncellemesi basarisiz: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isApplyingBulkPriceUpdate = false);
+      }
+    }
   }
 
   @override
@@ -810,6 +1023,112 @@ class _AdminPanelPageState extends State<AdminPanelPage>
           SizedBox(width: 120, child: _Th('Oran')),
         ],
       ),
+      toolbar: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: 220,
+                child: DropdownButtonFormField<String>(
+                  key: const ValueKey('admin-bulk-price-brand-filter'),
+                  initialValue: _bulkBrandFilter,
+                  isDense: true,
+                  decoration: const InputDecoration(labelText: 'Marka'),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('Tum Markalar'),
+                    ),
+                    ..._availableBrands.map(
+                      (brand) =>
+                          DropdownMenuItem(value: brand, child: Text(brand)),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _bulkBrandFilter = value ?? ''),
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: DropdownButtonFormField<String>(
+                  key: const ValueKey('admin-bulk-price-category-filter'),
+                  initialValue: _bulkCategoryFilter,
+                  isDense: true,
+                  decoration: const InputDecoration(labelText: 'Kategori'),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('Tum Kategoriler'),
+                    ),
+                    ..._availableCategories.map(
+                      (category) => DropdownMenuItem(
+                        value: category,
+                        child: Text(productCategoryTurkishLabel(category)),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _bulkCategoryFilter = value ?? ''),
+                ),
+              ),
+              SizedBox(
+                width: 240,
+                child: TextField(
+                  key: const ValueKey('admin-bulk-price-query-filter'),
+                  controller: _bulkSearchController,
+                  onChanged: (value) => setState(() => _bulkQuery = value),
+                  decoration: const InputDecoration(
+                    labelText: 'Urun Ara',
+                    hintText: 'Kod veya urun adi',
+                    isDense: true,
+                    prefixIcon: Icon(Icons.search_rounded),
+                  ),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _clearBulkFilters,
+                icon: const Icon(Icons.restart_alt_rounded),
+                label: const Text('Filtreyi Temizle'),
+              ),
+              FilledButton.icon(
+                onPressed: _isApplyingBulkPriceUpdate
+                    ? null
+                    : _openBulkPriceUpdateDialog,
+                icon: _isApplyingBulkPriceUpdate
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.price_change_rounded),
+                label: const Text('Toplu Fiyat Guncelle'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '${_bulkFilteredProducts.length} urun fiyat politikasina aday',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF5B6F7F),
+            ),
+          ),
+          if (_hasActiveBulkFilter) ...[
+            const SizedBox(height: 4),
+            Text(
+              _bulkFilterSummary(),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ],
+      ),
       children: [
         for (final rule in _priceRules)
           Row(
@@ -1048,6 +1367,234 @@ class _OwnCompanyDialog extends StatefulWidget {
 
   @override
   State<_OwnCompanyDialog> createState() => _OwnCompanyDialogState();
+}
+
+class _BulkPriceUpdateRequest {
+  const _BulkPriceUpdateRequest({
+    required this.brand,
+    required this.category,
+    required this.query,
+    required this.percentage,
+  });
+
+  final String brand;
+  final String category;
+  final String query;
+  final double percentage;
+}
+
+class _BulkPriceUpdateDialog extends StatefulWidget {
+  const _BulkPriceUpdateDialog({
+    required this.products,
+    required this.brand,
+    required this.category,
+    required this.query,
+    required this.filterSummary,
+  });
+
+  final List<Product> products;
+  final String brand;
+  final String category;
+  final String query;
+  final String filterSummary;
+
+  @override
+  State<_BulkPriceUpdateDialog> createState() => _BulkPriceUpdateDialogState();
+}
+
+class _BulkPriceUpdateDialogState extends State<_BulkPriceUpdateDialog> {
+  late final TextEditingController _percentageController;
+  bool _isDecrease = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _percentageController = TextEditingController(text: '10');
+  }
+
+  @override
+  void dispose() {
+    _percentageController.dispose();
+    super.dispose();
+  }
+
+  double get _percentageValue {
+    final parsed = double.tryParse(
+      _percentageController.text.trim().replaceAll(',', '.'),
+    );
+    return parsed == null ? 0 : parsed.abs();
+  }
+
+  double get _signedPercentage =>
+      _isDecrease ? -_percentageValue : _percentageValue;
+
+  Product? get _previewProduct =>
+      widget.products.isEmpty ? null : widget.products.first;
+
+  String _formatPrice(Product product, double value) {
+    return product.copyWith(salePrice: value).formattedSalePrice;
+  }
+
+  double _nextPrice(Product product) {
+    final multiplier = 1 + (_signedPercentage / 100);
+    return double.parse((product.salePrice * multiplier).toStringAsFixed(2));
+  }
+
+  Future<void> _submit() async {
+    if (widget.products.isEmpty || _percentageValue == 0) return;
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Toplu fiyat guncellemesini onayla'),
+            content: Text(
+              '${widget.products.length} urunun fiyati '
+              '${_signedPercentage >= 0 ? '%' : '-%'}'
+              '${_percentageValue.toStringAsFixed(2)} '
+              '${_isDecrease ? 'azaltilacak' : 'artirilacak'}.\n\n'
+              'Aktif filtreler: ${widget.filterSummary}',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Iptal'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Onayla'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+
+    Navigator.of(context).pop(
+      _BulkPriceUpdateRequest(
+        brand: widget.brand,
+        category: widget.category,
+        query: widget.query,
+        percentage: _signedPercentage,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final product = _previewProduct;
+    final nextPrice = product == null ? 0.0 : _nextPrice(product);
+
+    return AlertDialog(
+      title: const Text('Toplu Fiyat Guncelle'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment<bool>(value: false, label: Text('Yuzde artir')),
+                  ButtonSegment<bool>(value: true, label: Text('Yuzde azalt')),
+                ],
+                selected: {_isDecrease},
+                onSelectionChanged: (selection) {
+                  setState(() => _isDecrease = selection.first);
+                },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _percentageController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Oran (%)',
+                  hintText: 'Orn. 10',
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Eslesen urun sayisi: ${widget.products.length}',
+                style: const TextStyle(
+                  color: Color(0xFF17304C),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Aktif filtreler: ${widget.filterSummary}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFF5B6F7F),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: const Color(0xFFF8FAFC),
+                  border: Border.all(color: const Color(0xFFD8E0E8)),
+                ),
+                child: product == null
+                    ? const Text('Onizleme icin urun bulunamadi.')
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            product.code,
+                            style: const TextStyle(
+                              color: Color(0xFF17304C),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            product.name,
+                            style: const TextStyle(
+                              color: Color(0xFF475569),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Eski fiyat: ${_formatPrice(product, product.salePrice)}',
+                          ),
+                          Text(
+                            'Degisim: ${_signedPercentage >= 0 ? '+' : '-'}%${_percentageValue.toStringAsFixed(2)}',
+                          ),
+                          Text(
+                            'Yeni fiyat: ${_formatPrice(product, nextPrice)}',
+                            style: const TextStyle(
+                              color: Color(0xFF059669),
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Vazgec'),
+        ),
+        FilledButton(
+          onPressed: widget.products.isEmpty || _percentageValue == 0
+              ? null
+              : _submit,
+          child: const Text('Devam Et'),
+        ),
+      ],
+    );
+  }
 }
 
 class _OwnCompanyDialogState extends State<_OwnCompanyDialog> {

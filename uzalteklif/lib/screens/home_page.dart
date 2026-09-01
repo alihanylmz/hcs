@@ -37,15 +37,11 @@ class _HomePageState extends State<HomePage> {
   List<MarketRate> _rates = const [];
   List<PriceAdjustmentRule> _priceRules = const [];
   final _productCsvService = const ProductCsvService();
-  final _bulkSearchController = TextEditingController();
   bool _isLoading = true;
   bool _isImportingCsv = false;
   bool _isRefreshingRates = false;
   bool _isApplyingPriceRule = false;
-  bool _isApplyingBulkPriceUpdate = false;
   String _searchQuery = '';
-  String _bulkBrandFilter = '';
-  String _bulkCategoryFilter = '';
   String _codeFilter = '';
   String _nameFilter = '';
   String _brandModelFilter = '';
@@ -69,7 +65,6 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
-    _bulkSearchController.dispose();
     super.dispose();
   }
 
@@ -79,8 +74,6 @@ class _HomePageState extends State<HomePage> {
 
   List<Product> get _filteredProducts {
     final query = _searchQuery.trim().toLowerCase();
-    final brandFilter = _bulkBrandFilter.trim().toLowerCase();
-    final categoryFilter = _bulkCategoryFilter.trim().toLowerCase();
     final codeQuery = _codeFilter.trim().toLowerCase();
     final nameQuery = _nameFilter.trim().toLowerCase();
     final brandModelQuery = _brandModelFilter.trim().toLowerCase();
@@ -88,16 +81,17 @@ class _HomePageState extends State<HomePage> {
 
     return _products
         .where((product) {
-          final matchesQuery =
-              query.isEmpty ||
-              product.code.toLowerCase().contains(query) ||
-              product.name.toLowerCase().contains(query);
-          final matchesBrand =
-              brandFilter.isEmpty ||
-              product.brand.trim().toLowerCase() == brandFilter;
-          final matchesCategory =
-              categoryFilter.isEmpty ||
-              product.category.trim().toLowerCase() == categoryFilter;
+          final haystack = [
+            product.code,
+            product.name,
+            product.category,
+            productCategoryTurkishLabel(product.category),
+            product.brand,
+            product.model,
+            product.description,
+            product.technicalSummary,
+          ].join(' ').toLowerCase();
+          final matchesQuery = query.isEmpty || haystack.contains(query);
           final matchesCode =
               codeQuery.isEmpty ||
               product.code.toLowerCase().contains(codeQuery);
@@ -119,8 +113,6 @@ class _HomePageState extends State<HomePage> {
           final matchesMaxTl = _maxTlFilter == null || tlPrice <= _maxTlFilter!;
 
           return matchesQuery &&
-              matchesBrand &&
-              matchesCategory &&
               matchesCode &&
               matchesName &&
               matchesBrandModel &&
@@ -131,33 +123,6 @@ class _HomePageState extends State<HomePage> {
         })
         .toList(growable: false);
   }
-
-  List<String> get _availableBrands {
-    final brands =
-        _products
-            .map((product) => product.brand.trim())
-            .where((brand) => brand.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
-    return brands;
-  }
-
-  List<String> get _availableCategories {
-    final categories =
-        _products
-            .map((product) => product.category.trim())
-            .where((category) => category.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
-    return categories;
-  }
-
-  bool get _hasActiveBulkFilter =>
-      _bulkBrandFilter.trim().isNotEmpty ||
-      _bulkCategoryFilter.trim().isNotEmpty ||
-      _searchQuery.trim().isNotEmpty;
 
   Future<void> _loadDashboard() async {
     setState(() => _isLoading = true);
@@ -296,95 +261,6 @@ class _HomePageState extends State<HomePage> {
     final refreshed = await widget.productRepository.fetchProducts();
     if (!mounted) return;
     setState(() => _products = refreshed);
-  }
-
-  void _clearBulkFilters() {
-    setState(() {
-      _bulkBrandFilter = '';
-      _bulkCategoryFilter = '';
-      _searchQuery = '';
-      _bulkSearchController.clear();
-    });
-  }
-
-  String _bulkFilterSummary() {
-    final segments = <String>[];
-    if (_bulkBrandFilter.trim().isNotEmpty) {
-      segments.add('Marka: $_bulkBrandFilter');
-    }
-    if (_bulkCategoryFilter.trim().isNotEmpty) {
-      segments.add(
-        'Kategori: ${productCategoryTurkishLabel(_bulkCategoryFilter)}',
-      );
-    }
-    if (_searchQuery.trim().isNotEmpty) {
-      segments.add('Arama: ${_searchQuery.trim()}');
-    }
-    return segments.isEmpty ? 'Filtre yok' : segments.join(' | ');
-  }
-
-  Future<void> _openBulkPriceUpdateDialog() async {
-    if (!_hasActiveBulkFilter) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Toplu fiyat guncellemeden once en az bir filtre secin.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    final filteredProducts = _filteredProducts;
-    if (filteredProducts.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Secili filtrelere uyan urun bulunamadi.'),
-        ),
-      );
-      return;
-    }
-
-    final request = await showDialog<_BulkPriceUpdateRequest>(
-      context: context,
-      builder: (context) => _BulkPriceUpdateDialog(
-        products: filteredProducts,
-        brand: _bulkBrandFilter,
-        category: _bulkCategoryFilter,
-        query: _searchQuery,
-        filterSummary: _bulkFilterSummary(),
-      ),
-    );
-    if (request == null || !mounted) return;
-
-    setState(() => _isApplyingBulkPriceUpdate = true);
-    try {
-      final affected = await widget.productRepository.applyBulkPriceChange(
-        brand: request.brand,
-        category: request.category,
-        query: request.query,
-        percentage: request.percentage,
-      );
-      final refreshed = await widget.productRepository.fetchProducts();
-      if (!mounted) return;
-      setState(() => _products = refreshed);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '$affected urunun fiyati ${request.percentage >= 0 ? 'artirildi' : 'azaltildi'}.',
-          ),
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Toplu fiyat guncellemesi basarisiz: $error')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isApplyingBulkPriceUpdate = false);
-      }
-    }
   }
 
   Future<void> _saveCsvTemplate() async {
@@ -556,8 +432,6 @@ class _HomePageState extends State<HomePage> {
           children: [
             _buildProductToolbar(),
             const SizedBox(height: 16),
-            _buildBulkFilterBar(),
-            const SizedBox(height: 12),
             Container(
               decoration: BoxDecoration(
                 color: const Color(0xFFF1F5F9),
@@ -593,10 +467,7 @@ class _HomePageState extends State<HomePage> {
                             size: 18,
                             color: Color(0xFF64748B),
                           ),
-                          onPressed: () {
-                            _bulkSearchController.clear();
-                            setState(() => _searchQuery = '');
-                          },
+                          onPressed: () => setState(() => _searchQuery = ''),
                         ),
                       IconButton(
                         tooltip: _showAdvancedSearch
@@ -906,105 +777,6 @@ class _HomePageState extends State<HomePage> {
             ],
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildBulkFilterBar() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        color: const Color(0xFFF7FAFD),
-        border: Border.all(color: const Color(0xFFD8E0E8)),
-      ),
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          SizedBox(
-            width: 220,
-            child: DropdownButtonFormField<String>(
-              key: const ValueKey('bulk-price-brand-filter'),
-              initialValue: _bulkBrandFilter,
-              isDense: true,
-              decoration: const InputDecoration(labelText: 'Marka'),
-              items: [
-                const DropdownMenuItem<String>(
-                  value: '',
-                  child: Text('Tum Markalar'),
-                ),
-                ..._availableBrands.map(
-                  (brand) => DropdownMenuItem(value: brand, child: Text(brand)),
-                ),
-              ],
-              onChanged: (value) =>
-                  setState(() => _bulkBrandFilter = value ?? ''),
-            ),
-          ),
-          SizedBox(
-            width: 220,
-            child: DropdownButtonFormField<String>(
-              key: const ValueKey('bulk-price-category-filter'),
-              initialValue: _bulkCategoryFilter,
-              isDense: true,
-              decoration: const InputDecoration(labelText: 'Kategori'),
-              items: [
-                const DropdownMenuItem<String>(
-                  value: '',
-                  child: Text('Tum Kategoriler'),
-                ),
-                ..._availableCategories.map(
-                  (category) => DropdownMenuItem(
-                    value: category,
-                    child: Text(productCategoryTurkishLabel(category)),
-                  ),
-                ),
-              ],
-              onChanged: (value) =>
-                  setState(() => _bulkCategoryFilter = value ?? ''),
-            ),
-          ),
-          SizedBox(
-            width: 260,
-            child: TextField(
-              key: const ValueKey('bulk-price-query-filter'),
-              controller: _bulkSearchController,
-              onChanged: (value) => setState(() => _searchQuery = value),
-              decoration: const InputDecoration(
-                labelText: 'Urun Ara',
-                hintText: 'Urun kodu veya adi',
-                isDense: true,
-                prefixIcon: Icon(Icons.search_rounded),
-              ),
-            ),
-          ),
-          OutlinedButton.icon(
-            key: const ValueKey('bulk-price-clear-filters'),
-            onPressed: _clearBulkFilters,
-            icon: const Icon(Icons.restart_alt_rounded),
-            label: const Text('Filtreyi Temizle'),
-          ),
-          FilledButton.icon(
-            key: const ValueKey('bulk-price-open-dialog'),
-            onPressed: _isApplyingBulkPriceUpdate
-                ? null
-                : _openBulkPriceUpdateDialog,
-            icon: _isApplyingBulkPriceUpdate
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.price_change_rounded),
-            label: const Text('Toplu Fiyat Guncelle'),
-          ),
-        ],
       ),
     );
   }
@@ -1424,247 +1196,6 @@ class _PriceRuleDialogState extends State<_PriceRuleDialog> {
         FilledButton(
           onPressed: _affectedCount == 0 ? null : _submit,
           child: const Text('Uygula ve fiyatları güncelle'),
-        ),
-      ],
-    );
-  }
-}
-
-class _BulkPriceUpdateRequest {
-  const _BulkPriceUpdateRequest({
-    required this.brand,
-    required this.category,
-    required this.query,
-    required this.percentage,
-  });
-
-  final String brand;
-  final String category;
-  final String query;
-  final double percentage;
-}
-
-class _BulkPriceUpdateDialog extends StatefulWidget {
-  const _BulkPriceUpdateDialog({
-    required this.products,
-    required this.brand,
-    required this.category,
-    required this.query,
-    required this.filterSummary,
-  });
-
-  final List<Product> products;
-  final String brand;
-  final String category;
-  final String query;
-  final String filterSummary;
-
-  @override
-  State<_BulkPriceUpdateDialog> createState() => _BulkPriceUpdateDialogState();
-}
-
-class _BulkPriceUpdateDialogState extends State<_BulkPriceUpdateDialog> {
-  late final TextEditingController _percentageController;
-  bool _isDecrease = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _percentageController = TextEditingController(text: '10');
-  }
-
-  @override
-  void dispose() {
-    _percentageController.dispose();
-    super.dispose();
-  }
-
-  double get _percentageValue {
-    final parsed = double.tryParse(
-      _percentageController.text.trim().replaceAll(',', '.'),
-    );
-    if (parsed == null) {
-      return 0;
-    }
-    return parsed.abs();
-  }
-
-  double get _signedPercentage =>
-      _isDecrease ? -_percentageValue : _percentageValue;
-
-  int get _matchedCount => widget.products.length;
-
-  Product? get _previewProduct =>
-      widget.products.isEmpty ? null : widget.products.first;
-
-  String _formatPrice(double value, String currencyCode) {
-    final product = _previewProduct;
-    if (product == null) return value.toStringAsFixed(2);
-    return product
-        .copyWith(salePrice: value, currencyCode: currencyCode)
-        .formattedSalePrice;
-  }
-
-  double _previewNewPrice(Product product) {
-    final multiplier = 1 + (_signedPercentage / 100);
-    final adjusted = product.salePrice * multiplier;
-    return double.parse(adjusted.toStringAsFixed(2));
-  }
-
-  Future<void> _submit() async {
-    if (_matchedCount == 0 || _percentageValue == 0) return;
-
-    final confirmed =
-        await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Toplu fiyat guncellemesini onayla'),
-            content: Text(
-              '$_matchedCount urunun fiyati '
-              '${_signedPercentage >= 0 ? '%' : '-%'}'
-              '${_percentageValue.toStringAsFixed(2)} '
-              '${_isDecrease ? 'azaltilacak' : 'artirilacak'}.\n\n'
-              'Aktif filtreler: ${widget.filterSummary}',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Iptal'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Onayla'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    if (!confirmed || !mounted) return;
-
-    Navigator.of(context).pop(
-      _BulkPriceUpdateRequest(
-        brand: widget.brand,
-        category: widget.category,
-        query: widget.query,
-        percentage: _signedPercentage,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final previewProduct = _previewProduct;
-    final previewNewPrice = previewProduct == null
-        ? 0.0
-        : _previewNewPrice(previewProduct);
-
-    return AlertDialog(
-      title: const Text('Toplu Fiyat Guncelle'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment<bool>(value: false, label: Text('Yuzde artir')),
-                  ButtonSegment<bool>(value: true, label: Text('Yuzde azalt')),
-                ],
-                selected: {_isDecrease},
-                onSelectionChanged: (selection) {
-                  setState(() => _isDecrease = selection.first);
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _percentageController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Oran (%)',
-                  hintText: 'Orn. 10',
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Eslesen urun sayisi: $_matchedCount',
-                style: const TextStyle(
-                  color: Color(0xFF17304C),
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Aktif filtreler: ${widget.filterSummary}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF5B6F7F),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: const Color(0xFFF8FAFC),
-                  border: Border.all(color: const Color(0xFFD8E0E8)),
-                ),
-                child: previewProduct == null
-                    ? const Text('Onizleme icin urun bulunamadi.')
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            previewProduct.code,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF17304C),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            previewProduct.name,
-                            style: const TextStyle(
-                              color: Color(0xFF475569),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Eski fiyat: ${_formatPrice(previewProduct.salePrice, previewProduct.currencyCode)}',
-                          ),
-                          Text(
-                            'Degisim: ${_signedPercentage >= 0 ? '+' : '-'}%${_percentageValue.toStringAsFixed(2)}',
-                          ),
-                          Text(
-                            'Yeni fiyat: ${_formatPrice(previewNewPrice, previewProduct.currencyCode)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFF059669),
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Vazgec'),
-        ),
-        FilledButton(
-          onPressed: _matchedCount == 0 || _percentageValue == 0
-              ? null
-              : _submit,
-          child: const Text('Devam Et'),
         ),
       ],
     );

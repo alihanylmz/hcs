@@ -66,4 +66,51 @@ void main() {
     expect(untouchedBrand.salePrice, 1000);
     expect(untouchedCategory.salePrice, 1000);
   });
+
+  test('applyBulkPriceChange only updates selected product codes', () async {
+    final repository = ProductRepository();
+    final now = DateTime(2026, 9, 1, 12);
+
+    final first = Product(
+      id: 'bulk-selected-1',
+      code: 'BULK-SEL-1',
+      name: 'Secili Urun 1',
+      category: 'VFD',
+      brand: 'Danfoss',
+      model: 'M1',
+      unit: 'adet',
+      currencyCode: 'EUR',
+      salePrice: 100,
+      stockQuantity: 0,
+      minimumStock: 0,
+      vatRate: 20,
+      leadTime: '',
+      description: '',
+      technicalSummary: '',
+      isActive: true,
+      updatedAt: now,
+    );
+    final second = first.copyWith(
+      id: 'bulk-selected-2',
+      code: 'BULK-SEL-2',
+      name: 'Secili Urun 2',
+    );
+
+    await repository.saveProducts([first, second]);
+
+    final affected = await repository.applyBulkPriceChange(
+      brand: 'Danfoss',
+      category: 'VFD',
+      percentage: 20,
+      productCodes: const ['BULK-SEL-2'],
+    );
+
+    final products = await repository.fetchProducts();
+    final unchanged = products.firstWhere((p) => p.code == first.code);
+    final changed = products.firstWhere((p) => p.code == second.code);
+
+    expect(affected, 1);
+    expect(unchanged.salePrice, 100);
+    expect(changed.salePrice, 120);
+  });
 }

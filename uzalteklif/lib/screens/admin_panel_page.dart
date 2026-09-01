@@ -42,18 +42,22 @@ class _AdminPanelPageState extends State<AdminPanelPage>
   List<UserQuoteProfile> _users = const [];
   List<Map<String, dynamic>> _auditLogs = const [];
   List<Map<String, dynamic>> _revisions = const [];
+  // ignore: unused_field
   List<PriceAdjustmentRule> _priceRules = const [];
   List<OwnCompany> _companies = const [];
   List<Product> _products = const [];
   final _stampService = const CompanyStampService();
   final _bulkSearchController = TextEditingController();
+  final _bulkPercentageController = TextEditingController(text: '10');
   String? _stampPath;
   bool _loading = true;
   bool _isPickingStamp = false;
   bool _isApplyingBulkPriceUpdate = false;
+  bool _bulkIsDecrease = false;
   String _bulkBrandFilter = '';
   String _bulkCategoryFilter = '';
   String _bulkQuery = '';
+  Set<String> _selectedBulkProductCodes = <String>{};
 
   @override
   void initState() {
@@ -66,6 +70,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
   void dispose() {
     _tabController.dispose();
     _bulkSearchController.dispose();
+    _bulkPercentageController.dispose();
     super.dispose();
   }
 
@@ -106,6 +111,9 @@ class _AdminPanelPageState extends State<AdminPanelPage>
         _companies = results[4]! as List<OwnCompany>;
         _products = results[5]! as List<Product>;
         _stampPath = results[6] as String?;
+        _selectedBulkProductCodes = _bulkFilteredProducts
+            .map((product) => product.code.trim().toUpperCase())
+            .toSet();
         _loading = false;
       });
     } catch (_) {
@@ -272,10 +280,57 @@ class _AdminPanelPageState extends State<AdminPanelPage>
         .toList(growable: false);
   }
 
+  List<Product> get _selectedBulkProducts {
+    final selectedCodes = _selectedBulkProductCodes;
+    return _bulkFilteredProducts
+        .where(
+          (product) =>
+              selectedCodes.contains(product.code.trim().toUpperCase()),
+        )
+        .toList(growable: false);
+  }
+
+  double get _bulkPercentageValue {
+    final parsed = double.tryParse(
+      _bulkPercentageController.text.trim().replaceAll(',', '.'),
+    );
+    return parsed == null ? 0 : parsed.abs();
+  }
+
+  double get _signedBulkPercentage =>
+      _bulkIsDecrease ? -_bulkPercentageValue : _bulkPercentageValue;
+
   bool get _hasActiveBulkFilter =>
       _bulkBrandFilter.trim().isNotEmpty ||
       _bulkCategoryFilter.trim().isNotEmpty ||
       _bulkQuery.trim().isNotEmpty;
+
+  void _syncBulkSelectionToFiltered() {
+    _selectedBulkProductCodes = _bulkFilteredProducts
+        .map((product) => product.code.trim().toUpperCase())
+        .toSet();
+  }
+
+  void _setBulkBrandFilter(String value) {
+    setState(() {
+      _bulkBrandFilter = value;
+      _syncBulkSelectionToFiltered();
+    });
+  }
+
+  void _setBulkCategoryFilter(String value) {
+    setState(() {
+      _bulkCategoryFilter = value;
+      _syncBulkSelectionToFiltered();
+    });
+  }
+
+  void _setBulkQuery(String value) {
+    setState(() {
+      _bulkQuery = value;
+      _syncBulkSelectionToFiltered();
+    });
+  }
 
   void _clearBulkFilters() {
     setState(() {
@@ -283,6 +338,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
       _bulkCategoryFilter = '';
       _bulkQuery = '';
       _bulkSearchController.clear();
+      _syncBulkSelectionToFiltered();
     });
   }
 
@@ -312,33 +368,55 @@ class _AdminPanelPageState extends State<AdminPanelPage>
       return;
     }
 
-    final products = _bulkFilteredProducts;
+    final products = _selectedBulkProducts;
     if (products.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Filtrelere uyan urun bulunamadi.')),
+        const SnackBar(content: Text('Guncellenecek urun secilmedi.')),
       );
       return;
     }
+    if (_bulkPercentageValue == 0) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Gecerli bir oran girin.')));
+      return;
+    }
 
-    final request = await showDialog<_BulkPriceUpdateRequest>(
-      context: context,
-      builder: (context) => _BulkPriceUpdateDialog(
-        products: products,
-        brand: _bulkBrandFilter,
-        category: _bulkCategoryFilter,
-        query: _bulkQuery,
-        filterSummary: _bulkFilterSummary(),
-      ),
-    );
-    if (request == null || !mounted) return;
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Toplu fiyat guncellemesini onayla'),
+            content: Text(
+              '${products.length} urunun fiyati guncellenecek.\n'
+              'Degisim: ${_signedBulkPercentage >= 0 ? '+' : '-'}%${_bulkPercentageValue.toStringAsFixed(2)}\n\n'
+              'Aktif filtreler: ${_bulkFilterSummary()}',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Iptal'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Fiyatlari Guncelle'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
 
     setState(() => _isApplyingBulkPriceUpdate = true);
     try {
       final affected = await widget.productRepository.applyBulkPriceChange(
-        brand: request.brand,
-        category: request.category,
-        query: request.query,
-        percentage: request.percentage,
+        brand: _bulkBrandFilter,
+        category: _bulkCategoryFilter,
+        query: _bulkQuery,
+        percentage: _signedBulkPercentage,
+        productCodes: products
+            .map((product) => product.code.trim().toUpperCase())
+            .toList(growable: false),
       );
       final refreshedProducts = await _guardProductList(
         widget.productRepository.fetchProducts(),
@@ -350,13 +428,10 @@ class _AdminPanelPageState extends State<AdminPanelPage>
       setState(() {
         _products = refreshedProducts;
         _priceRules = refreshedRules;
+        _syncBulkSelectionToFiltered();
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '$affected urunun fiyati ${request.percentage >= 0 ? 'guncellendi' : 'azaltildi'}.',
-          ),
-        ),
+        SnackBar(content: Text('$affected urunun fiyati guncellendi.')),
       );
     } catch (error) {
       if (!mounted) return;
@@ -368,6 +443,43 @@ class _AdminPanelPageState extends State<AdminPanelPage>
         setState(() => _isApplyingBulkPriceUpdate = false);
       }
     }
+  }
+
+  void _toggleBulkProductSelection(Product product, bool isSelected) {
+    final code = product.code.trim().toUpperCase();
+    setState(() {
+      if (isSelected) {
+        _selectedBulkProductCodes.add(code);
+      } else {
+        _selectedBulkProductCodes.remove(code);
+      }
+    });
+  }
+
+  void _toggleAllBulkProducts(bool isSelected) {
+    setState(() {
+      if (isSelected) {
+        _syncBulkSelectionToFiltered();
+      } else {
+        _selectedBulkProductCodes.clear();
+      }
+    });
+  }
+
+  double _previewBulkPrice(Product product) {
+    final multiplier = 1 + (_signedBulkPercentage / 100);
+    return double.parse((product.salePrice * multiplier).toStringAsFixed(2));
+  }
+
+  String _bulkPriceChangeLabel(bool isSelected) {
+    if (!isSelected || _bulkPercentageValue == 0) {
+      return '-';
+    }
+    return '${_signedBulkPercentage >= 0 ? '+' : '-'}%${_bulkPercentageValue.toStringAsFixed(2)}';
+  }
+
+  String _formatPreviewPrice(Product product, double price) {
+    return product.copyWith(salePrice: price).formattedSalePrice;
   }
 
   @override
@@ -1014,13 +1126,36 @@ class _AdminPanelPageState extends State<AdminPanelPage>
   }
 
   Widget _buildPriceRules() {
+    final filteredProducts = _bulkFilteredProducts;
+    final selectedCodes = _selectedBulkProductCodes;
+    final selectedCount = _selectedBulkProducts.length;
+    final allVisibleSelected =
+        filteredProducts.isNotEmpty &&
+        filteredProducts.every(
+          (product) =>
+              selectedCodes.contains(product.code.trim().toUpperCase()),
+        );
+
     return _PanelTable(
-      header: const Row(
+      header: Row(
         children: [
-          Expanded(flex: 3, child: _Th('Kural')),
-          Expanded(flex: 2, child: _Th('Kapsam')),
-          Expanded(flex: 2, child: _Th('Hedef')),
-          SizedBox(width: 120, child: _Th('Oran')),
+          SizedBox(
+            width: 52,
+            child: Checkbox(
+              value: allVisibleSelected,
+              tristate: filteredProducts.isNotEmpty && !allVisibleSelected,
+              onChanged: filteredProducts.isEmpty
+                  ? null
+                  : (value) => _toggleAllBulkProducts(value ?? false),
+            ),
+          ),
+          const Expanded(flex: 2, child: _Th('Urun Kodu')),
+          const Expanded(flex: 3, child: _Th('Urun Adi')),
+          const Expanded(flex: 2, child: _Th('Marka')),
+          const Expanded(flex: 2, child: _Th('Kategori')),
+          const Expanded(flex: 2, child: _Th('Mevcut Fiyat')),
+          const Expanded(flex: 2, child: _Th('Uygulanacak Degisim')),
+          const Expanded(flex: 2, child: _Th('Yeni Fiyat')),
         ],
       ),
       toolbar: Column(
@@ -1048,8 +1183,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                           DropdownMenuItem(value: brand, child: Text(brand)),
                     ),
                   ],
-                  onChanged: (value) =>
-                      setState(() => _bulkBrandFilter = value ?? ''),
+                  onChanged: (value) => _setBulkBrandFilter(value ?? ''),
                 ),
               ),
               SizedBox(
@@ -1071,8 +1205,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                       ),
                     ),
                   ],
-                  onChanged: (value) =>
-                      setState(() => _bulkCategoryFilter = value ?? ''),
+                  onChanged: (value) => _setBulkCategoryFilter(value ?? ''),
                 ),
               ),
               SizedBox(
@@ -1080,7 +1213,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                 child: TextField(
                   key: const ValueKey('admin-bulk-price-query-filter'),
                   controller: _bulkSearchController,
-                  onChanged: (value) => setState(() => _bulkQuery = value),
+                  onChanged: _setBulkQuery,
                   decoration: const InputDecoration(
                     labelText: 'Urun Ara',
                     hintText: 'Kod veya urun adi',
@@ -1093,6 +1226,31 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                 onPressed: _clearBulkFilters,
                 icon: const Icon(Icons.restart_alt_rounded),
                 label: const Text('Filtreyi Temizle'),
+              ),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment<bool>(value: false, label: Text('Yuzde artir')),
+                  ButtonSegment<bool>(value: true, label: Text('Yuzde azalt')),
+                ],
+                selected: {_bulkIsDecrease},
+                onSelectionChanged: (selection) {
+                  setState(() => _bulkIsDecrease = selection.first);
+                },
+              ),
+              SizedBox(
+                width: 140,
+                child: TextField(
+                  controller: _bulkPercentageController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Oran (%)',
+                    hintText: '10',
+                    isDense: true,
+                  ),
+                ),
               ),
               FilledButton.icon(
                 onPressed: _isApplyingBulkPriceUpdate
@@ -1111,10 +1269,18 @@ class _AdminPanelPageState extends State<AdminPanelPage>
           ),
           const SizedBox(height: 12),
           Text(
-            '${_bulkFilteredProducts.length} urun fiyat politikasina aday',
+            '${filteredProducts.length} urun fiyat guncellemesine aday',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               fontWeight: FontWeight.w700,
               color: const Color(0xFF5B6F7F),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '$selectedCount urun secili',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF64748B),
             ),
           ),
           if (_hasActiveBulkFilter) ...[
@@ -1130,30 +1296,41 @@ class _AdminPanelPageState extends State<AdminPanelPage>
         ],
       ),
       children: [
-        for (final rule in _priceRules)
+        for (final product in filteredProducts)
           Row(
             children: [
-              Expanded(
-                flex: 3,
-                child: _Cell(
-                  rule.name.isEmpty ? rule.id : rule.name,
-                  strong: true,
+              SizedBox(
+                width: 52,
+                child: Checkbox(
+                  value: selectedCodes.contains(
+                    product.code.trim().toUpperCase(),
+                  ),
+                  onChanged: (value) =>
+                      _toggleBulkProductSelection(product, value ?? false),
                 ),
               ),
-              Expanded(flex: 2, child: _Cell(rule.scope.label)),
+              Expanded(flex: 2, child: _Cell(product.code, strong: true)),
+              Expanded(flex: 3, child: _Cell(product.name, strong: true)),
+              Expanded(flex: 2, child: _Cell(product.brand)),
               Expanded(
                 flex: 2,
-                child: _Cell(switch (rule.scope) {
-                  PriceAdjustmentScope.brand => rule.brand,
-                  PriceAdjustmentScope.category => rule.category,
-                  PriceAdjustmentScope.brandAndCategory =>
-                    '${rule.brand} / ${rule.category}',
-                }),
+                child: _Cell(productCategoryTurkishLabel(product.category)),
               ),
-              SizedBox(
-                width: 120,
+              Expanded(flex: 2, child: _Cell(product.formattedSalePrice)),
+              Expanded(
+                flex: 2,
                 child: _Cell(
-                  '${rule.percentage >= 0 ? '+' : ''}${rule.percentage.toStringAsFixed(2)}%',
+                  _bulkPriceChangeLabel(
+                    selectedCodes.contains(product.code.trim().toUpperCase()),
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: _Cell(
+                  selectedCodes.contains(product.code.trim().toUpperCase())
+                      ? _formatPreviewPrice(product, _previewBulkPrice(product))
+                      : product.formattedSalePrice,
                   strong: true,
                 ),
               ),
@@ -1367,234 +1544,6 @@ class _OwnCompanyDialog extends StatefulWidget {
 
   @override
   State<_OwnCompanyDialog> createState() => _OwnCompanyDialogState();
-}
-
-class _BulkPriceUpdateRequest {
-  const _BulkPriceUpdateRequest({
-    required this.brand,
-    required this.category,
-    required this.query,
-    required this.percentage,
-  });
-
-  final String brand;
-  final String category;
-  final String query;
-  final double percentage;
-}
-
-class _BulkPriceUpdateDialog extends StatefulWidget {
-  const _BulkPriceUpdateDialog({
-    required this.products,
-    required this.brand,
-    required this.category,
-    required this.query,
-    required this.filterSummary,
-  });
-
-  final List<Product> products;
-  final String brand;
-  final String category;
-  final String query;
-  final String filterSummary;
-
-  @override
-  State<_BulkPriceUpdateDialog> createState() => _BulkPriceUpdateDialogState();
-}
-
-class _BulkPriceUpdateDialogState extends State<_BulkPriceUpdateDialog> {
-  late final TextEditingController _percentageController;
-  bool _isDecrease = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _percentageController = TextEditingController(text: '10');
-  }
-
-  @override
-  void dispose() {
-    _percentageController.dispose();
-    super.dispose();
-  }
-
-  double get _percentageValue {
-    final parsed = double.tryParse(
-      _percentageController.text.trim().replaceAll(',', '.'),
-    );
-    return parsed == null ? 0 : parsed.abs();
-  }
-
-  double get _signedPercentage =>
-      _isDecrease ? -_percentageValue : _percentageValue;
-
-  Product? get _previewProduct =>
-      widget.products.isEmpty ? null : widget.products.first;
-
-  String _formatPrice(Product product, double value) {
-    return product.copyWith(salePrice: value).formattedSalePrice;
-  }
-
-  double _nextPrice(Product product) {
-    final multiplier = 1 + (_signedPercentage / 100);
-    return double.parse((product.salePrice * multiplier).toStringAsFixed(2));
-  }
-
-  Future<void> _submit() async {
-    if (widget.products.isEmpty || _percentageValue == 0) return;
-    final confirmed =
-        await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Toplu fiyat guncellemesini onayla'),
-            content: Text(
-              '${widget.products.length} urunun fiyati '
-              '${_signedPercentage >= 0 ? '%' : '-%'}'
-              '${_percentageValue.toStringAsFixed(2)} '
-              '${_isDecrease ? 'azaltilacak' : 'artirilacak'}.\n\n'
-              'Aktif filtreler: ${widget.filterSummary}',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Iptal'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Onayla'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    if (!confirmed || !mounted) return;
-
-    Navigator.of(context).pop(
-      _BulkPriceUpdateRequest(
-        brand: widget.brand,
-        category: widget.category,
-        query: widget.query,
-        percentage: _signedPercentage,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final product = _previewProduct;
-    final nextPrice = product == null ? 0.0 : _nextPrice(product);
-
-    return AlertDialog(
-      title: const Text('Toplu Fiyat Guncelle'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment<bool>(value: false, label: Text('Yuzde artir')),
-                  ButtonSegment<bool>(value: true, label: Text('Yuzde azalt')),
-                ],
-                selected: {_isDecrease},
-                onSelectionChanged: (selection) {
-                  setState(() => _isDecrease = selection.first);
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _percentageController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Oran (%)',
-                  hintText: 'Orn. 10',
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Eslesen urun sayisi: ${widget.products.length}',
-                style: const TextStyle(
-                  color: Color(0xFF17304C),
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Aktif filtreler: ${widget.filterSummary}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF5B6F7F),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: const Color(0xFFF8FAFC),
-                  border: Border.all(color: const Color(0xFFD8E0E8)),
-                ),
-                child: product == null
-                    ? const Text('Onizleme icin urun bulunamadi.')
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            product.code,
-                            style: const TextStyle(
-                              color: Color(0xFF17304C),
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            product.name,
-                            style: const TextStyle(
-                              color: Color(0xFF475569),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Eski fiyat: ${_formatPrice(product, product.salePrice)}',
-                          ),
-                          Text(
-                            'Degisim: ${_signedPercentage >= 0 ? '+' : '-'}%${_percentageValue.toStringAsFixed(2)}',
-                          ),
-                          Text(
-                            'Yeni fiyat: ${_formatPrice(product, nextPrice)}',
-                            style: const TextStyle(
-                              color: Color(0xFF059669),
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Vazgec'),
-        ),
-        FilledButton(
-          onPressed: widget.products.isEmpty || _percentageValue == 0
-              ? null
-              : _submit,
-          child: const Text('Devam Et'),
-        ),
-      ],
-    );
-  }
 }
 
 class _OwnCompanyDialogState extends State<_OwnCompanyDialog> {

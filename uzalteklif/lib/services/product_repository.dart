@@ -446,11 +446,16 @@ class ProductRepository {
     String brand = '',
     String category = '',
     String query = '',
+    List<String>? productCodes,
     required double percentage,
   }) async {
     final normalizedBrand = brand.trim().toLowerCase();
     final normalizedCategory = category.trim().toLowerCase();
     final normalizedQuery = query.trim().toLowerCase();
+    final normalizedCodes = (productCodes ?? const <String>[])
+        .map((code) => code.trim().toUpperCase())
+        .where((code) => code.isNotEmpty)
+        .toSet();
     final now = DateTime.now().toUtc();
     final multiplier = 1 + (percentage / 100);
 
@@ -467,7 +472,13 @@ class ProductRepository {
               normalizedQuery.isEmpty ||
               product.code.toLowerCase().contains(normalizedQuery) ||
               product.name.toLowerCase().contains(normalizedQuery);
-          return matchesBrand && matchesCategory && matchesQuery;
+          final matchesSelection =
+              normalizedCodes.isEmpty ||
+              normalizedCodes.contains(product.code.trim().toUpperCase());
+          return matchesBrand &&
+              matchesCategory &&
+              matchesQuery &&
+              matchesSelection;
         })
         .map(
           (product) => product.copyWith(

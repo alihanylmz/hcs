@@ -1,0 +1,1 @@
+void navigateToHash(String hash) {}

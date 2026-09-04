@@ -36,6 +36,30 @@ jobs:
           --dart-define=SUPABASE_URL=https://example.supabase.co
           --dart-define=SUPABASE_ANON_KEY=ci-anon-key
 
+  quote-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter beta
+        uses: subosito/flutter-action@v2
+        with:
+          channel: beta
+          cache: true
+
+      - name: Install quote dependencies
+        working-directory: uzalteklif
+        run: flutter pub get
+
+      - name: Test quote app
+        working-directory: uzalteklif
+        run: flutter test
+
+      - name: Analyze quote app
+        working-directory: uzalteklif
+        run: flutter analyze --no-fatal-warnings
+
   windows-build:
     runs-on: windows-latest
     steps:

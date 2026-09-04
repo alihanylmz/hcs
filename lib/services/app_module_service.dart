@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'dart:html' as html;
+
+import 'app_module_navigation.dart';
 
 class AppModuleService {
   static void switchToQuote(BuildContext context) {
@@ -14,8 +15,7 @@ class AppModuleService {
 
     if (kIsWeb) {
       Future.delayed(const Duration(milliseconds: 300), () {
-        html.window.location.hash = '#/';
-        html.window.location.reload();
+        navigateToHash('#/');
       });
     } else {
       Navigator.of(context).popUntil((route) => route.isFirst);
@@ -33,8 +33,7 @@ class AppModuleService {
 
     if (kIsWeb) {
       Future.delayed(const Duration(milliseconds: 300), () {
-        html.window.location.hash = '#/tickets';
-        html.window.location.reload();
+        navigateToHash('#/tickets');
       });
     } else {
       Navigator.of(context).popUntil((route) => route.isFirst);

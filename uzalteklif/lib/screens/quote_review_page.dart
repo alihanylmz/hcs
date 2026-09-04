@@ -7,7 +7,9 @@ import '../models/market_rate.dart';
 import '../models/product.dart';
 import '../models/quote.dart';
 import '../services/cari_repository.dart';
+import '../services/outlook_attachment_email_service.dart';
 import '../services/pdf_export_service.dart';
+import '../services/pdf_file_saver_stub.dart';
 import '../services/own_company_repository.dart';
 import '../services/price_adjustment_rule_repository.dart';
 import '../services/product_repository.dart';
@@ -60,6 +62,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
   static const _accent = Color(0xFFB8843C);
 
   final _pdfService = const PdfExportService();
+  final _outlookEmailService = const OutlookAttachmentEmailService();
 
   late Quote _quote;
   bool _isBusy = false;
@@ -979,6 +982,16 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     final encodedBody = Uri.encodeComponent(customBody).replaceAll('+', '%20');
     final encodedCc = Uri.encodeComponent('teklif@uzalteknik.com').replaceAll('+', '%20');
 
+    if (_outlookEmailService.isSupported) {
+      await _openWindowsOutlookEmail(
+        toEmail: finalToEmail,
+        selectedSender: selectedSender,
+        subject: customSubject,
+        body: customBody,
+      );
+      return;
+    }
+
     final uri = Uri.parse('mailto:$finalToEmail?cc=$encodedCc&subject=$encodedSubject&body=$encodedBody');
 
     try {
@@ -1017,6 +1030,69 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _openWindowsOutlookEmail({
+    required String toEmail,
+    required String selectedSender,
+    required String subject,
+    required String body,
+  }) async {
+    try {
+      final pdfBytes = await _pdfService.buildQuotePdfBytes(_quote);
+      final pdfPath = await savePdfFile(
+        fileName: '${_quote.code}.pdf',
+        bytes: pdfBytes,
+        archiveQuoteCode: _quote.code,
+      );
+      if (pdfPath == null) {
+        throw Exception('PDF dosyasi kaydedilemedi.');
+      }
+
+      final openResult = await _outlookEmailService.openDraftWithAttachment(
+        to: toEmail,
+        cc: 'teklif@uzalteknik.com',
+        subject: subject,
+        body: body,
+        attachmentPath: pdfPath,
+        senderEmail: selectedSender,
+      );
+      if (!openResult.opened) {
+        throw Exception('Outlook acilamadi.');
+      }
+
+      await widget.quoteRepository.markEmailSent(_quote.id, toEmail);
+      final updated = _quote.copyWith(
+        emailSentAt: DateTime.now().toUtc(),
+        emailSentTo: toEmail,
+      );
+      if (!mounted) return;
+      setState(() => _quote = updated);
+
+      final senderInfo = selectedSender.isEmpty
+          ? ''
+          : openResult.senderMatched
+          ? ' (Gonderen: $selectedSender)'
+          : ' (Gonderen hesap Outlook\'ta bulunamadi, Reply-To eklendi: $selectedSender)';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Outlook taslagi PDF ekli acildi.$senderInfo Alici: $toEmail',
+          ),
+          backgroundColor: const Color(0xFF29956F),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Outlook PDF ekli taslak olusturulamadi ($toEmail). Outlook kurulu ve oturum acik olmali.',
+          ),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
     }
   }
 

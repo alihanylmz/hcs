@@ -113,7 +113,17 @@ class QuoteRepository {
       return;
     }
 
-    await _client.from('quotes').upsert(quote.toJson());
+    try {
+      await _client.from('quotes').upsert(quote.toJson());
+    } on PostgrestException catch (error) {
+      if (_isMissingSharedWithColumn(error)) {
+        final payload = Map<String, dynamic>.from(quote.toJson())
+          ..remove('shared_with');
+        await _client.from('quotes').upsert(payload);
+        return;
+      }
+      rethrow;
+    }
   }
 
   /// Teklif kodu gun + ay + yil + saat + dakika biciminde uretilir.
@@ -184,9 +194,21 @@ class QuoteRepository {
       );
     }
     if (_client == null) return;
-    await _client.from('quotes').update({
-      'shared_with': sharedWith,
-    }).eq('id', quoteId);
+    try {
+      await _client.from('quotes').update({
+        'shared_with': sharedWith,
+      }).eq('id', quoteId);
+    } on PostgrestException catch (error) {
+      if (_isMissingSharedWithColumn(error)) {
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  bool _isMissingSharedWithColumn(PostgrestException error) {
+    final message = error.message.toLowerCase();
+    return error.code == 'PGRST204' && message.contains('shared_with');
   }
 }
 

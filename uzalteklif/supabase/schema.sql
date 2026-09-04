@@ -536,6 +536,60 @@ $$;
 
 grant execute on function public.is_system_admin() to authenticated;
 
+create or replace function public.can_view_quote_record(
+  p_created_by uuid,
+  p_shared_with text[] default '{}'
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    public.is_quote_manager()
+    or p_created_by = auth.uid()
+    or exists (
+      select 1 from public.user_profiles u
+      where u.user_id = auth.uid()
+        and u.role in (
+          'admin',
+          'manager',
+          'sales',
+          'seller',
+          'sales_engineer',
+          'mechatronics_engineer',
+          'electrical_electronics_engineer',
+          'operations',
+          'finance'
+        )
+    )
+    or auth.uid()::text = any (coalesce(p_shared_with, '{}'))
+    or coalesce(auth.jwt() ->> 'email', '') = any (coalesce(p_shared_with, '{}'));
+$$;
+
+grant execute on function public.can_view_quote_record(uuid, text[]) to authenticated;
+
+create or replace function public.can_update_quote_record(
+  p_created_by uuid,
+  p_shared_with text[] default '{}'
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    public.is_quote_manager()
+    or p_created_by is null
+    or p_created_by = auth.uid()
+    or auth.uid()::text = any (coalesce(p_shared_with, '{}'))
+    or coalesce(auth.jwt() ->> 'email', '') = any (coalesce(p_shared_with, '{}'));
+$$;
+
+grant execute on function public.can_update_quote_record(uuid, text[]) to authenticated;
+
 drop trigger if exists user_profiles_set_updated_at on public.user_profiles;
 create trigger user_profiles_set_updated_at
 before update on public.user_profiles
@@ -1183,8 +1237,7 @@ on public.quotes
 for select
 to authenticated
 using (
-  public.is_quote_manager()
-  or created_by = auth.uid()
+  public.can_view_quote_record(created_by, shared_with)
 );
 
 create policy "quotes_insert_authenticated"
@@ -1200,12 +1253,10 @@ on public.quotes
 for update
 to authenticated
 using (
-  public.is_quote_manager()
-  or created_by = auth.uid()
+  public.can_update_quote_record(created_by, shared_with)
 )
 with check (
-  public.is_quote_manager()
-  or created_by = auth.uid()
+  public.can_update_quote_record(created_by, shared_with)
 );
 
 create policy "quotes_delete_scope"

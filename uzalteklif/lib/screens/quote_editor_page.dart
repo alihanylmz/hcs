@@ -217,6 +217,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       final defaultUnitPrice = product.priceInTl(_rateLookup);
       _items.add(
         _LineDraft(
+          lineId: _newId('line'),
           productId: product.id,
           productCode: product.code.trim(),
           priceCurrencyCode: _selectedDisplayUnit,
@@ -593,6 +594,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       final productId = _findProductIdFromItem(item);
       _items.add(
         _LineDraft(
+          lineId: item.id,
           productId: productId,
           productCode: item.resolvedProductCode,
           priceCurrencyCode: source.displayUnit,
@@ -1321,7 +1323,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
               : '';
 
           return QuoteLineItem(
-            id: _newId('line'),
+            id: draft.lineId,
             productCode:
                 _findProductById(draft.productId)?.code.trim() ??
                 draft.productCode,
@@ -1427,12 +1429,30 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
           : src?.status ?? QuoteStatus.draft,
       submittedAt: widget.revisionMode ? null : src?.submittedAt,
       approvedAt: widget.revisionMode ? null : src?.approvedAt,
+      approvedBy: widget.revisionMode ? null : src?.approvedBy,
       approvedByName: widget.revisionMode ? '' : src?.approvedByName ?? '',
       approvalNote: widget.revisionMode ? '' : src?.approvalNote ?? '',
+      acceptedTotalTl: widget.revisionMode ? null : src?.acceptedTotalTl,
+      acceptedAmount: widget.revisionMode ? null : src?.acceptedAmount,
+      acceptedCurrencyCode: widget.revisionMode
+          ? 'TL'
+          : src?.acceptedCurrencyCode ?? 'TL',
+      acceptedFxRate: widget.revisionMode ? null : src?.acceptedFxRate,
+      acceptedNote: widget.revisionMode ? '' : src?.acceptedNote ?? '',
+      acceptedAt: widget.revisionMode ? null : src?.acceptedAt,
+      acceptedBy: widget.revisionMode ? null : src?.acceptedBy,
+      acceptedByName: widget.revisionMode ? '' : src?.acceptedByName ?? '',
       revisionCount: src?.revisionCount ?? 0,
       createdBy: resolvedCreatorId,
       createdByName: resolvedCreatorName,
       archivedAt: widget.revisionMode ? null : src?.archivedAt,
+      emailSentAt: widget.revisionMode ? null : src?.emailSentAt,
+      emailSentTo: widget.revisionMode ? '' : src?.emailSentTo ?? '',
+      emailViewedAt: widget.revisionMode ? null : src?.emailViewedAt,
+      customerResponse: widget.revisionMode
+          ? CustomerResponse.pending
+          : src?.customerResponse ?? CustomerResponse.pending,
+      sharedWith: src?.sharedWith ?? const [],
     );
   }
 
@@ -1465,6 +1485,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     setState(() {
       _items.add(
         _LineDraft(
+          lineId: _newId('line'),
           productId: product.id,
           productCode: product.code.trim(),
           priceCurrencyCode: _selectedDisplayUnit,
@@ -1490,6 +1511,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     setState(() {
       _items.add(
         _LineDraft(
+          lineId: _newId('line'),
           productId: null,
           productCode: '',
           priceCurrencyCode: _selectedDisplayUnit,
@@ -4070,6 +4092,7 @@ class _QuotePriceChange {
 
 class _LineDraft {
   _LineDraft({
+    required this.lineId,
     required this.productId,
     required this.productCode,
     required this.priceCurrencyCode,
@@ -4082,9 +4105,10 @@ class _LineDraft {
   }) : descriptionController = TextEditingController(text: description),
        unitController = TextEditingController(text: unit),
        quantityController = TextEditingController(text: quantity),
-       unitPriceController = TextEditingController(text: unitPriceTl),
-       discountController = TextEditingController(text: discount);
+        unitPriceController = TextEditingController(text: unitPriceTl),
+        discountController = TextEditingController(text: discount);
 
+  final String lineId;
   final String? productId;
   final String productCode;
   String priceCurrencyCode;

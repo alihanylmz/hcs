@@ -37,6 +37,18 @@ class UserQuoteProfile {
   bool get isManager => role == 'admin' || role == 'manager';
   bool get canManageUsers => isAdmin;
   bool get canApproveQuotes => isManager || role == 'finance';
+  bool get canSeeTeamQuotes => switch (role) {
+    'admin' ||
+    'manager' ||
+    'sales' ||
+    'seller' ||
+    'sales_engineer' ||
+    'mechatronics_engineer' ||
+    'electrical_electronics_engineer' ||
+    'operations' ||
+    'finance' => true,
+    _ => false,
+  };
   final String preparedByName;
   final String preparedByTitle;
   final String preparedByPhone;

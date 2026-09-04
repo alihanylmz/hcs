@@ -210,14 +210,17 @@ class _QuotesPageState extends State<QuotesPage> {
     final myEmail = myProfile?.preparedByEmail;
     final myName = myProfile?.preparedByName;
 
-    final quotes = rawQuotes.where((q) {
-      return q.canAccess(
-        currentUserId: myUid,
-        currentUserEmail: myEmail,
-        currentUserName: myName,
-        isManager: isManager,
-      );
-    }).toList();
+    final canSeeTeamQuotes = myProfile?.canSeeTeamQuotes == true;
+    final quotes = canSeeTeamQuotes
+        ? List<Quote>.from(rawQuotes)
+        : rawQuotes.where((q) {
+            return q.canAccess(
+              currentUserId: myUid,
+              currentUserEmail: myEmail,
+              currentUserName: myName,
+              isManager: isManager,
+            );
+          }).toList();
 
     List<CariAccount> cariler = const [];
     try {

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'dart:html' as html;
+
+import 'module_switcher_navigation.dart';
 
 class ModuleSwitcher {
   static void switchToTask(BuildContext context) {
@@ -14,8 +15,7 @@ class ModuleSwitcher {
 
     if (kIsWeb) {
       Future.delayed(const Duration(milliseconds: 300), () {
-        html.window.location.hash = '#/tickets';
-        html.window.location.reload();
+        navigateToModule('#/tickets');
       });
     } else {
       Navigator.of(context).popUntil((route) => route.isFirst);
@@ -33,8 +33,7 @@ class ModuleSwitcher {
 
     if (kIsWeb) {
       Future.delayed(const Duration(milliseconds: 300), () {
-        html.window.location.hash = '#/';
-        html.window.location.reload();
+        navigateToModule('#/');
       });
     } else {
       Navigator.of(context).popUntil((route) => route.isFirst);

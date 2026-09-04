@@ -7,7 +7,7 @@ class QuoteCodeGenerator {
   QuoteCodeGenerator._();
 
   /// `GAYYYYHHmm`
-  static final RegExp pattern = RegExp(r'^\d{9,12}$');
+  static final RegExp pattern = RegExp(r'^UZ-\d{6}-\d{6}$');
 
   /// Paylasim tokeninde kullanilan alfabe. Karistirilan karakterler (O/0, I/1,
   /// vb.) ve majiskul formlar disaridi; QR okutma sonrasi elle yazmak gerekirse
@@ -22,12 +22,13 @@ class QuoteCodeGenerator {
   static final Random _secureRandom = Random.secure();
 
   static String buildCode({required DateTime timestamp}) {
-    final day = timestamp.day.toString();
-    final month = timestamp.month.toString();
-    final yyyy = timestamp.year.toString();
+    final yy = (timestamp.year % 100).toString().padLeft(2, '0');
+    final month = timestamp.month.toString().padLeft(2, '0');
+    final day = timestamp.day.toString().padLeft(2, '0');
     final hh = timestamp.hour.toString().padLeft(2, '0');
     final min = timestamp.minute.toString().padLeft(2, '0');
-    return '$day$month$yyyy$hh$min';
+    final sec = timestamp.second.toString().padLeft(2, '0');
+    return 'UZ-$yy$month$day-$hh$min$sec';
   }
 
   /// Teklifin herkese acik linkinde kullanilan kisa ve tahmin edilemez parcayi

@@ -1014,12 +1014,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         return;
       }
 
-      await widget.quoteRepository.saveQuote(quote);
+      final savedQuote = await widget.quoteRepository.saveQuote(quote);
       if (!mounted) {
         return;
       }
 
-      Navigator.of(context).pop(quote);
+      Navigator.of(context).pop(savedQuote);
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -1405,6 +1405,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       title: _composedQuoteTitle(),
       note: taggedNote,
       createdAt: _draftTimestamp,
+      updatedAt: widget.quoteToRevise?.updatedAt,
       displayUnit: _selectedDisplayUnit,
       items: items,
       sections: sections,

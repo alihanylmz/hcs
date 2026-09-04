@@ -8,7 +8,7 @@ class QuoteRepository {
   QuoteRepository({SupabaseClient? client}) : _client = client;
 
   final SupabaseClient? _client;
-  static final Map<String, Future<void>> _saveQueue = {};
+  static final Map<String, Future<Quote>> _saveQueue = {};
 
   static final List<Quote> _memoryQuotes = [
     Quote(
@@ -91,11 +91,11 @@ class QuoteRepository {
         .toList(growable: false);
   }
 
-  Future<void> saveQuote(Quote quote) async {
-    final previous = _saveQueue[quote.id] ?? Future<void>.value();
-    late final Future<void> current;
+  Future<Quote> saveQuote(Quote quote) async {
+    final previous = _saveQueue[quote.id] ?? Future<Quote>.value(quote);
+    late final Future<Quote> current;
     current = previous
-        .catchError((_) {})
+        .catchError((_) => quote)
         .then((_) => _saveQuoteNow(quote))
         .whenComplete(() {
           if (identical(_saveQueue[quote.id], current)) {
@@ -106,24 +106,80 @@ class QuoteRepository {
     return current;
   }
 
-  Future<void> _saveQuoteNow(Quote quote) async {
-    _upsertMemoryQuote(quote);
-
+  Future<Quote> _saveQuoteNow(Quote quote) async {
     if (_client == null) {
-      return;
+      final saved = quote.copyWith(
+        updatedAt: quote.updatedAt ?? DateTime.now().toUtc(),
+      );
+      _upsertMemoryQuote(saved);
+      return saved;
     }
 
     try {
-      await _client.from('quotes').upsert(quote.toJson());
+      final payload = Map<String, dynamic>.from(quote.toJson())
+        ..remove('updated_at');
+      if (quote.updatedAt == null) {
+        final rows = await _client
+            .from('quotes')
+            .upsert(payload)
+            .select('updated_at');
+        final saved = quote.copyWith(
+          updatedAt: _parseUpdatedAt(rows.first['updated_at']),
+        );
+        _upsertMemoryQuote(saved);
+        return saved;
+      }
+
+      final rows = await _client
+          .from('quotes')
+          .update(payload)
+          .eq('id', quote.id)
+          .eq('updated_at', quote.updatedAt!.toUtc().toIso8601String())
+          .select('updated_at');
+      if (rows.isEmpty) {
+        throw QuoteConflictException(quote.id);
+      }
+      final saved = quote.copyWith(
+        updatedAt: _parseUpdatedAt(rows.first['updated_at']),
+      );
+      _upsertMemoryQuote(saved);
+      return saved;
     } on PostgrestException catch (error) {
       if (_isMissingSharedWithColumn(error)) {
         final payload = Map<String, dynamic>.from(quote.toJson())
-          ..remove('shared_with');
-        await _client.from('quotes').upsert(payload);
-        return;
+          ..remove('shared_with')
+          ..remove('updated_at');
+        if (quote.updatedAt == null) {
+          final rows = await _client
+              .from('quotes')
+              .upsert(payload)
+              .select('updated_at');
+          final saved = quote.copyWith(
+            updatedAt: _parseUpdatedAt(rows.first['updated_at']),
+          );
+          _upsertMemoryQuote(saved);
+          return saved;
+        }
+        final rows = await _client
+            .from('quotes')
+            .update(payload)
+            .eq('id', quote.id)
+            .eq('updated_at', quote.updatedAt!.toUtc().toIso8601String())
+            .select('updated_at');
+        if (rows.isEmpty) throw QuoteConflictException(quote.id);
+        final saved = quote.copyWith(
+          updatedAt: _parseUpdatedAt(rows.first['updated_at']),
+        );
+        _upsertMemoryQuote(saved);
+        return saved;
       }
       rethrow;
     }
+  }
+
+  DateTime _parseUpdatedAt(Object? value) {
+    final raw = value?.toString();
+    return DateTime.tryParse(raw ?? '')?.toUtc() ?? DateTime.now().toUtc();
   }
 
   /// Teklif kodu gun + ay + yil + saat + dakika biciminde uretilir.
@@ -210,5 +266,16 @@ class QuoteRepository {
     final message = error.message.toLowerCase();
     return error.code == 'PGRST204' && message.contains('shared_with');
   }
+}
+
+class QuoteConflictException implements Exception {
+  QuoteConflictException(this.quoteId);
+
+  final String quoteId;
+
+  @override
+  String toString() =>
+      'Bu teklif siz açtıktan sonra başka bir kullanıcı tarafından değiştirildi. '
+      'Yeni sürümü yükleyip değişikliklerinizi tekrar kontrol edin.';
 }
 

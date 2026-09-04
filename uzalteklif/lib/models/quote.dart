@@ -431,6 +431,7 @@ class Quote {
     required this.title,
     required this.note,
     required this.createdAt,
+    this.updatedAt,
     required this.displayUnit,
     required this.items,
     required this.marketSnapshot,
@@ -477,6 +478,7 @@ class Quote {
   final String title;
   final String note;
   final DateTime createdAt;
+  final DateTime? updatedAt;
   final String displayUnit;
   final List<QuoteLineItem> items;
   final List<MarketRate> marketSnapshot;
@@ -770,6 +772,7 @@ class Quote {
     String? createdBy,
     String? createdByName,
     DateTime? archivedAt,
+    DateTime? updatedAt,
     bool clearArchivedAt = false,
     DateTime? emailSentAt,
     bool clearEmailSentAt = false,
@@ -787,6 +790,7 @@ class Quote {
       title: title,
       note: note,
       createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       displayUnit: displayUnit,
       items: items,
       marketSnapshot: marketSnapshot,
@@ -834,6 +838,7 @@ class Quote {
     'display_unit': displayUnit,
     'subtotal_tl': subtotalTl,
     'created_at': createdAt.toIso8601String(),
+    if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
     'items': items.map((item) => item.toJson()).toList(),
     'hidden_costs': hiddenCosts.map((item) => item.toJson()).toList(),
     'market_snapshot': marketSnapshot.map((rate) => rate.toJson()).toList(),
@@ -894,6 +899,7 @@ class Quote {
       note: json['note'] as String? ?? '',
       displayUnit: json['display_unit'] as String? ?? 'TL',
       createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: _parseDateTime(json['updated_at']),
       items: itemsJson.map(QuoteLineItem.fromJson).toList(),
       hiddenCosts: hiddenCostsJson.map(HiddenCostItem.fromJson).toList(),
       marketSnapshot: marketSnapshotJson.map(MarketRate.fromJson).toList(),

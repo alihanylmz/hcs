@@ -136,7 +136,8 @@ create table if not exists public.quotes (
   accepted_by uuid references auth.users (id) on delete set null,
   accepted_by_name text not null default '',
   revision_count integer not null default 0,
-  created_at timestamptz not null default timezone('utc', now())
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
 );
 
 alter table public.quotes
@@ -152,6 +153,15 @@ $$;
 
 alter table public.quotes
 alter column id type text using id::text;
+
+alter table public.quotes
+add column if not exists updated_at timestamptz not null default timezone('utc', now());
+
+drop trigger if exists quotes_set_updated_at on public.quotes;
+create trigger quotes_set_updated_at
+before update on public.quotes
+for each row
+execute function public.set_updated_at();
 
 alter table public.quotes
 alter column note type text using note::text;

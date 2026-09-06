@@ -203,22 +203,60 @@ class QuoteRepository {
     _memoryQuotes[index] = quote;
   }
 
-  /// Teklifin e-posta gonderim bilgisini gunceller.
-  /// Memory modunda sadece local listeyi degistirir.
-  Future<void> markEmailSent(String quoteId, String sentTo) async {
+  /// Kullanıcının gerçekten gönderdiğini manuel olarak teyit eder.
+  Future<void> markEmailSent(
+    String quoteId,
+    String sentTo, {
+    String? sentBy,
+    String sentByName = '',
+    String note = '',
+  }) async {
     final now = DateTime.now().toUtc();
     final index = _memoryQuotes.indexWhere((q) => q.id == quoteId);
     if (index != -1) {
       _memoryQuotes[index] = _memoryQuotes[index].copyWith(
         emailSentAt: now,
         emailSentTo: sentTo,
+        emailSentBy: sentBy,
+        emailSentByName: sentByName,
+        emailSentNote: note,
       );
     }
     if (_client == null) return;
-    await _client.from('quotes').update({
-      'email_sent_at': now.toIso8601String(),
-      'email_sent_to': sentTo,
-    }).eq('id', quoteId);
+    await _client
+        .from('quotes')
+        .update({
+          'email_sent_at': now.toIso8601String(),
+          'email_sent_to': sentTo,
+          'email_sent_by': sentBy,
+          'email_sent_by_name': sentByName,
+          'email_sent_note': note,
+        })
+        .eq('id', quoteId);
+  }
+
+  /// E-posta istemcisinde taslak açıldığını kaydeder; gönderim sayılmaz.
+  Future<void> markEmailDraftOpened(
+    String quoteId,
+    String openedTo, {
+    String? openedBy,
+  }) async {
+    final now = DateTime.now().toUtc();
+    final index = _memoryQuotes.indexWhere((q) => q.id == quoteId);
+    if (index != -1) {
+      _memoryQuotes[index] = _memoryQuotes[index].copyWith(
+        emailDraftOpenedAt: now,
+        emailDraftOpenedTo: openedTo,
+      );
+    }
+    if (_client == null) return;
+    await _client
+        .from('quotes')
+        .update({
+          'email_draft_opened_at': now.toIso8601String(),
+          'email_draft_opened_to': openedTo,
+        })
+        .eq('id', quoteId);
   }
 
   /// Musterinin teklif kararini gunceller.
@@ -233,16 +271,51 @@ class QuoteRepository {
       );
     }
     if (_client == null) return;
-    await _client.from('quotes').update({
-      'customer_response': response.storageKey,
-    }).eq('id', quoteId);
+    await _client
+        .from('quotes')
+        .update({'customer_response': response.storageKey})
+        .eq('id', quoteId);
+  }
+
+  /// Durum değişikliğini sunucu tarafı geçiş kurallarıyla uygular.
+  Future<Quote> transitionQuoteStatus(
+    String quoteId,
+    QuoteStatus targetStatus, {
+    String reason = '',
+    String idempotencyKey = '',
+    bool archive = false,
+  }) async {
+    final index = _memoryQuotes.indexWhere((q) => q.id == quoteId);
+    if (_client == null) {
+      if (index == -1) throw StateError('Teklif bulunamadı.');
+      final updated = _memoryQuotes[index].copyWith(
+        status: targetStatus,
+        statusChangedAt: DateTime.now().toUtc(),
+        archivedAt: archive
+            ? DateTime.now().toUtc()
+            : _memoryQuotes[index].archivedAt,
+      );
+      _memoryQuotes[index] = updated;
+      return updated;
+    }
+    final rows = await _client.rpc(
+      'transition_quote_status',
+      params: {
+        'p_quote_id': quoteId,
+        'p_target_status': targetStatus.storageKey,
+        'p_reason': reason,
+        'p_idempotency_key': idempotencyKey,
+        'p_archive': archive,
+      },
+    );
+    final row = (rows as List).cast<Map<String, dynamic>>().first;
+    final updated = Quote.fromJson(row);
+    _upsertMemoryQuote(updated);
+    return updated;
   }
 
   /// Teklifin paylasildigi kisiler listesini gunceller.
-  Future<void> updateSharedWith(
-    String quoteId,
-    List<String> sharedWith,
-  ) async {
+  Future<void> updateSharedWith(String quoteId, List<String> sharedWith) async {
     final index = _memoryQuotes.indexWhere((q) => q.id == quoteId);
     if (index != -1) {
       _memoryQuotes[index] = _memoryQuotes[index].copyWith(
@@ -251,9 +324,10 @@ class QuoteRepository {
     }
     if (_client == null) return;
     try {
-      await _client.from('quotes').update({
-        'shared_with': sharedWith,
-      }).eq('id', quoteId);
+      await _client
+          .from('quotes')
+          .update({'shared_with': sharedWith})
+          .eq('id', quoteId);
     } on PostgrestException catch (error) {
       if (_isMissingSharedWithColumn(error)) {
         return;
@@ -278,4 +352,3 @@ class QuoteConflictException implements Exception {
       'Bu teklif siz açtıktan sonra başka bir kullanıcı tarafından değiştirildi. '
       'Yeni sürümü yükleyip değişikliklerinizi tekrar kontrol edin.';
 }
-

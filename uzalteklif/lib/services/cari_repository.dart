@@ -10,13 +10,12 @@ class CariRepository {
   bool get isRemoteReady =>
       _client != null && _client.auth.currentSession != null;
 
-  Future<List<CariAccount>> fetchAll() async {
+  Future<List<CariAccount>> fetchAll({bool includeArchived = false}) async {
     if (!isRemoteReady) return const [];
     final client = _client!;
-    final rows = await client
-        .from('customer_accounts')
-        .select()
-        .order('company_name', ascending: true);
+    var query = client.from('customer_accounts').select();
+    if (!includeArchived) query = query.eq('is_active', true);
+    final rows = await query.order('company_name', ascending: true);
     return rows
         .cast<Map<String, dynamic>>()
         .map(CariAccount.fromJson)
@@ -83,7 +82,26 @@ class CariRepository {
   }
 
   Future<void> deleteById(String id) async {
+    throw StateError('Cari kayıtları kalıcı olarak silinemez; arşivleyin.');
+  }
+
+  Future<void> archiveById(String id) async {
     if (!isRemoteReady || id.isEmpty) return;
-    await _client!.from('customer_accounts').delete().eq('id', id);
+    // Bağlı teklifler korunur; cari yalnızca pasife alınır.
+    await _client!
+        .from('customer_accounts')
+        .update({
+          'archived_at': DateTime.now().toUtc().toIso8601String(),
+          'is_active': false,
+        })
+        .eq('id', id);
+  }
+
+  Future<void> restoreById(String id) async {
+    if (!isRemoteReady || id.isEmpty) return;
+    await _client!
+        .from('customer_accounts')
+        .update({'archived_at': null, 'is_active': true})
+        .eq('id', id);
   }
 }

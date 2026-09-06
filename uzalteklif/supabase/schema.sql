@@ -256,7 +256,8 @@ not valid;
 alter table public.quotes drop constraint if exists quotes_status_check;
 alter table public.quotes
 add constraint quotes_status_check
-check (status in ('draft', 'sent', 'pending', 'approved', 'accepted', 'rejected', 'cancelled'))
+check (status in ('draft', 'approval_pending', 'approved', 'sent', 'viewed',
+                  'negotiating', 'won', 'lost', 'expired', 'cancelled'))
 not valid;
 
 alter table public.quotes drop constraint if exists quotes_revision_count_check;
@@ -296,7 +297,16 @@ on public.quotes (public_token)
 where public_token <> '';
 
 alter table public.quotes
-add column if not exists cari_id text not null default '';
+add column if not exists cari_id text;
+alter table public.quotes alter column cari_id drop not null;
+
+alter table public.quotes
+add column if not exists owner_user_id uuid references auth.users (id) on delete set null,
+add column if not exists valid_until date,
+add column if not exists next_action_at timestamptz,
+add column if not exists expected_close_at date,
+add column if not exists loss_reason_code text not null default '',
+add column if not exists status_changed_at timestamptz;
 
 alter table public.quotes
 add column if not exists created_by uuid references auth.users (id) on delete set null;
@@ -621,6 +631,8 @@ create table if not exists public.customer_accounts (
   tax_number text not null default '',
   address text not null default '',
   notes text not null default '',
+  archived_at timestamptz,
+  is_active boolean not null default true,
   created_by uuid references auth.users (id) on delete set null,
   updated_at timestamptz not null default timezone('utc', now())
 );

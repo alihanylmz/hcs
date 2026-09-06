@@ -24,11 +24,10 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
-        continue-on-error: true
-        run: flutter analyze --no-fatal-warnings
+        run: flutter analyze
 
       - name: Test
-        run: flutter test test/widget_test.dart
+        run: flutter test
 
       - name: Build web
         run: >
@@ -52,13 +51,13 @@ jobs:
         working-directory: uzalteklif
         run: flutter pub get
 
+      - name: Analyze quote app
+        working-directory: uzalteklif
+        run: flutter analyze
+
       - name: Test quote app
         working-directory: uzalteklif
         run: flutter test
-
-      - name: Analyze quote app
-        working-directory: uzalteklif
-        run: flutter analyze --no-fatal-warnings
 
   windows-build:
     runs-on: windows-latest

@@ -40,6 +40,7 @@ import '../widgets/quote_editor_cari_dropdown.dart';
 import '../widgets/quote_editor_cari_quick_create_button.dart';
 import '../widgets/quote_editor_manage_cari_button.dart';
 import '../widgets/quote_editor_own_company_field.dart';
+import '../widgets/quote_editor_step_header.dart';
 import '../widgets/quote_editor_line_product_meta.dart';
 import '../widgets/quote_editor_line_total_text.dart';
 import '../widgets/quote_editor_line_product_code.dart';
@@ -186,7 +187,8 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   String _selectedDisplayUnit = 'EURTRY';
   String _productCategoryFilter = 'Tum Kategoriler';
   bool _isSubmitting = false;
-  bool _infoCollapsed = true;
+  int _currentStep = 0; // 0=Müşteri ve konu, 1=Kalemler ve fiyat, 2=Koşullar/ön izleme/kayıt
+  bool _showAdvancedOptions = false; // global "Gelişmiş seçenekleri göster" toggle
   QuotePaymentMethod _paymentMethod = QuotePaymentMethod.cash;
   bool _hidePrices = false;
   String? _draftQuoteId;
@@ -1831,25 +1833,38 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             ),
             child: Form(
               key: _formKey,
-              child: isWide
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: _buildFormPanel(expandList: true)),
-                        const SizedBox(width: 16),
-                        SizedBox(
-                          width: 300,
-                          child: _buildSummaryPanel(expandActions: true),
-                        ),
-                      ],
-                    )
-                  : ListView(
-                      children: [
-                        _buildFormPanel(expandList: false),
-                        const SizedBox(height: 20),
-                        _buildSummaryPanel(expandActions: false),
-                      ],
-                    ),
+              child: Column(
+                children: [
+                  // Step header
+                  QuoteEditorStepHeader(
+                    currentStep: _currentStep,
+                    onStepSelected: (step) => setState(() => _currentStep = step),
+                  ),
+                  const SizedBox(height: 16),
+                  // Form content based on layout
+                  Expanded(
+                    child: isWide
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: _buildFormPanel(expandList: true)),
+                              const SizedBox(width: 16),
+                              SizedBox(
+                                width: 300,
+                                child: _buildSummaryPanel(expandActions: true),
+                              ),
+                            ],
+                          )
+                        : ListView(
+                            children: [
+                              _buildFormPanel(expandList: false),
+                              const SizedBox(height: 20),
+                              _buildSummaryPanel(expandActions: false),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

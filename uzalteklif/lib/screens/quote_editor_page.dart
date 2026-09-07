@@ -3396,67 +3396,6 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                 runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text(
-                    'Hizli cari',
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF17304C),
-                    ),
-                  ),
-                  if (_cariler.isEmpty)
-                    Text(
-                      'Kayit yok — Carileri yonet ile ekleyin.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF5B6F7F),
-                      ),
-                    )
-                  else
-                    SizedBox(
-                      width: 280,
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Kayitli cari',
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            isExpanded: true,
-                            value: _effectiveCariDropdownValue(),
-                            items: [
-                              const DropdownMenuItem<String>(
-                                value: '',
-                                child: Text('Manuel giris'),
-                              ),
-                              ..._cariler.map(
-                                (c) => DropdownMenuItem<String>(
-                                  value: c.id,
-                                  child: Text(
-                                    c.menuLabel,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ),
-                            ],
-                            onChanged: (id) {
-                              setState(() {
-                                _selectedCariId = id ?? '';
-                                if (_selectedCariId.isEmpty) return;
-                                for (final c in _cariler) {
-                                  if (c.id == _selectedCariId) {
-                                    _applyCariToForm(c);
-                                    break;
-                                  }
-                                }
-                              });
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
                   TextButton.icon(
                     onPressed: _quickCreateCari,
                     icon: const Icon(Icons.add_business_rounded, size: 18),
@@ -3485,12 +3424,59 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             ),
             const SizedBox(height: 14),
           ],
-          TextFormField(
-            controller: _customerCompanyController,
-            decoration: const InputDecoration(labelText: 'Firma Adi'),
-            validator: (value) =>
-                value == null || value.trim().isEmpty ? 'Zorunlu alan' : null,
-            onChanged: (_) => setState(() {}),
+          Autocomplete<CariAccount>(
+            optionsBuilder: (TextEditingValue textEditingValue) {
+              final input = textEditingValue.text.trim().toLowerCase();
+              if (input.isEmpty) {
+                return _cariler;
+              }
+              return _cariler.where((c) {
+                return c.companyName.trim().toLowerCase().contains(input);
+              });
+            },
+            onSelected: (CariAccount cari) {
+              _customerCompanyController.text = cari.companyName;
+              _applyCariToForm(cari);
+              setState(() => _selectedCariId = cari.id);
+            },
+            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+              return TextFormField(
+                controller: controller,
+                focusNode: focusNode,
+                decoration: const InputDecoration(
+                  labelText: 'Firma Adi',
+                  hintText: 'Firmani yazin yada seciniz',
+                ),
+                validator: (value) =>
+                    value == null || value.trim().isEmpty ? 'Zorunlu alan' : null,
+                onChanged: (value) {
+                  // Yazilan metin seçili cariden farkli ise selectedCariId temizle
+                  if (_selectedCariId.isNotEmpty) {
+                    final selectedCari =
+                        _cariler.firstWhereOrNull((c) => c.id == _selectedCariId);
+                    if (selectedCari == null ||
+                        selectedCari.companyName.trim() != value.trim()) {
+                      setState(() => _selectedCariId = '');
+                    }
+                  }
+                  setState(() {});
+                },
+              );
+            },
+            optionsViewBuilder: (context, onSelected, options) {
+              return Material(
+                elevation: 4,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: options
+                      .map((option) => ListTile(
+                            title: Text(option.menuLabel),
+                            onTap: () => onSelected(option),
+                          ))
+                      .toList(),
+                ),
+              );
+            },
           ),
           const SizedBox(height: 12),
           TextFormField(

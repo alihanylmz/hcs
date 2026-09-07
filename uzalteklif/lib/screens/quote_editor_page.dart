@@ -395,9 +395,13 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     return CompanyProfile.defaultVatRate;
   }
 
-  String _effectiveCariDropdownValue() {
-    if (_selectedCariId.isEmpty) return '';
-    return _cariler.any((c) => c.id == _selectedCariId) ? _selectedCariId : '';
+  /// Yuklu cari listesinde [id] ile eslesen kaydi dondurur; yoksa null.
+  CariAccount? _findCariById(String id) {
+    if (id.isEmpty) return null;
+    for (final c in _cariler) {
+      if (c.id == id) return c;
+    }
+    return null;
   }
 
   void _applyCariToForm(CariAccount c) {
@@ -593,7 +597,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
     // Dropdown'dan bir cari seçilmişse ve hâlâ listede varsa ve adını değiştirmemişse koru
     if (_selectedCariId.isNotEmpty) {
-      final selectedCari = _cariler.firstWhereOrNull((c) => c.id == _selectedCariId);
+      final selectedCari = _findCariById(_selectedCariId);
       if (selectedCari != null &&
           selectedCari.companyName.trim().toLowerCase() ==
               companyText.toLowerCase()) {
@@ -3435,8 +3439,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             onChanged: (value) {
               // Yazilan metin seçili cariden farkli ise selectedCariId temizle
               if (_selectedCariId.isNotEmpty) {
-                final selectedCari =
-                    _cariler.firstWhereOrNull((c) => c.id == _selectedCariId);
+                final selectedCari = _findCariById(_selectedCariId);
                 if (selectedCari == null ||
                     selectedCari.companyName.trim() != value.trim()) {
                   setState(() => _selectedCariId = '');

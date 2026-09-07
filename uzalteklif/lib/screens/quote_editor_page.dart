@@ -1965,53 +1965,82 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   }
 
   Widget _buildFormPanel({required bool expandList}) {
-    final lineList = _buildSectionedItemsList(expandList: expandList);
-
-    final panelColumn = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildFormHeader(),
-        _buildRevisionBanner(),
-        _buildCopyBanner(),
-        if (!_infoCollapsed) ...[
-          const SizedBox(height: 24),
-          _buildTopFormSections(),
-        ],
-        const SizedBox(height: 24),
-        _buildLinesToolbar(),
-        const SizedBox(height: 12),
-        if (_availableProducts.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              color: const Color(0xFFFFF2E6),
-              border: Border.all(color: const Color(0xFFE3C5A3)),
-            ),
-            child: const Text(
-              'Katalogda kayitli urun yok. Ozel kalem ekleyerek teklif hazirlayabilirsiniz.',
-            ),
-          ),
-        _buildCategoryBar(),
-        const SizedBox(height: 12),
-        lineList,
-        if (_hiddenCosts.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _buildHiddenCostsCompactSummary(),
-        ],
-      ],
+    final padding = EdgeInsets.all(
+      MediaQuery.sizeOf(context).width < 700 ? 12 : 24,
     );
+
+    Widget panelContent;
+    switch (_currentStep) {
+      case 0:
+        // Step 0: Müşteri ve konu
+        panelContent = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildFormHeader(),
+            _buildRevisionBanner(),
+            _buildCopyBanner(),
+            const SizedBox(height: 24),
+            _buildCustomerFields(),
+            const SizedBox(height: 16),
+            _buildOfferFields(),
+          ],
+        );
+        break;
+      case 1:
+        // Step 1: Kalemler ve fiyat
+        final lineList = _buildSectionedItemsList(expandList: expandList);
+        panelContent = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildFormHeader(),
+            const SizedBox(height: 24),
+            _buildLinesToolbar(),
+            const SizedBox(height: 12),
+            if (_availableProducts.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  color: const Color(0xFFFFF2E6),
+                  border: Border.all(color: const Color(0xFFE3C5A3)),
+                ),
+                child: const Text(
+                  'Katalogda kayitli urun yok. Ozel kalem ekleyerek teklif hazirlayabilirsiniz.',
+                ),
+              ),
+            _buildCategoryBar(),
+            const SizedBox(height: 12),
+            lineList,
+            if (_hiddenCosts.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _buildHiddenCostsCompactSummary(),
+            ],
+          ],
+        );
+        break;
+      case 2:
+        // Step 2: Koşullar, ön izleme ve kayıt
+        panelContent = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildFormHeader(),
+            const SizedBox(height: 24),
+            _buildCommercialTermsFields(),
+          ],
+        );
+        break;
+      default:
+        panelContent = const SizedBox.shrink();
+    }
 
     return Card(
       child: Padding(
-        padding: EdgeInsets.all(
-          MediaQuery.sizeOf(context).width < 700 ? 12 : 24,
-        ),
+        padding: padding,
         child: expandList
-            ? SingleChildScrollView(primary: false, child: panelColumn)
-            : panelColumn,
+            ? SingleChildScrollView(primary: false, child: panelContent)
+            : panelContent,
       ),
     );
   }
@@ -2093,56 +2122,35 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
   Widget _buildFormHeader() {
     final codePlate = _QuoteCodePlate(code: _visibleQuoteCode);
-    final collapseTooltip = _infoCollapsed
-        ? 'Bilgileri genislet'
-        : 'Bilgileri kuculterek kalem alanina odaklan';
-    final toggleButton = Tooltip(
-      message: collapseTooltip,
-      child: FilledButton.tonalIcon(
-        onPressed: () => setState(() => _infoCollapsed = !_infoCollapsed),
-        icon: Icon(
-          _infoCollapsed
-              ? Icons.edit_note_rounded
-              : Icons.keyboard_arrow_up_rounded,
-        ),
-        label: Text(_infoCollapsed ? 'Bilgileri Düzenle' : 'Kalemlere Dön'),
-      ),
-    );
+    final stepTitles = [
+      'Müşteri ve Teklif Bilgileri',
+      'Teklif Kalemleri',
+      'Koşullar ve Kayıt',
+    ];
+    final stepSubtitles = [
+      'Müşteriyi seç, teklif konusunu yaz',
+      'Ürün ekle, kalemler listesini düzenle',
+      'Ticari koşulları, ödeme terimi belirle',
+    ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final titleRow = Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Text(
-                'Musteri ve Teklif Bilgileri',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            toggleButton,
-          ],
-        );
         final titleBlock = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            titleRow,
+            Text(
+              stepTitles[_currentStep],
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
             const SizedBox(height: 8),
             Text(
-              _infoCollapsed
-                  ? 'Temel bilgileri buradan gir; ayrıntılar gerektiğinde açılır.'
-                  : 'Firma, yetkili, not ve ticari koşulları düzenliyorsun.',
+              stepSubtitles[_currentStep],
               style: Theme.of(
                 context,
               ).textTheme.bodyLarge?.copyWith(color: const Color(0xFF5B6F7F)),
             ),
-            if (_infoCollapsed) ...[
-              const SizedBox(height: 14),
-              _buildQuickInfoFields(),
-            ],
           ],
         );
 
@@ -3420,17 +3428,21 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     final st = widget.quoteToRevise?.status;
     final canCompleteQuote =
         st == null || st == QuoteStatus.draft || st == QuoteStatus.rejected;
-    final actionButtons = QuoteEditorOutputActions(
-      isSubmitting: _isSubmitting,
-      canCompleteQuote: canCompleteQuote,
-      isRevision: isRevision,
-      onSubmitForApproval: _submitForApproval,
-      onSave: _saveQuote,
-      onExportPdf: _exportPdf,
-      onExportExcel: _exportExcel,
-      onExportMaterialRequestPdf: _exportMaterialRequestPdf,
-      onExportMaterialRequestExcel: _exportMaterialRequestExcel,
-    );
+
+    // Action buttons only shown on step 2
+    final actionButtons = _currentStep == 2
+        ? QuoteEditorOutputActions(
+            isSubmitting: _isSubmitting,
+            canCompleteQuote: canCompleteQuote,
+            isRevision: isRevision,
+            onSubmitForApproval: _submitForApproval,
+            onSave: _saveQuote,
+            onExportPdf: _exportPdf,
+            onExportExcel: _exportExcel,
+            onExportMaterialRequestPdf: _exportMaterialRequestPdf,
+            onExportMaterialRequestExcel: _exportMaterialRequestExcel,
+          )
+        : null;
 
     final scrollableContent = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3508,7 +3520,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                     ),
                   ),
                   const SizedBox(height: 18),
-                  actionButtons,
+                  if (actionButtons != null) actionButtons else const SizedBox.shrink(),
                 ],
               )
             : Column(
@@ -3517,7 +3529,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                 children: [
                   scrollableContent,
                   const SizedBox(height: 18),
-                  actionButtons,
+                  if (actionButtons != null) actionButtons else const SizedBox.shrink(),
                 ],
               ),
       ),

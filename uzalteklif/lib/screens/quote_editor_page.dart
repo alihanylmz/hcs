@@ -24,6 +24,23 @@ import '../widgets/quote_editor_autosave_status.dart';
 import '../widgets/workspace_background.dart';
 import 'cariler_page.dart';
 
+/// Teklifin kalici olarak saklandigi kayit yollari. Bu yollarda nota
+/// "Cikti bicimi" etiketi EKLENMEZ.
+///
+/// Etiket, PDF/Excel gibi tek seferlik ciktilarin hangi bicimde uretildigini
+/// belgede gostermek icindir. Kalici bir kayitta eklenirse teklifin notuna
+/// yazilir, teklif tekrar acildiginda nota geri yuklenir ve sonraki her
+/// kayitta bir yenisi eklenerek not sinirsiz buyur. Autosave 12 saniyede bir
+/// kaydettigi icin bu ozellikle yikici olur.
+const _persistingQuoteSources = {'ARSIV', 'AUTOSAVE'};
+
+/// [source] kalici bir kayit yolu ise notu oldugu gibi, degilse sonuna
+/// cikti bicimi etiketi ekleyerek dondurur.
+String quoteNoteForSource(String baseNote, String source) {
+  if (_persistingQuoteSources.contains(source)) return baseNote;
+  return '$baseNote\nCikti bicimi: $source';
+}
+
 class QuoteInitialProductLine {
   const QuoteInitialProductLine({
     required this.productId,
@@ -1621,9 +1638,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     }
 
     final baseNote = _sanitizeLongText(_noteController.text).trim();
-    final taggedNote = source == 'ARSIV'
-        ? baseNote
-        : '$baseNote\nCikti bicimi: $source';
+    final taggedNote = quoteNoteForSource(baseNote, source);
 
     final hiddenCosts = _hiddenCosts
         .where((draft) => draft.totalTl > 0)

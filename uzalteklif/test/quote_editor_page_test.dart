@@ -11,6 +11,18 @@ import 'package:uzalteklif/services/quote_repository.dart';
 import 'package:uzalteklif/services/user_profile_repository.dart';
 import 'package:uzalteklif/theme/app_theme.dart';
 
+// Helper to navigate to a specific step
+Future<void> _goToStep(WidgetTester tester, int step) async {
+  await tester.tap(find.byKey(ValueKey('quote-step-$step')));
+  await tester.pumpAndSettle();
+}
+
+// Helper to enable advanced options
+Future<void> _enableAdvanced(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('quote-advanced-toggle')));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -77,6 +89,9 @@ void main() {
     expect(find.text('Teklif Kodu'), findsOneWidget);
     expect(find.textContaining('UZ-'), findsWidgets);
 
+    // Navigate to step 1 (Kalemler ve fiyat)
+    await _goToStep(tester, 1);
+
     await tester.tap(find.byIcon(Icons.add_shopping_cart_rounded));
     await tester.pumpAndSettle();
     final addButton = find.byKey(const ValueKey('catalog-add-p-1'));
@@ -138,6 +153,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+
+    // Navigate to step 1 (Kalemler ve fiyat)
+    await _goToStep(tester, 1);
 
     expect(find.byKey(const ValueKey('quote-line-sensor-1')), findsNWidgets(2));
     expect(
@@ -219,6 +237,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
+    // Navigate to step 1 (Kalemler ve fiyat)
+    await _goToStep(tester, 1);
+
     expect(find.widgetWithText(TextFormField, '100.00'), findsOneWidget);
   });
 
@@ -287,6 +308,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
+    // Navigate to step 1 (Kalemler ve fiyat)
+    await _goToStep(tester, 1);
+
     expect(find.widgetWithText(TextFormField, '120000.00'), findsOneWidget);
     expect(find.textContaining('kur carpani hatasi'), findsNothing);
   });
@@ -353,12 +377,23 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+
+    // Verify copy cleared old fields and has new content
     expect(find.text('Eski firma'), findsNothing);
     expect(find.text('Kopya profil testi'), findsNothing);
     expect(find.text('Kopyalanacak fiyat kalemi'), findsOneWidget);
     expect(find.widgetWithText(TextFormField, '1234.00'), findsOneWidget);
-    await tester.tap(find.text('Bilgileri Düzenle'));
-    await tester.pumpAndSettle();
+
+    // Navigate to step 0 (Müşteri ve konu) to see prepared-by fields
+    await _goToStep(tester, 0);
+
+    // Enable advanced options to show prepared-by fields
+    // (Note: advanced toggle is on Step 2, so navigate there and enable)
+    await _goToStep(tester, 2);
+    await _enableAdvanced(tester);
+
+    // Navigate back to step 0 to verify prepared-by fields now visible
+    await _goToStep(tester, 0);
 
     expect(find.text('Güncel Kullanıcı'), findsOneWidget);
     expect(find.text('+90 555 111 22 33'), findsOneWidget);

@@ -1983,6 +1983,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             _buildCustomerFields(),
             const SizedBox(height: 16),
             _buildOfferFields(),
+            if (_showAdvancedOptions) ...[
+              const SizedBox(height: 16),
+              _buildOwnCompanyFields(),
+              const SizedBox(height: 16),
+              _buildPreparedByFields(),
+            ],
           ],
         );
         break;
@@ -2028,6 +2034,19 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             _buildFormHeader(),
             const SizedBox(height: 24),
             _buildCommercialTermsFields(),
+            const SizedBox(height: 24),
+            // Advanced options toggle
+            _buildSectionCard(
+              title: 'Gelişmiş Seçenekler',
+              subtitle: 'Firma/banka bilgileri ve gizli maliyet araçları',
+              child: SwitchListTile.adaptive(
+                key: const ValueKey('quote-advanced-toggle'),
+                value: _showAdvancedOptions,
+                onChanged: (value) => setState(() => _showAdvancedOptions = value),
+                title: const Text('Gelişmiş seçenekleri göster'),
+                subtitle: const Text('Hazır veriler varsa değiştirmek için açın'),
+              ),
+            ),
           ],
         );
         break;
@@ -2096,11 +2115,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
               icon: const Icon(Icons.add_rounded, size: 18),
               label: const Text('Özel Kalem'),
             ),
-            OutlinedButton.icon(
-              onPressed: () => _openHiddenCostDialog(),
-              icon: const Icon(Icons.visibility_off_outlined, size: 18),
-              label: const Text('Gizli Maliyet'),
-            ),
+            if (_showAdvancedOptions)
+              OutlinedButton.icon(
+                onPressed: () => _openHiddenCostDialog(),
+                icon: const Icon(Icons.visibility_off_outlined, size: 18),
+                label: const Text('Gizli Maliyet'),
+              ),
           ],
         );
 
@@ -2555,10 +2575,11 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
               ),
             ),
           ),
-          TextButton(
-            onPressed: () => _openHiddenCostDialog(),
-            child: const Text('Ekle'),
-          ),
+          if (_showAdvancedOptions)
+            TextButton(
+              onPressed: () => _openHiddenCostDialog(),
+              child: const Text('Ekle'),
+            ),
         ],
       ),
     );

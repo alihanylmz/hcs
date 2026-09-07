@@ -91,12 +91,15 @@ class QuoteRepository {
         .toList(growable: false);
   }
 
-  Future<Quote> saveQuote(Quote quote) async {
+  /// [forceOverwrite] true ise `updated_at` esitlik kontrolu atlanir ve yazma
+  /// her zaman uygular (autosave icin son-yazan-kazanir). Manuel kayitlarda
+  /// false kalmali; aksi halde cakisma tespiti sessizce devre disi kalir.
+  Future<Quote> saveQuote(Quote quote, {bool forceOverwrite = false}) async {
     final previous = _saveQueue[quote.id] ?? Future<Quote>.value(quote);
     late final Future<Quote> current;
     current = previous
         .catchError((_) => quote)
-        .then((_) => _saveQuoteNow(quote))
+        .then((_) => _saveQuoteNow(quote, forceOverwrite: forceOverwrite))
         .whenComplete(() {
           if (identical(_saveQueue[quote.id], current)) {
             _saveQueue.remove(quote.id);
@@ -106,7 +109,7 @@ class QuoteRepository {
     return current;
   }
 
-  Future<Quote> _saveQuoteNow(Quote quote) async {
+  Future<Quote> _saveQuoteNow(Quote quote, {bool forceOverwrite = false}) async {
     if (_client == null) {
       final saved = quote.copyWith(
         updatedAt: quote.updatedAt ?? DateTime.now().toUtc(),
@@ -134,14 +137,27 @@ class QuoteRepository {
         return saved;
       }
 
-      final rows = await _client
-          .from('quotes')
-          .update(payload)
-          .eq('id', quote.id)
-          .eq('updated_at', quote.updatedAt!.toUtc().toIso8601String())
-          .select('updated_at');
+      // eq() yeni bir builder dondurur, yerinde degistirmez; donus degeri
+      // atanmazsa filtre hic uygulanmaz.
+      var query = _client.from('quotes').update(payload).eq('id', quote.id);
+      if (!forceOverwrite) {
+        query = query.eq(
+          'updated_at',
+          quote.updatedAt!.toUtc().toIso8601String(),
+        );
+      }
+      final rows = await query.select('updated_at');
       if (rows.isEmpty) {
-        throw QuoteConflictException(quote.id);
+        // forceOverwrite'ta da bos donebilir (kayit silinmis olabilir);
+        // rows.first cagirmadan once bunu ayirmak sart.
+        if (!forceOverwrite) {
+          throw QuoteConflictException(quote.id);
+        }
+        final saved = quote.copyWith(
+          updatedAt: quote.updatedAt ?? DateTime.now().toUtc(),
+        );
+        _upsertMemoryQuote(saved);
+        return saved;
       }
       final saved = quote.copyWith(
         updatedAt: _parseUpdatedAt(rows.first['updated_at']),
@@ -168,13 +184,22 @@ class QuoteRepository {
           _upsertMemoryQuote(saved);
           return saved;
         }
-        final rows = await _client
-            .from('quotes')
-            .update(payload)
-            .eq('id', quote.id)
-            .eq('updated_at', quote.updatedAt!.toUtc().toIso8601String())
-            .select('updated_at');
-        if (rows.isEmpty) throw QuoteConflictException(quote.id);
+        var query = _client.from('quotes').update(payload).eq('id', quote.id);
+        if (!forceOverwrite) {
+          query = query.eq(
+            'updated_at',
+            quote.updatedAt!.toUtc().toIso8601String(),
+          );
+        }
+        final rows = await query.select('updated_at');
+        if (rows.isEmpty) {
+          if (!forceOverwrite) throw QuoteConflictException(quote.id);
+          final saved = quote.copyWith(
+            updatedAt: quote.updatedAt ?? DateTime.now().toUtc(),
+          );
+          _upsertMemoryQuote(saved);
+          return saved;
+        }
         final saved = quote.copyWith(
           updatedAt: _parseUpdatedAt(rows.first['updated_at']),
         );

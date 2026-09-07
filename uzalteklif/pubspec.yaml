@@ -31,6 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
 
+  connectivity_plus: ^6.1.5
   cupertino_icons: ^1.0.8
   excel: ^4.0.6
   file_selector: ^1.1.0

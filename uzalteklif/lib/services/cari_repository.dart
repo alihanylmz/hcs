@@ -41,7 +41,21 @@ class CariRepository {
     if ((row['created_by'] as String?)?.trim().isEmpty ?? true) {
       row.remove('created_by');
     }
-    await _client!.from('customer_accounts').upsert(row);
+    try {
+      await _client!.from('customer_accounts').upsert(row);
+    } on PostgrestException catch (error) {
+      // Bazi kurulumlarda `contacts` kolonu eklenmemis olabilir
+      // (20260807_customer_account_contacts.sql uygulanmamis). Bu durumda
+      // kolonu cikarip tekrar dener; QuoteRepository'deki shared_with
+      // fallback'i ile ayni desen.
+      if (!_isMissingContactsColumn(error)) rethrow;
+      await _client!.from('customer_accounts').upsert(row..remove('contacts'));
+    }
+  }
+
+  bool _isMissingContactsColumn(PostgrestException error) {
+    return error.code == 'PGRST204' &&
+        error.message.toLowerCase().contains('contacts');
   }
 
   /// Eğer verilen cari hesaba [contactName] adlı yetkili eklenmemişse otomatik olarak ekler ve günceller.

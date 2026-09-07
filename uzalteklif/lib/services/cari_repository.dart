@@ -86,4 +86,18 @@ class CariRepository {
     if (!isRemoteReady || id.isEmpty) return;
     await _client!.from('customer_accounts').delete().eq('id', id);
   }
+
+  /// Verilen cariler listesinde [companyName] ile eşleşen bir cariyi bulur (büyük/küçük harfe duyarsız).
+  /// Eşleşme bulunmazsa null döndürür.
+  static CariAccount? findByCompanyName(
+    List<CariAccount> cariler,
+    String companyName,
+  ) {
+    final normalized = companyName.trim().toLowerCase();
+    if (normalized.isEmpty) return null;
+    for (final c in cariler) {
+      if (c.companyName.trim().toLowerCase() == normalized) return c;
+    }
+    return null;
+  }
 }

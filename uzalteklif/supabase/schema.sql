@@ -296,7 +296,7 @@ on public.quotes (public_token)
 where public_token <> '';
 
 alter table public.quotes
-add column if not exists cari_id text not null default '';
+add column if not exists cari_id text default null;
 
 alter table public.quotes
 add column if not exists created_by uuid references auth.users (id) on delete set null;

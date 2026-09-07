@@ -118,6 +118,10 @@ class QuoteRepository {
     try {
       final payload = Map<String, dynamic>.from(quote.toJson())
         ..remove('updated_at');
+      // Boş cari_id'yi NULL'a çevir (FK kısıtını kırmamak için)
+      if ((payload['cari_id'] as String?)?.isEmpty ?? true) {
+        payload['cari_id'] = null;
+      }
       if (quote.updatedAt == null) {
         final rows = await _client
             .from('quotes')
@@ -149,6 +153,10 @@ class QuoteRepository {
         final payload = Map<String, dynamic>.from(quote.toJson())
           ..remove('shared_with')
           ..remove('updated_at');
+        // Boş cari_id'yi NULL'a çevir (FK kısıtını kırmamak için)
+        if ((payload['cari_id'] as String?)?.isEmpty ?? true) {
+          payload['cari_id'] = null;
+        }
         if (quote.updatedAt == null) {
           final rows = await _client
               .from('quotes')

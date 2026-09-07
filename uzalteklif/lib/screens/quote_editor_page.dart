@@ -408,6 +408,47 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     _customerEmailController.text = c.email;
   }
 
+  /// Mevcut form alanlarından (firma adı, yetkili, ünvan, telefon, e-posta, vergi info) bir [CariAccount] oluşturur,
+  /// kaydeder ve verilen callback'i yeni cari'nin id'siyle çağırır. Dialog göstermez — veriler form'dan alınır.
+  Future<String> _createCariFromForm() async {
+    final companyName = _customerCompanyController.text.trim();
+    final contactName = _customerNameController.text.trim();
+    final contactTitle = _customerTitleController.text.trim();
+    final phone = _customerPhoneController.text.trim();
+    final email = _customerEmailController.text.trim();
+    final taxOffice = '';
+    final taxNumber = '';
+    final address = '';
+    final notes = '';
+
+    if (companyName.isEmpty) return '';
+
+    final cari = CariAccount(
+      id: 'cari-${DateTime.now().microsecondsSinceEpoch}',
+      companyName: companyName,
+      contactName: contactName,
+      contactTitle: contactTitle,
+      phone: phone,
+      email: email,
+      taxOffice: taxOffice,
+      taxNumber: taxNumber,
+      address: address,
+      notes: notes,
+      updatedAt: DateTime.now().toUtc(),
+    );
+
+    try {
+      await widget.cariRepository.save(cari);
+      return cari.id;
+    } catch (error) {
+      if (!mounted) return '';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cari otomatik olarak oluşturulamadı: $error')),
+      );
+      return '';
+    }
+  }
+
   Future<void> _quickCreateCari() async {
     final company = TextEditingController(
       text: _customerCompanyController.text,
@@ -538,6 +579,48 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         context,
       ).showSnackBar(SnackBar(content: Text('Cari kaydedilemedi: $error')));
     }
+  }
+
+  /// Firma adını dropdown'dan seçilen cari ile eşleştir, ya da eşleşme yoksa otomatik yeni cari oluştur.
+  /// Kullanıcı dropdown'dan bir cariyi bilerek seçmişse ve firma adını değiştirmemişse, seçilen cari'yi koru.
+  /// Aksi takdirde: 1) yazılan firma adıyla mevcut cariler içinde eşleştir, 2) eşleşme yoksa yeni cari oluştur.
+  /// Firma adı tamamen boşsa boş string döndür (NULL olarak kaydedilir, FK kısıtını kırmaz).
+  Future<String> _resolveCariIdForSave() async {
+    final companyText = _customerCompanyController.text.trim();
+
+    // Firma adı boşsa NULL'a git (FK'ye müsaade)
+    if (companyText.isEmpty) return '';
+
+    // Dropdown'dan bir cari seçilmişse ve hâlâ listede varsa ve adını değiştirmemişse koru
+    if (_selectedCariId.isNotEmpty) {
+      final selectedCari = _cariler.firstWhereOrNull((c) => c.id == _selectedCariId);
+      if (selectedCari != null &&
+          selectedCari.companyName.trim().toLowerCase() ==
+              companyText.toLowerCase()) {
+        return _selectedCariId;
+      }
+    }
+
+    // Yazılan adla mevcut cariler içinde eşleştir (case-insensitive)
+    final matched = CariRepository.findByCompanyName(_cariler, companyText);
+    if (matched != null) {
+      // Eşleşme bulundu — seçilen cari'yi güncelle ama forma uygula (dropdown senkronizasyonu)
+      setState(() => _selectedCariId = matched.id);
+      return matched.id;
+    }
+
+    // Eşleşme yoksa otomatik yeni cari oluştur
+    final newCariId = await _createCariFromForm();
+    if (newCariId.isNotEmpty) {
+      // Listeyi yenile ve seçili id'yi güncelle
+      final list = await widget.cariRepository.fetchAll();
+      if (!mounted) return newCariId;
+      setState(() {
+        _cariler = list;
+        _selectedCariId = newCariId;
+      });
+    }
+    return newCariId;
   }
 
   /// Mevcut bir teklifi revize modunda yuklerken tum controller'lari ve
@@ -1284,6 +1367,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       return null;
     }
 
+    // Resolve cari_id: mevcut cariler içinde eşleştir ya da otomatik yeni cari oluştur
+    final resolvedCariId = await _resolveCariIdForSave();
+    if (!mounted) {
+      return null;
+    }
+
     final contactNameInput = _customerNameController.text.trim();
     if (_selectedCariId.isNotEmpty && contactNameInput.isNotEmpty) {
       final matches = _cariler.where((c) => c.id == _selectedCariId);
@@ -1411,7 +1500,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       sections: sections,
       hiddenCosts: hiddenCosts,
       marketSnapshot: _rates,
-      cariId: _selectedCariId.trim(),
+      cariId: resolvedCariId.trim(),
       documentProfile: company.toDocumentProfile(
         preparedByName: _preparedByNameController.text.trim(),
         preparedByTitle: _preparedByTitleController.text.trim(),

@@ -16,9 +16,11 @@ import '../services/own_company_repository.dart';
 import '../services/price_adjustment_rule_repository.dart';
 import '../services/product_repository.dart';
 import '../services/quote_code_generator.dart';
+import '../services/quote_editor_autosave_service.dart';
 import '../services/quote_repository.dart';
 import '../services/user_profile_repository.dart';
 import '../utils/product_category_labels.dart';
+import '../widgets/quote_editor_autosave_status.dart';
 import '../widgets/workspace_background.dart';
 import 'cariler_page.dart';
 
@@ -52,6 +54,7 @@ class QuoteEditorPage extends StatefulWidget {
     CariRepository? cariRepository,
     OwnCompanyRepository? ownCompanyRepository,
     PriceAdjustmentRuleRepository? priceAdjustmentRuleRepository,
+    this.autosaveService,
   }) : userProfileRepository = userProfileRepository ?? UserProfileRepository(),
        cariRepository = cariRepository ?? CariRepository(),
        ownCompanyRepository =
@@ -86,6 +89,9 @@ class QuoteEditorPage extends StatefulWidget {
   final CariRepository cariRepository;
   final OwnCompanyRepository ownCompanyRepository;
   final PriceAdjustmentRuleRepository priceAdjustmentRuleRepository;
+
+  /// Testlerde enjekte edilir; null ise sayfa kendi servisini kurar.
+  final QuoteEditorAutosaveService? autosaveService;
 
   @override
   State<QuoteEditorPage> createState() => _QuoteEditorPageState();
@@ -158,6 +164,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   List<CariAccount> _cariler = const [];
   List<Product> _availableProducts = const [];
   String _selectedCariId = '';
+  QuoteEditorAutosaveService? _autosaveService;
 
   @override
   void initState() {
@@ -184,10 +191,62 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       _selectedDisplayUnit = 'TL';
     }
 
+    _registerDirtyListeners();
     _refreshDraftQuoteCode();
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _bootstrapEditorContext(),
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _bootstrapEditorContext();
+      _initializeAutosave();
+    });
+  }
+
+  Future<void> _initializeAutosave() async {
+    if (widget.autosaveService != null) {
+      if (!mounted) return;
+      setState(() => _autosaveService = widget.autosaveService);
+      return;
+    }
+    final service = await QuoteEditorAutosaveService.create(
+      quoteRepository: widget.quoteRepository,
+      buildQuote: () => _buildQuote(source: 'AUTOSAVE', forAutosave: true),
+      draftKey: () => _draftQuoteId ?? 'new',
+      debounceDuration: const Duration(seconds: 12),
     );
+    if (!mounted) {
+      service.dispose();
+      return;
+    }
+    setState(() => _autosaveService = service);
+  }
+
+  /// Kaydedilecek bir icerik degistiginde cagrilir; adim gezinme veya
+  /// filtre gibi salt-gorsel degisikliklerde cagrilmaz.
+  void _markDirty() => _autosaveService?.markDirty();
+
+  /// Teklif icerigini tasiyan tum metin alanlarini autosave'e baglar.
+  /// `_productSearchController` bilerek disarida: urun arama kutusu sadece
+  /// katalog filtresi, teklifin bir parcasi degil. Listener'lari ayrica
+  /// kaldirmaya gerek yok, controller'lar dispose'ta zaten yok ediliyor.
+  void _registerDirtyListeners() {
+    for (final c in <TextEditingController>[
+      _customerNameController,
+      _customerCompanyController,
+      _customerTitleController,
+      _customerPhoneController,
+      _customerEmailController,
+      _preparedByNameController,
+      _preparedByTitleController,
+      _preparedByPhoneController,
+      _preparedByEmailController,
+      _titleController,
+      _noteController,
+      _validityController,
+      _paymentTermsController,
+      _paymentTermDaysController,
+      _deliveryTermsController,
+      _uncategorizedBulkDiscountController,
+    ]) {
+      c.addListener(_markDirty);
+    }
   }
 
   void _loadInitialProducts() {
@@ -600,7 +659,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   /// Kullanıcı dropdown'dan bir cariyi bilerek seçmişse ve firma adını değiştirmemişse, seçilen cari'yi koru.
   /// Aksi takdirde: 1) yazılan firma adıyla mevcut cariler içinde eşleştir, 2) eşleşme yoksa yeni cari oluştur.
   /// Firma adı tamamen boşsa boş string döndür (NULL olarak kaydedilir, FK kısıtını kırmaz).
-  Future<String> _resolveCariIdForSave() async {
+  /// [allowCreate] false ise (autosave) eslesme yoksa yeni cari ACMAZ, bos
+  /// doner; teklif cari_id'siz kaydedilir ve cari gercek kayitta olusur.
+  Future<String> _resolveCariIdForSave({bool allowCreate = true}) async {
     final companyText = _customerCompanyController.text.trim();
 
     // Firma adı boşsa NULL'a git (FK'ye müsaade)
@@ -624,7 +685,8 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       return matched.id;
     }
 
-    // Eşleşme yoksa otomatik yeni cari oluştur
+    // Eşleşme yoksa otomatik yeni cari oluştur (autosave'de atlanir)
+    if (!allowCreate) return '';
     final newCariId = await _createCariFromForm();
     if (newCariId.isNotEmpty) {
       // Listeyi yenile ve seçili id'yi güncelle
@@ -771,6 +833,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
   @override
   void dispose() {
+    // Autosave zamanlayicisi buildQuote uzerinden controller'lari okuyor;
+    // onlar dispose edilmeden once durdurulmali.
+    _autosaveService?.flushAndDispose();
     _customerNameController.dispose();
     _customerCompanyController.dispose();
     _customerCompanyFocusNode.dispose();
@@ -1355,26 +1420,38 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     }
   }
 
-  Future<Quote?> _buildQuote({required String source}) async {
+  /// [forAutosave] true ise arka planda sessiz calisir: kullaniciya uyari
+  /// gostermez ve cari kayitlarina yazmaz. Autosave her 12 saniyede bir
+  /// cagrildigi icin, kullanici firma adini yazarken yarim isimlerle cari
+  /// olusturmamasi ve form eksikken uyari yagdirmamasi gerekir. Cari acma
+  /// isi gercek kayda (Kaydet/Tamamla) birakilir.
+  Future<Quote?> _buildQuote({
+    required String source,
+    bool forAutosave = false,
+  }) async {
     final formState = _formKey.currentState;
     if (formState == null) {
       return null;
     }
     if (!formState.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Form alanlarinda hata var. Kirmizi kutucuklari kontrol edin.',
+      if (!forAutosave) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Form alanlarinda hata var. Kirmizi kutucuklari kontrol edin.',
+            ),
           ),
-        ),
-      );
+        );
+      }
       return null;
     }
 
     if (_items.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('En az bir kalem ekleyin.')));
+      if (!forAutosave) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('En az bir kalem ekleyin.')),
+        );
+      }
       return null;
     }
 
@@ -1383,14 +1460,19 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       return null;
     }
 
-    // Resolve cari_id: mevcut cariler içinde eşleştir ya da otomatik yeni cari oluştur
-    final resolvedCariId = await _resolveCariIdForSave();
+    // Resolve cari_id: mevcut cariler içinde eşleştir ya da otomatik yeni cari
+    // oluştur (autosave'de oluşturma kapalı, sadece eşleştirir).
+    final resolvedCariId = await _resolveCariIdForSave(
+      allowCreate: !forAutosave,
+    );
     if (!mounted) {
       return null;
     }
 
     final contactNameInput = _customerNameController.text.trim();
-    if (_selectedCariId.isNotEmpty && contactNameInput.isNotEmpty) {
+    if (!forAutosave &&
+        _selectedCariId.isNotEmpty &&
+        contactNameInput.isNotEmpty) {
       final matches = _cariler.where((c) => c.id == _selectedCariId);
       if (matches.isNotEmpty) {
         try {
@@ -1900,7 +1982,23 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     final compact = screenWidth < 700;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Teklif Olustur')),
+      appBar: AppBar(
+        title: const Text('Teklif Olustur'),
+        actions: [
+          if (_autosaveService != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Center(
+                child: ListenableBuilder(
+                  listenable: _autosaveService!,
+                  builder: (context, _) => QuoteEditorAutosaveStatus(
+                    status: _autosaveService!.status,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
       body: WorkspaceBackground(
         child: SafeArea(
           child: Padding(

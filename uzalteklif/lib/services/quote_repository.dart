@@ -91,15 +91,12 @@ class QuoteRepository {
         .toList(growable: false);
   }
 
-  /// [forceOverwrite] true ise `updated_at` esitlik kontrolu atlanir ve yazma
-  /// her zaman uygular (autosave icin son-yazan-kazanir). Manuel kayitlarda
-  /// false kalmali; aksi halde cakisma tespiti sessizce devre disi kalir.
-  Future<Quote> saveQuote(Quote quote, {bool forceOverwrite = false}) async {
+  Future<Quote> saveQuote(Quote quote) async {
     final previous = _saveQueue[quote.id] ?? Future<Quote>.value(quote);
     late final Future<Quote> current;
     current = previous
         .catchError((_) => quote)
-        .then((_) => _saveQuoteNow(quote, forceOverwrite: forceOverwrite))
+        .then((_) => _saveQuoteNow(quote))
         .whenComplete(() {
           if (identical(_saveQueue[quote.id], current)) {
             _saveQueue.remove(quote.id);
@@ -109,7 +106,7 @@ class QuoteRepository {
     return current;
   }
 
-  Future<Quote> _saveQuoteNow(Quote quote, {bool forceOverwrite = false}) async {
+  Future<Quote> _saveQuoteNow(Quote quote) async {
     if (_client == null) {
       final saved = quote.copyWith(
         updatedAt: quote.updatedAt ?? DateTime.now().toUtc(),
@@ -137,27 +134,14 @@ class QuoteRepository {
         return saved;
       }
 
-      // eq() yeni bir builder dondurur, yerinde degistirmez; donus degeri
-      // atanmazsa filtre hic uygulanmaz.
-      var query = _client.from('quotes').update(payload).eq('id', quote.id);
-      if (!forceOverwrite) {
-        query = query.eq(
-          'updated_at',
-          quote.updatedAt!.toUtc().toIso8601String(),
-        );
-      }
-      final rows = await query.select('updated_at');
+      final rows = await _client
+          .from('quotes')
+          .update(payload)
+          .eq('id', quote.id)
+          .eq('updated_at', quote.updatedAt!.toUtc().toIso8601String())
+          .select('updated_at');
       if (rows.isEmpty) {
-        // forceOverwrite'ta da bos donebilir (kayit silinmis olabilir);
-        // rows.first cagirmadan once bunu ayirmak sart.
-        if (!forceOverwrite) {
-          throw QuoteConflictException(quote.id);
-        }
-        final saved = quote.copyWith(
-          updatedAt: quote.updatedAt ?? DateTime.now().toUtc(),
-        );
-        _upsertMemoryQuote(saved);
-        return saved;
+        throw QuoteConflictException(quote.id);
       }
       final saved = quote.copyWith(
         updatedAt: _parseUpdatedAt(rows.first['updated_at']),
@@ -184,22 +168,13 @@ class QuoteRepository {
           _upsertMemoryQuote(saved);
           return saved;
         }
-        var query = _client.from('quotes').update(payload).eq('id', quote.id);
-        if (!forceOverwrite) {
-          query = query.eq(
-            'updated_at',
-            quote.updatedAt!.toUtc().toIso8601String(),
-          );
-        }
-        final rows = await query.select('updated_at');
-        if (rows.isEmpty) {
-          if (!forceOverwrite) throw QuoteConflictException(quote.id);
-          final saved = quote.copyWith(
-            updatedAt: quote.updatedAt ?? DateTime.now().toUtc(),
-          );
-          _upsertMemoryQuote(saved);
-          return saved;
-        }
+        final rows = await _client
+            .from('quotes')
+            .update(payload)
+            .eq('id', quote.id)
+            .eq('updated_at', quote.updatedAt!.toUtc().toIso8601String())
+            .select('updated_at');
+        if (rows.isEmpty) throw QuoteConflictException(quote.id);
         final saved = quote.copyWith(
           updatedAt: _parseUpdatedAt(rows.first['updated_at']),
         );
@@ -248,10 +223,13 @@ class QuoteRepository {
       );
     }
     if (_client == null) return;
-    await _client.from('quotes').update({
-      'email_sent_at': now.toIso8601String(),
-      'email_sent_to': sentTo,
-    }).eq('id', quoteId);
+    await _client
+        .from('quotes')
+        .update({
+          'email_sent_at': now.toIso8601String(),
+          'email_sent_to': sentTo,
+        })
+        .eq('id', quoteId);
   }
 
   /// Musterinin teklif kararini gunceller.
@@ -266,16 +244,14 @@ class QuoteRepository {
       );
     }
     if (_client == null) return;
-    await _client.from('quotes').update({
-      'customer_response': response.storageKey,
-    }).eq('id', quoteId);
+    await _client
+        .from('quotes')
+        .update({'customer_response': response.storageKey})
+        .eq('id', quoteId);
   }
 
   /// Teklifin paylasildigi kisiler listesini gunceller.
-  Future<void> updateSharedWith(
-    String quoteId,
-    List<String> sharedWith,
-  ) async {
+  Future<void> updateSharedWith(String quoteId, List<String> sharedWith) async {
     final index = _memoryQuotes.indexWhere((q) => q.id == quoteId);
     if (index != -1) {
       _memoryQuotes[index] = _memoryQuotes[index].copyWith(
@@ -284,9 +260,10 @@ class QuoteRepository {
     }
     if (_client == null) return;
     try {
-      await _client.from('quotes').update({
-        'shared_with': sharedWith,
-      }).eq('id', quoteId);
+      await _client
+          .from('quotes')
+          .update({'shared_with': sharedWith})
+          .eq('id', quoteId);
     } on PostgrestException catch (error) {
       if (_isMissingSharedWithColumn(error)) {
         return;
@@ -311,4 +288,3 @@ class QuoteConflictException implements Exception {
       'Bu teklif siz açtıktan sonra başka bir kullanıcı tarafından değiştirildi. '
       'Yeni sürümü yükleyip değişikliklerinizi tekrar kontrol edin.';
 }
-

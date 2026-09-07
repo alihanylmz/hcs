@@ -59,64 +59,65 @@ void main() {
     await initializeDateFormatting('tr_TR');
   });
 
-  testWidgets('kurtarma taslagi varsa bant cikar ve geri yukleme formu doldurur', (
+  testWidgets(
+    'kurtarma taslagi varsa bant cikar ve geri yukleme formu doldurur',
+    (WidgetTester tester) async {
+      // Editor acilmadan once diskte bir kurtarma kopyasi hazirla.
+      SharedPreferences.setMockInitialValues({
+        'autosave_draft_new': jsonEncode({
+          'quote': _draftQuote().toJson(),
+          'savedAt': DateTime(2026, 9, 8, 12, 30).toUtc().toIso8601String(),
+        }),
+      });
+
+      // Debounce'u testin uzerinde hic ateslenmeyecek kadar uzun tutuyoruz;
+      // bekleyen timer pumpAndSettle'i kilitlemesin.
+      final service = await QuoteEditorAutosaveService.create(
+        buildQuote: () async => null,
+        draftKey: () => 'new',
+        debounceDuration: const Duration(hours: 1),
+      );
+      addTearDown(service.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: QuoteEditorPage(
+            quoteRepository: QuoteRepository(),
+            initialRates: const [],
+            availableProducts: const [],
+            autosaveService: service,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('kaydedilmemis bir taslak bulundu'),
+        findsOneWidget,
+        reason: 'Diskte taslak varken kurtarma bandi gorunmeli',
+      );
+
+      await tester.tap(find.text('Geri Yukle'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Kurtarilan Firma'), findsWidgets);
+      expect(find.text('Kurtarilan Yetkili'), findsWidgets);
+      expect(find.text('Taslak geri yuklendi.'), findsOneWidget);
+
+      // Geri yukleme sonrasi kopya temizlenmeli, yoksa tekrar acilista
+      // ayni bant bir daha cikar.
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('autosave_draft_new'), isNull);
+    },
+  );
+
+  testWidgets('taslak yoksa kurtarma bandi cikmaz', (
     WidgetTester tester,
   ) async {
-    // Editor acilmadan once diskte bir kurtarma kopyasi hazirla.
-    SharedPreferences.setMockInitialValues({
-      'autosave_draft_new': jsonEncode({
-        'quote': _draftQuote().toJson(),
-        'savedAt': DateTime(2026, 9, 8, 12, 30).toUtc().toIso8601String(),
-      }),
-    });
-
-    // Debounce'u testin uzerinde hic ateslenmeyecek kadar uzun tutuyoruz;
-    // bekleyen timer pumpAndSettle'i kilitlemesin.
-    final service = await QuoteEditorAutosaveService.create(
-      quoteRepository: QuoteRepository(),
-      buildQuote: () async => null,
-      draftKey: () => 'new',
-      debounceDuration: const Duration(hours: 1),
-    );
-    addTearDown(service.dispose);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light,
-        home: QuoteEditorPage(
-          quoteRepository: QuoteRepository(),
-          initialRates: const [],
-          availableProducts: const [],
-          autosaveService: service,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(
-      find.textContaining('kaydedilmemis bir taslak bulundu'),
-      findsOneWidget,
-      reason: 'Diskte taslak varken kurtarma bandi gorunmeli',
-    );
-
-    await tester.tap(find.text('Geri Yukle'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Kurtarilan Firma'), findsWidgets);
-    expect(find.text('Kurtarilan Yetkili'), findsWidgets);
-    expect(find.text('Taslak geri yuklendi.'), findsOneWidget);
-
-    // Geri yukleme sonrasi kopya temizlenmeli, yoksa tekrar acilista
-    // ayni bant bir daha cikar.
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('autosave_draft_new'), isNull);
-  });
-
-  testWidgets('taslak yoksa kurtarma bandi cikmaz', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
 
     final service = await QuoteEditorAutosaveService.create(
-      quoteRepository: QuoteRepository(),
       buildQuote: () async => null,
       draftKey: () => 'new',
       debounceDuration: const Duration(hours: 1),

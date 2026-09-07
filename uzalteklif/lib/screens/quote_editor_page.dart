@@ -224,7 +224,6 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       return;
     }
     final service = await QuoteEditorAutosaveService.create(
-      quoteRepository: widget.quoteRepository,
       buildQuote: () => _buildQuote(source: 'AUTOSAVE', forAutosave: true),
       draftKey: () => _draftQuoteId ?? 'new',
       debounceDuration: const Duration(seconds: 12),

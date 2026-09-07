@@ -8,7 +8,10 @@ void main() {
       // Autosave kalici bir kayit yolu. Etiket eklenirse teklifin notuna
       // yazilir, teklif tekrar acildiginda nota geri yuklenir ve 12 saniyede
       // bir yenisi eklenerek not sinirsiz buyur.
-      expect(quoteNoteForSource('Kullanici notu', 'AUTOSAVE'), 'Kullanici notu');
+      expect(
+        quoteNoteForSource('Kullanici notu', 'AUTOSAVE'),
+        'Kullanici notu',
+      );
     });
 
     test('ARSIV notu oldugu gibi birakir', () {

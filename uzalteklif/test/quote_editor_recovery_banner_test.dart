@@ -112,6 +112,50 @@ void main() {
     },
   );
 
+  testWidgets(
+    'yeni teklifte sayfanin kendi kurdugu servis "new" anahtarini okur',
+    (WidgetTester tester) async {
+      // Bu test yalnizca OKUMA tarafini kapsar: sayfanin kendi kurdugu
+      // servis de "new" anahtarini okuyor mu.
+      //
+      // Asil hata yazma tarafindaydi: anahtar eskiden `_draftQuoteId ?? "new"`
+      // idi ve ilk otomatik kayitta _ensureDraftIdentity() rastgele bir id
+      // uretip onunla yaziyordu, dolayisiyla yazilan anahtar okunanla asla
+      // eslesmiyordu. Onu davranis uzerinden sinamak gecerli bir form ve
+      // gercek bir autosave turu gerektirdigi icin burada kapsanmiyor;
+      // tutarlilik artik yapisal olarak garanti: okuma da yazma da tek bir
+      // _recoveryDraftKey() fonksiyonunu cagiriyor.
+      SharedPreferences.setMockInitialValues({
+        'autosave_draft_new': jsonEncode({
+          'quote': _draftQuote().toJson(),
+          'savedAt': DateTime(2026, 9, 8, 12, 30).toUtc().toIso8601String(),
+        }),
+      });
+
+      // Servis BILEREK enjekte edilmiyor: sayfa kendi servisini kursun ki
+      // gercek draftKey closure'i calissin.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: QuoteEditorPage(
+            quoteRepository: QuoteRepository(),
+            initialRates: const [],
+            availableProducts: const [],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('kaydedilmemis bir taslak bulundu'),
+        findsOneWidget,
+        reason:
+            'Sayfanin kendi kurdugu servis de "new" anahtarini okumali; '
+            'aksi halde yeni tekliflerde kurtarma sessizce calismaz',
+      );
+    },
+  );
+
   testWidgets('taslak yoksa kurtarma bandi cikmaz', (
     WidgetTester tester,
   ) async {

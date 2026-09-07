@@ -225,7 +225,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     }
     final service = await QuoteEditorAutosaveService.create(
       buildQuote: () => _buildQuote(source: 'AUTOSAVE', forAutosave: true),
-      draftKey: () => _draftQuoteId ?? 'new',
+      draftKey: _recoveryDraftKey,
       debounceDuration: const Duration(seconds: 12),
     );
     if (!mounted) {
@@ -240,12 +240,24 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   /// filtre gibi salt-gorsel degisikliklerde cagrilmaz.
   void _markDirty() => _autosaveService?.markDirty();
 
+  /// Kurtarma kopyasinin SharedPreferences anahtari.
+  ///
+  /// Oturumlar arasi SABIT olmali: okuma editor acilirken, yazma ise ilk
+  /// otomatik kayitta olur. `_draftQuoteId` kullanilamaz, cunku yeni bir
+  /// teklifte acilista henuz null olur ve `_ensureDraftIdentity()` ilk
+  /// kayitta rastgele bir id uretir; boylece yazilan anahtar okunan
+  /// anahtarla asla eslesmez ve yeni tekliflerde kurtarma hic calismaz.
+  ///
+  /// Mevcut bir teklif duzenleniyorsa onun id'si zaten sabittir. Yeni
+  /// teklifte tek bir 'new' yuvasi kullanilir.
+  String _recoveryDraftKey() => widget.quoteToRevise?.id ?? 'new';
+
   /// Editor acilirken yerel kurtarma kopyasi varsa kullaniciya sunar.
   Future<void> _checkRecoveryDraft() async {
     final service = _autosaveService;
     if (service == null || !mounted) return;
 
-    final key = _draftQuoteId ?? 'new';
+    final key = _recoveryDraftKey();
     final draft = await service.readRecoveryDraft(key);
     if (draft == null || !mounted) return;
 
@@ -1271,7 +1283,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       final savedQuote = await widget.quoteRepository.saveQuote(quote);
       // Gercek kayit yapildi; yerel kurtarma kopyasi artik bayat, yoksa
       // teklif tekrar acildiginda gereksiz yere geri yukleme onerilir.
-      await _autosaveService?.discardRecoveryDraft(_draftQuoteId ?? 'new');
+      await _autosaveService?.discardRecoveryDraft(_recoveryDraftKey());
       if (!mounted) {
         return;
       }
@@ -1315,7 +1327,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
       await widget.quoteRepository.saveQuote(quote);
       // Kayit kalici hale geldi; yerel kurtarma kopyasini temizle.
-      await _autosaveService?.discardRecoveryDraft(_draftQuoteId ?? 'new');
+      await _autosaveService?.discardRecoveryDraft(_recoveryDraftKey());
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2105,8 +2117,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             builder: (ctx) => AlertDialog(
               title: const Text('Kaydedilmemis degisiklikler'),
               content: const Text(
-                'Teklifte kaydedilmemis degisiklikler var. Yerel bir taslak '
-                'kopya saklanir ve teklifi tekrar actiginizda size sunulur.',
+                'Teklif henuz sisteme kaydedilmedi. Cikarsaniz bu '
+                'degisiklikler silinir.\n\n'
+                'Saklamak icin once "Taslak Olarak Kaydet" kullanin.',
               ),
               actions: [
                 TextButton(
@@ -2121,6 +2134,11 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             ),
           );
           if ((leave ?? false) && mounted) {
+            // Bilincli cikis temiz kapanistir: yerel taslagi siliyoruz.
+            // Boylece diskte taslak kalmasi yalnizca duzensiz kapanmayi
+            // (sekme kapatma, yenileme, cokme) isaret eder ve kurtarma
+            // bandi her acilista degil, sadece gercekten gerektiginde cikar.
+            await _autosaveService?.discardRecoveryDraft(_recoveryDraftKey());
             navigator.pop();
           }
         },

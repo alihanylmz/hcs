@@ -628,6 +628,11 @@ create table if not exists public.customer_accounts (
 alter table public.customer_accounts
 add column if not exists created_by uuid references auth.users (id) on delete set null;
 
+-- CariAccount.toJson() her zaman `contacts` gonderir; kolon yoksa cari
+-- kaydetmenin tamami PGRST204 ile duser.
+alter table public.customer_accounts
+add column if not exists contacts jsonb not null default '[]'::jsonb;
+
 create index if not exists customer_accounts_created_by_idx
 on public.customer_accounts (created_by);
 

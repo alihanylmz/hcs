@@ -2277,16 +2277,75 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   }
 
   Widget _buildQuickInfoFields() {
-    Widget companyField() => TextFormField(
-      controller: _customerCompanyController,
-      decoration: const InputDecoration(
-        labelText: 'Müşteri Firma',
-        prefixIcon: Icon(Icons.business_outlined),
-        isDense: true,
-      ),
-      validator: (value) =>
-          value == null || value.trim().isEmpty ? 'Zorunlu alan' : null,
-      onChanged: (_) => setState(() {}),
+    // Yazarken kayitli cariler arasinda arar. Listeden secilirse cari bilgileri
+    // forma dolar; serbest yazilirsa kayit sirasinda _resolveCariIdForSave()
+    // eslestirir ya da yeni cari acar.
+    Widget companyField() => RawAutocomplete<CariAccount>(
+      textEditingController: _customerCompanyController,
+      focusNode: _customerCompanyFocusNode,
+      displayStringForOption: (cari) => cari.companyName,
+      optionsBuilder: (value) {
+        final query = value.text.trim().toLowerCase();
+        if (query.isEmpty) return _cariler.take(12);
+        return _cariler
+            .where((c) => c.companyName.trim().toLowerCase().contains(query))
+            .take(12);
+      },
+      onSelected: (cari) {
+        _applyCariToForm(cari);
+        setState(() => _selectedCariId = cari.id);
+      },
+      fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+        return TextFormField(
+          controller: textController,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: 'Müşteri Firma',
+            prefixIcon: const Icon(Icons.business_outlined),
+            suffixIcon: _cariler.isEmpty
+                ? null
+                : const Icon(Icons.arrow_drop_down_rounded),
+            isDense: true,
+          ),
+          validator: (value) =>
+              value == null || value.trim().isEmpty ? 'Zorunlu alan' : null,
+          onFieldSubmitted: (_) => onFieldSubmitted(),
+          onChanged: (value) {
+            // Metin secili cariden farklilastiysa secimi birak; kayitta yeni
+            // cari acilabilmesi icin bu gerekli.
+            if (_selectedCariId.isNotEmpty) {
+              final selected = _findCariById(_selectedCariId);
+              if (selected == null ||
+                  selected.companyName.trim() != value.trim()) {
+                setState(() => _selectedCariId = '');
+              }
+            }
+            setState(() {});
+          },
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        final values = options.toList(growable: false);
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 8,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420, maxHeight: 240),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: values.length,
+                itemBuilder: (context, index) => ListTile(
+                  dense: true,
+                  title: Text(values[index].menuLabel),
+                  onTap: () => onSelected(values[index]),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
     Widget contactField() {
       final currentCariMatches = _cariler.where((c) => c.id == _selectedCariId);
@@ -3440,80 +3499,23 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             ),
             const SizedBox(height: 14),
           ],
-          // Firma adi: yazarken kayitli cariler arasinda arar. Listeden secilirse
-          // cari bilgileri forma dolar; serbest yazilirsa kayit sirasinda
-          // _resolveCariIdForSave() eslestirir ya da yeni cari acar.
-          RawAutocomplete<CariAccount>(
-            textEditingController: _customerCompanyController,
-            focusNode: _customerCompanyFocusNode,
-            displayStringForOption: (cari) => cari.companyName,
-            optionsBuilder: (value) {
-              final query = value.text.trim().toLowerCase();
-              if (query.isEmpty) return _cariler.take(12);
-              return _cariler
-                  .where(
-                    (c) => c.companyName.trim().toLowerCase().contains(query),
-                  )
-                  .take(12);
-            },
-            onSelected: (cari) {
-              _applyCariToForm(cari);
-              setState(() => _selectedCariId = cari.id);
-            },
-            fieldViewBuilder:
-                (context, textController, focusNode, onFieldSubmitted) {
-                  return TextFormField(
-                    controller: textController,
-                    focusNode: focusNode,
-                    decoration: InputDecoration(
-                      labelText: 'Firma Adi',
-                      hintText: _cariler.isEmpty
-                          ? 'Firma adini yazin'
-                          : 'Yazarak arayin veya listeden secin',
-                      suffixIcon: const Icon(Icons.arrow_drop_down_rounded),
-                    ),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Zorunlu alan'
-                        : null,
-                    onFieldSubmitted: (_) => onFieldSubmitted(),
-                    onChanged: (value) {
-                      // Yazilan metin secili cariden farkliysa secimi birak;
-                      // kayitta yeni cari acilmasi icin bu gerekli.
-                      if (_selectedCariId.isNotEmpty) {
-                        final selected = _findCariById(_selectedCariId);
-                        if (selected == null ||
-                            selected.companyName.trim() != value.trim()) {
-                          setState(() => _selectedCariId = '');
-                        }
-                      }
-                      setState(() {});
-                    },
-                  );
-                },
-            optionsViewBuilder: (context, onSelected, options) {
-              final values = options.toList(growable: false);
-              return Align(
-                alignment: Alignment.topLeft,
-                child: Material(
-                  elevation: 8,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxWidth: 540,
-                      maxHeight: 240,
-                    ),
-                    child: ListView.builder(
-                      padding: EdgeInsets.zero,
-                      shrinkWrap: true,
-                      itemCount: values.length,
-                      itemBuilder: (context, index) => ListTile(
-                        dense: true,
-                        title: Text(values[index].menuLabel),
-                        onTap: () => onSelected(values[index]),
-                      ),
-                    ),
-                  ),
-                ),
-              );
+          // Not: cari arama/secme dropdown'u her zaman gorunen "Musteri Firma"
+          // alaninda (_buildQuickInfoFields). Burasi ayni controller'a bagli
+          // duz bir alan; iki RawAutocomplete ayni focus node'u paylasamaz.
+          TextFormField(
+            controller: _customerCompanyController,
+            decoration: const InputDecoration(labelText: 'Firma Adi'),
+            validator: (value) =>
+                value == null || value.trim().isEmpty ? 'Zorunlu alan' : null,
+            onChanged: (value) {
+              if (_selectedCariId.isNotEmpty) {
+                final selected = _findCariById(_selectedCariId);
+                if (selected == null ||
+                    selected.companyName.trim() != value.trim()) {
+                  setState(() => _selectedCariId = '');
+                }
+              }
+              setState(() {});
             },
           ),
           const SizedBox(height: 12),

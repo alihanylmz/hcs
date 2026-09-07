@@ -72,7 +72,7 @@ void main() {
 
     // Enter new company name that doesn't exist in cariler
     const newCompanyName = 'Yeni Firma Ltd';
-    await tester.enterText(find.byType(Autocomplete<CariAccount>), newCompanyName);
+    await tester.enterText(find.byType(TextFormField).first, newCompanyName);
     await tester.pumpAndSettle();
 
     // Add one product line (minimum requirement)
@@ -155,7 +155,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Fill in minimum required fields to enable add product button
-    await tester.enterText(find.byType(Autocomplete<CariAccount>), 'Test Firma');
+    await tester.enterText(find.byType(TextFormField).first, 'Test Firma');
     await tester.pumpAndSettle();
 
     expect(find.text('Teklif Kodu'), findsOneWidget);

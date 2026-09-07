@@ -3424,58 +3424,63 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             ),
             const SizedBox(height: 14),
           ],
-          Autocomplete<CariAccount>(
-            optionsBuilder: (TextEditingValue textEditingValue) {
-              final input = textEditingValue.text.trim().toLowerCase();
-              if (input.isEmpty) {
-                return _cariler;
+          TextFormField(
+            controller: _customerCompanyController,
+            decoration: const InputDecoration(
+              labelText: 'Firma Adi',
+              hintText: 'Firmani yazin yada seciniz',
+            ),
+            validator: (value) =>
+                value == null || value.trim().isEmpty ? 'Zorunlu alan' : null,
+            onChanged: (value) {
+              // Yazilan metin seçili cariden farkli ise selectedCariId temizle
+              if (_selectedCariId.isNotEmpty) {
+                final selectedCari =
+                    _cariler.firstWhereOrNull((c) => c.id == _selectedCariId);
+                if (selectedCari == null ||
+                    selectedCari.companyName.trim() != value.trim()) {
+                  setState(() => _selectedCariId = '');
+                }
               }
-              return _cariler.where((c) {
-                return c.companyName.trim().toLowerCase().contains(input);
+              setState(() {});
+            },
+            onTap: () {
+              // Show dialog with matching cariler for user to select
+              if (_cariler.isEmpty) return;
+              final input = _customerCompanyController.text.trim().toLowerCase();
+              final options = input.isEmpty
+                  ? _cariler
+                  : _cariler
+                      .where((c) =>
+                          c.companyName.trim().toLowerCase().contains(input))
+                      .toList();
+
+              if (options.isEmpty) return;
+
+              showDialog<CariAccount>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Cari Sec'),
+                  content: SizedBox(
+                    width: double.maxFinite,
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: options
+                          .map((cari) => ListTile(
+                                title: Text(cari.menuLabel),
+                                onTap: () => Navigator.pop(ctx, cari),
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                ),
+              ).then((cari) {
+                if (cari != null) {
+                  _customerCompanyController.text = cari.companyName;
+                  _applyCariToForm(cari);
+                  setState(() => _selectedCariId = cari.id);
+                }
               });
-            },
-            onSelected: (CariAccount cari) {
-              _customerCompanyController.text = cari.companyName;
-              _applyCariToForm(cari);
-              setState(() => _selectedCariId = cari.id);
-            },
-            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-              return TextFormField(
-                controller: controller,
-                focusNode: focusNode,
-                decoration: const InputDecoration(
-                  labelText: 'Firma Adi',
-                  hintText: 'Firmani yazin yada seciniz',
-                ),
-                validator: (value) =>
-                    value == null || value.trim().isEmpty ? 'Zorunlu alan' : null,
-                onChanged: (value) {
-                  // Yazilan metin seçili cariden farkli ise selectedCariId temizle
-                  if (_selectedCariId.isNotEmpty) {
-                    final selectedCari =
-                        _cariler.firstWhereOrNull((c) => c.id == _selectedCariId);
-                    if (selectedCari == null ||
-                        selectedCari.companyName.trim() != value.trim()) {
-                      setState(() => _selectedCariId = '');
-                    }
-                  }
-                  setState(() {});
-                },
-              );
-            },
-            optionsViewBuilder: (context, onSelected, options) {
-              return Material(
-                elevation: 4,
-                child: ListView(
-                  shrinkWrap: true,
-                  children: options
-                      .map((option) => ListTile(
-                            title: Text(option.menuLabel),
-                            onTap: () => onSelected(option),
-                          ))
-                      .toList(),
-                ),
-              );
             },
           ),
           const SizedBox(height: 12),

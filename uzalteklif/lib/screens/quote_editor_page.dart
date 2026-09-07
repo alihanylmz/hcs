@@ -1024,6 +1024,11 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       return;
     }
 
+    // Check required fields and jump to owning step if needed
+    if (!_checkRequiredFields()) {
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
@@ -1054,6 +1059,11 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   /// Teklifi satış sürecinde "Gönderime Hazır" aşamasına taşır.
   Future<void> _submitForApproval() async {
     if (_isSubmitting) {
+      return;
+    }
+
+    // Check required fields and jump to owning step if needed
+    if (!_checkRequiredFields()) {
       return;
     }
 
@@ -5157,5 +5167,38 @@ class _ParameterFieldEditor extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Check required fields before save/submit.
+  /// Jumps to the owning step and shows SnackBar if validation fails.
+  /// Returns true if all required fields are filled.
+  bool _checkRequiredFields() {
+    // Step 0: customer company and title required
+    if (_customerCompanyController.text.trim().isEmpty) {
+      setState(() => _currentStep = 0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen müşteri şirketini seçin')),
+      );
+      return false;
+    }
+
+    if (_titleController.text.trim().isEmpty) {
+      setState(() => _currentStep = 0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen teklif konusunu yazın')),
+      );
+      return false;
+    }
+
+    // Step 1: at least one line item required
+    if (_items.isEmpty) {
+      setState(() => _currentStep = 1);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen en az bir kalem ekleyin')),
+      );
+      return false;
+    }
+
+    return true;
   }
 }

@@ -872,10 +872,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
   List<String> get _productCategories {
     final categories =
-        _availableProducts
-            .map((product) => product.category)
-            .toSet()
-            .toList()
+        _availableProducts.map((product) => product.category).toSet().toList()
           ..sort();
     return ['Tum Kategoriler', ...categories];
   }
@@ -1999,36 +1996,69 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             ),
         ],
       ),
-      body: WorkspaceBackground(
-        child: SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              compact ? 8 : 24,
-              compact ? 8 : 12,
-              compact ? 8 : 24,
-              compact ? 12 : 24,
+      // PopScope kendini cevreleyen route'a kaydolur, bu yuzden Scaffold'u
+      // sarmasi gerekmez; body'de olmasi yeterli ve dev build agacini
+      // yeniden girintilemekten kurtariyor.
+      body: PopScope(
+        canPop: !(_autosaveService?.isDirty ?? false),
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop || !mounted) return;
+          final navigator = Navigator.of(context);
+          final leave = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Kaydedilmemis degisiklikler'),
+              content: const Text(
+                'Teklifte kaydedilmemis degisiklikler var. Yerel bir taslak '
+                'kopya saklanir ve teklifi tekrar actiginizda size sunulur.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Vazgec'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Cik'),
+                ),
+              ],
             ),
-            child: Form(
-              key: _formKey,
-              child: isWide
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: _buildFormPanel(expandList: true)),
-                        const SizedBox(width: 16),
-                        SizedBox(
-                          width: 300,
-                          child: _buildSummaryPanel(expandActions: true),
-                        ),
-                      ],
-                    )
-                  : ListView(
-                      children: [
-                        _buildFormPanel(expandList: false),
-                        const SizedBox(height: 20),
-                        _buildSummaryPanel(expandActions: false),
-                      ],
-                    ),
+          );
+          if ((leave ?? false) && mounted) {
+            navigator.pop();
+          }
+        },
+        child: WorkspaceBackground(
+          child: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                compact ? 8 : 24,
+                compact ? 8 : 12,
+                compact ? 8 : 24,
+                compact ? 12 : 24,
+              ),
+              child: Form(
+                key: _formKey,
+                child: isWide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: _buildFormPanel(expandList: true)),
+                          const SizedBox(width: 16),
+                          SizedBox(
+                            width: 300,
+                            child: _buildSummaryPanel(expandActions: true),
+                          ),
+                        ],
+                      )
+                    : ListView(
+                        children: [
+                          _buildFormPanel(expandList: false),
+                          const SizedBox(height: 20),
+                          _buildSummaryPanel(expandActions: false),
+                        ],
+                      ),
+              ),
             ),
           ),
         ),
@@ -4319,8 +4349,8 @@ class _LineDraft {
   }) : descriptionController = TextEditingController(text: description),
        unitController = TextEditingController(text: unit),
        quantityController = TextEditingController(text: quantity),
-        unitPriceController = TextEditingController(text: unitPriceTl),
-        discountController = TextEditingController(text: discount);
+       unitPriceController = TextEditingController(text: unitPriceTl),
+       discountController = TextEditingController(text: discount);
 
   final String lineId;
   final String? productId;

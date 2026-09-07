@@ -203,6 +203,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     if (widget.autosaveService != null) {
       if (!mounted) return;
       setState(() => _autosaveService = widget.autosaveService);
+      _checkRecoveryDraft();
       return;
     }
     final service = await QuoteEditorAutosaveService.create(
@@ -216,11 +217,87 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       return;
     }
     setState(() => _autosaveService = service);
+    _checkRecoveryDraft();
   }
 
   /// Kaydedilecek bir icerik degistiginde cagrilir; adim gezinme veya
   /// filtre gibi salt-gorsel degisikliklerde cagrilmaz.
   void _markDirty() => _autosaveService?.markDirty();
+
+  /// Editor acilirken yerel kurtarma kopyasi varsa kullaniciya sunar.
+  Future<void> _checkRecoveryDraft() async {
+    final service = _autosaveService;
+    if (service == null || !mounted) return;
+
+    final key = _draftQuoteId ?? 'new';
+    final draft = await service.readRecoveryDraft(key);
+    if (draft == null || !mounted) return;
+
+    // Sunucudaki surum taslaktan yeni ya da esitse taslak bayat demektir;
+    // kullaniciyi mesgul etmeden atiyoruz.
+    final knownUpdatedAt = widget.quoteToRevise?.updatedAt;
+    if (knownUpdatedAt != null && !draft.savedAt.isAfter(knownUpdatedAt)) {
+      await service.discardRecoveryDraft(key);
+      return;
+    }
+    if (!mounted) return;
+    _showRecoveryBanner(draft, key);
+  }
+
+  void _showRecoveryBanner(RecoveryDraft draft, String key) {
+    final messenger = ScaffoldMessenger.of(context);
+    final savedAt = DateFormat(
+      'dd.MM.yyyy HH:mm',
+      'tr_TR',
+    ).format(draft.savedAt.toLocal());
+    messenger.showMaterialBanner(
+      MaterialBanner(
+        content: Text(
+          '$savedAt tarihli kaydedilmemis bir taslak bulundu. '
+          'Geri yuklemek ister misiniz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              messenger.hideCurrentMaterialBanner();
+              _restoreRecoveryDraft(draft, key);
+            },
+            child: const Text('Geri Yukle'),
+          ),
+          TextButton(
+            onPressed: () {
+              messenger.hideCurrentMaterialBanner();
+              _autosaveService?.discardRecoveryDraft(key);
+            },
+            child: const Text('Yoksay'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Formu taslaktaki icerikle yeniden doldurur. `_loadFromExistingQuote`
+  /// listelere ekleme yaptigi icin once mevcut kalem/bolum draft'lari
+  /// temizlenip dispose ediliyor.
+  void _restoreRecoveryDraft(RecoveryDraft draft, String key) {
+    setState(() {
+      for (final item in _items) {
+        item.dispose();
+      }
+      _items.clear();
+      for (final section in _sections) {
+        section.dispose();
+      }
+      _sections.clear();
+      _hiddenCosts.clear();
+      _loadFromExistingQuote(draft.quote);
+    });
+    _autosaveService?.discardRecoveryDraft(key);
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Taslak geri yuklendi.')));
+  }
 
   /// Teklif icerigini tasiyan tum metin alanlarini autosave'e baglar.
   /// `_productSearchController` bilerek disarida: urun arama kutusu sadece
@@ -1176,6 +1253,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       }
 
       final savedQuote = await widget.quoteRepository.saveQuote(quote);
+      // Gercek kayit yapildi; yerel kurtarma kopyasi artik bayat, yoksa
+      // teklif tekrar acildiginda gereksiz yere geri yukleme onerilir.
+      await _autosaveService?.discardRecoveryDraft(_draftQuoteId ?? 'new');
       if (!mounted) {
         return;
       }
@@ -1218,6 +1298,8 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       );
 
       await widget.quoteRepository.saveQuote(quote);
+      // Kayit kalici hale geldi; yerel kurtarma kopyasini temizle.
+      await _autosaveService?.discardRecoveryDraft(_draftQuoteId ?? 'new');
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(

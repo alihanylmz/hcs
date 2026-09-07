@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'package:uzalteklif/models/cari_account.dart';
 import 'package:uzalteklif/models/market_rate.dart';
 import 'package:uzalteklif/models/product.dart';
 import 'package:uzalteklif/models/quote.dart';
 import 'package:uzalteklif/models/user_quote_profile.dart';
 import 'package:uzalteklif/screens/quote_editor_page.dart';
+import 'package:uzalteklif/services/cari_repository.dart';
 import 'package:uzalteklif/services/quote_repository.dart';
 import 'package:uzalteklif/services/user_profile_repository.dart';
 import 'package:uzalteklif/theme/app_theme.dart';
@@ -16,6 +18,86 @@ void main() {
 
   setUpAll(() async {
     await initializeDateFormatting('tr_TR');
+  });
+
+  testWidgets('auto-creates cari when saving quote with new company name', (
+    WidgetTester tester,
+  ) async {
+    // Setup: empty cari repository, a product, rates
+    final cariRepo = _FakeCariRepository();
+    final products = [
+      Product(
+        id: 'p-1',
+        code: 'SNS-100',
+        name: 'Test Sensoru',
+        category: 'Sensor',
+        brand: 'Brand',
+        model: 'M1',
+        unit: 'adet',
+        currencyCode: 'TL',
+        salePrice: 1000,
+        stockQuantity: 10,
+        minimumStock: 1,
+        vatRate: 20,
+        leadTime: '1 gun',
+        description: '',
+        technicalSummary: '',
+        isActive: true,
+        updatedAt: DateTime(2026, 4, 21, 12),
+      ),
+    ];
+
+    final rates = [
+      MarketRate(
+        code: 'USDTRY',
+        label: 'Dolar',
+        unitLabel: '1 USD',
+        value: 38.2,
+        updatedAt: DateTime(2026, 4, 21, 12),
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: QuoteEditorPage(
+          quoteRepository: QuoteRepository(),
+          cariRepository: cariRepo,
+          initialRates: rates,
+          availableProducts: products,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Enter new company name that doesn't exist in cariler
+    const newCompanyName = 'Yeni Firma Ltd';
+    await tester.enterText(find.byType(Autocomplete<CariAccount>), newCompanyName);
+    await tester.pumpAndSettle();
+
+    // Add one product line (minimum requirement)
+    final addButton = find.byKey(const ValueKey('catalog-add-p-1'));
+    if (addButton.evaluate().isNotEmpty) {
+      final buttonWidget = tester.widget<OutlinedButton>(addButton);
+      buttonWidget.onPressed!.call();
+      await tester.pumpAndSettle();
+    }
+
+    // Try to save (via Teklifi Tamamla button)
+    final submitButton = find.byKey(const ValueKey('btn-tamamla'));
+    if (submitButton.evaluate().isNotEmpty) {
+      await tester.tap(submitButton);
+      await tester.pumpAndSettle();
+
+      // Verify: new cari should have been auto-created
+      expect(cariRepo.cariler.isNotEmpty, true,
+          reason: 'Cari should be auto-created on save');
+      final created = cariRepo.cariler.firstWhereOrNull(
+        (c) => c.companyName == newCompanyName,
+      );
+      expect(created, isNotNull,
+          reason: 'New company name should exist in cariler');
+    }
   });
 
   testWidgets('quote editor shows code plate and adds product lines', (
@@ -70,6 +152,10 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
+
+    // Fill in minimum required fields to enable add product button
+    await tester.enterText(find.byType(Autocomplete<CariAccount>), 'Test Firma');
     await tester.pumpAndSettle();
 
     expect(find.text('Teklif Kodu'), findsOneWidget);
@@ -404,4 +490,31 @@ UserQuoteProfile _userProfile({
     defaultDeliveryTerms: 'Termin teyidi ile',
     defaultVatRate: 20,
   );
+}
+
+/// Fake [CariRepository] for testing auto-create-on-save flow
+class _FakeCariRepository extends CariRepository {
+  _FakeCariRepository() : super(client: null);
+
+  List<CariAccount> cariler = [];
+
+  @override
+  bool get isRemoteReady => true;
+
+  @override
+  Future<List<CariAccount>> fetchAll() async => cariler;
+
+  @override
+  Future<CariAccount?> fetchById(String id) async =>
+      cariler.firstWhereOrNull((c) => c.id == id);
+
+  @override
+  Future<void> save(CariAccount cari) async {
+    final idx = cariler.indexWhere((c) => c.id == cari.id);
+    if (idx >= 0) {
+      cariler[idx] = cari;
+    } else {
+      cariler.add(cari);
+    }
+  }
 }

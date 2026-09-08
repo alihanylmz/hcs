@@ -59,6 +59,7 @@ import '../widgets/quote_editor_payment_visibility_panel.dart';
 import '../widgets/quote_editor_hidden_cost_total_card.dart';
 import '../widgets/quote_editor_hidden_cost_row.dart';
 import '../widgets/quote_editor_product_catalog_empty_state.dart';
+import '../widgets/quote_editor_catalog_selection_bar.dart';
 import '../widgets/quote_editor_catalog_label.dart';
 import '../widgets/quote_editor_catalog_row.dart';
 import '../widgets/quote_editor_compact_catalog_item.dart';
@@ -1801,6 +1802,44 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     );
   }
 
+  /// Katalogda isaretlenmis urunlerin kimlikleri.
+  ///
+  /// Tek tikla "Kaleme Al" yolu aynen duruyor; bu isaretleme onun yerine
+  /// degil, yanina. Bircok urunu tek tek eklemek yerine isaretleyip bir kerede
+  /// eklemek icin.
+  final Set<String> _catalogSelection = <String>{};
+
+  void _toggleCatalogSelection(String productId) {
+    setState(() {
+      if (!_catalogSelection.remove(productId)) {
+        _catalogSelection.add(productId);
+      }
+    });
+  }
+
+  void _clearCatalogSelection() {
+    if (_catalogSelection.isEmpty) return;
+    setState(() => _catalogSelection.clear());
+  }
+
+  /// Isaretli urunlerin hepsini teklife ekler ve isaretleri temizler.
+  ///
+  /// Katalogdaki gorunur sirayla ekliyoruz ki sonuc kullanicinin ekranda
+  /// gordugu duzenle ayni olsun. Ekleme icin tek tik yolundaki
+  /// `_addProductToQuote` yeniden kullaniliyor; boylece ayni urun zaten
+  /// teklifteyse miktari artirma ve bolum iskontosu uygulama davranisi
+  /// ikisinde de birebir ayni kaliyor.
+  void _addSelectedProductsToQuote() {
+    if (_catalogSelection.isEmpty) return;
+    final ordered = _filteredProductsForAdd
+        .where((p) => _catalogSelection.contains(p.id))
+        .toList(growable: false);
+    for (final product in ordered) {
+      _addProductToQuote(product);
+    }
+    _clearCatalogSelection();
+  }
+
   void _addProductToQuote(Product product) {
     final targetSectionId = _activeSectionId ?? '';
     final existingIndex = _items.indexWhere(
@@ -2598,12 +2637,39 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     );
   }
 
-  Widget _buildProductCatalog({required List<Product> filteredProducts}) {
-    return QuoteEditorProductCatalog(
-      allProducts: _availableProducts,
-      filteredProducts: filteredProducts,
-      isSelected: _isProductSelected,
-      onAdd: _addProductToQuote,
+  /// Katalog bir showDialog icindeki StatefulBuilder altinda ciziliyor, bu
+  /// yuzden sayfanin setState'i onu yenilemiyor. Secim degistiginde dialogun
+  /// kendi setState'ini de tetikleyebilmek icin [onSelectionChanged] gerekli.
+  Widget _buildProductCatalog({
+    required List<Product> filteredProducts,
+    VoidCallback? onSelectionChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        QuoteEditorCatalogSelectionBar(
+          selectedCount: _catalogSelection.length,
+          onAddSelected: () {
+            _addSelectedProductsToQuote();
+            onSelectionChanged?.call();
+          },
+          onClear: () {
+            _clearCatalogSelection();
+            onSelectionChanged?.call();
+          },
+        ),
+        QuoteEditorProductCatalog(
+          allProducts: _availableProducts,
+          filteredProducts: filteredProducts,
+          isSelected: _isProductSelected,
+          onAdd: _addProductToQuote,
+          isChecked: _catalogSelection.contains,
+          onToggleChecked: (id) {
+            _toggleCatalogSelection(id);
+            onSelectionChanged?.call();
+          },
+        ),
+      ],
     );
   }
 
@@ -2726,6 +2792,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                       Expanded(
                         child: _buildProductCatalog(
                           filteredProducts: filteredProducts,
+                          onSelectionChanged: () => setDialogState(() {}),
                         ),
                       ),
                     ],

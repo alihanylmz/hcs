@@ -13,12 +13,20 @@ class QuoteEditorProductCatalog extends StatelessWidget {
     required this.filteredProducts,
     required this.isSelected,
     required this.onAdd,
+    this.isChecked,
+    this.onToggleChecked,
   });
 
   final List<Product> allProducts;
   final List<Product> filteredProducts;
   final bool Function(String productId) isSelected;
   final ValueChanged<Product> onAdd;
+
+  /// Coklu secimde urun isaretli mi. Null ise onay kutulari gosterilmez.
+  final bool Function(String productId)? isChecked;
+
+  /// Onay kutusu tiklandiginda urun kimligiyle cagrilir.
+  final ValueChanged<String>? onToggleChecked;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +59,10 @@ class QuoteEditorProductCatalog extends StatelessWidget {
                 return QuoteEditorCompactCatalogItem(
                   product: product,
                   selected: isSelected(product.id),
+                  checked: isChecked?.call(product.id) ?? false,
+                  onToggleChecked: onToggleChecked == null
+                      ? null
+                      : () => onToggleChecked!(product.id),
                   onAdd: () => onAdd(product),
                 );
               },
@@ -90,6 +102,10 @@ class QuoteEditorProductCatalog extends StatelessWidget {
                     return QuoteEditorCatalogRow(
                       product: product,
                       selected: isSelected(product.id),
+                      checked: isChecked?.call(product.id) ?? false,
+                      onToggleChecked: onToggleChecked == null
+                          ? null
+                          : () => onToggleChecked!(product.id),
                       onAdd: () => onAdd(product),
                     );
                   },

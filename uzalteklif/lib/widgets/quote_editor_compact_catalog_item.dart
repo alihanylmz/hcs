@@ -9,10 +9,18 @@ class QuoteEditorCompactCatalogItem extends StatelessWidget {
     required this.product,
     required this.selected,
     required this.onAdd,
+    this.checked = false,
+    this.onToggleChecked,
   });
   final Product product;
   final bool selected;
   final VoidCallback onAdd;
+
+  /// Coklu secimde isaretli mi.
+  final bool checked;
+
+  /// Null ise onay kutusu hic gosterilmez (coklu secim kapali demektir).
+  final VoidCallback? onToggleChecked;
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +35,12 @@ class QuoteEditorCompactCatalogItem extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (onToggleChecked != null)
+            Checkbox(
+              key: ValueKey('catalog-check-${product.id}'),
+              value: checked,
+              onChanged: (_) => onToggleChecked!(),
+            ),
           Row(
             children: [
               Expanded(

@@ -28,6 +28,7 @@ import '../services/quote_editor_line_total_service.dart';
 import '../services/quote_editor_product_filter_service.dart';
 import '../services/user_profile_repository.dart';
 import '../utils/product_category_labels.dart';
+import '../utils/tabular_paste_parser.dart';
 import '../widgets/quote_editor_autosave_status.dart';
 import '../widgets/workspace_background.dart';
 import '../widgets/quote_editor_commercial_terms_fields.dart';
@@ -52,6 +53,7 @@ import '../widgets/quote_editor_line_unit_price_field.dart';
 import '../widgets/quote_editor_line_discount_field.dart';
 import '../widgets/quote_editor_line_duplicate_button.dart';
 import '../widgets/quote_editor_line_remove_button.dart';
+import '../widgets/quote_editor_paste_lines_dialog.dart';
 import '../widgets/quote_editor_move_menu.dart';
 import '../widgets/quote_editor_total_card.dart';
 import '../widgets/quote_editor_hidden_cost_summary.dart';
@@ -1889,6 +1891,45 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     });
   }
 
+  /// Excel/Sheets'ten kopyalanan satirlari onizleme dialogu uzerinden ekler.
+  ///
+  /// Dialog iptal edilirse veya hic satir cikmazsa hicbir sey yapilmaz.
+  /// Eklenen kalemler aktif kategoriye ve o kategorinin toplu iskontosuna
+  /// uyar; boylece elle eklenen kalemlerle ayni davranirlar.
+  Future<void> _pasteLinesFromClipboardText() async {
+    final rows = await showDialog<List<TabularPasteRow>>(
+      context: context,
+      builder: (_) => const QuoteEditorPasteLinesDialog(),
+    );
+    if (rows == null || rows.isEmpty || !mounted) return;
+
+    final targetSectionId = _activeSectionId ?? '';
+    final sectionDiscount = _bulkDiscountForSection(targetSectionId);
+    setState(() {
+      for (final row in rows) {
+        _items.add(
+          _LineDraft(
+            lineId: _newId('line'),
+            productId: null,
+            productCode: '',
+            priceCurrencyCode: _selectedDisplayUnit,
+            description: row.description,
+            unit: row.unit,
+            quantity: _formatQuantityForInput(row.quantity),
+            unitPriceTl: row.unitPrice.toStringAsFixed(2),
+            discount: sectionDiscount ?? _formatQuantityForInput(row.discount),
+          sectionId: targetSectionId,
+          ),
+        );
+      }
+    });
+    _markDirty();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${rows.length} satir eklendi.')),
+    );
+  }
+
   void _addCustomLine() {
     final targetSectionId = _activeSectionId ?? '';
     final discount = _bulkDiscountForSection(targetSectionId) ?? '0';
@@ -2536,11 +2577,17 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
               ),
             ),
             const SizedBox(width: 10),
-            Text(
-              _formatTlForDisplayUnit(_visibleSubtotalTl),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF17304C),
-                fontWeight: FontWeight.w900,
+            // Baslik Expanded icinde; ara toplam metni sabit genislik isterse
+            // dar kalan yerde satiri tasiriyor. Flexible + ellipsis ile
+            // hicbir genislikte tasmiyor.
+            Flexible(
+              child: Text(
+                _formatTlForDisplayUnit(_visibleSubtotalTl),
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: const Color(0xFF17304C),
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
           ],
@@ -2558,6 +2605,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
               onPressed: _addCustomLine,
               icon: const Icon(Icons.add_rounded, size: 18),
               label: const Text('Özel Kalem'),
+            ),
+            OutlinedButton.icon(
+              key: const ValueKey('paste-lines-open'),
+              onPressed: _pasteLinesFromClipboardText,
+              icon: const Icon(Icons.content_paste_rounded, size: 18),
+              label: const Text('Excel’den Yapıştır'),
             ),
             if (_showAdvancedOptions)
               OutlinedButton.icon(
@@ -2577,7 +2630,10 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         return Row(
           children: [
             Expanded(child: title),
-            actions,
+            // Wrap bir Row icinde sinirsiz genislik ister; Flexible olmadan
+            // buton sayisi artinca satiri tasiriyor. Flexible ile kalan
+            // genislige sigar, sigmayan buton alt satira kayar.
+            Flexible(child: actions),
           ],
         );
       },

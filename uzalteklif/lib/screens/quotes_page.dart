@@ -1631,13 +1631,35 @@ class _QuoteTableRow extends StatelessWidget {
               if (showAmount)
                 SizedBox(
                   width: 126,
-                  child: Text(
-                    formatter.format(quote.totalFor(quote.displayUnit)),
-                    textAlign: TextAlign.end,
-                    style: const TextStyle(
-                      color: ink,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
+                  // Tutar, listedeki en cok aranan bilgi; kendi zemini olsun
+                  // ki satirda goz once oraya gitsin. Renk bilerek notr:
+                  // durum rozetleri renkle anlam tasiyor, tutar onlarla
+                  // yarismamali.
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF3F8),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFDCE4EE)),
+                      ),
+                      child: Text(
+                        formatter.format(quote.totalFor(quote.displayUnit)),
+                        textAlign: TextAlign.end,
+                        maxLines: 1,
+                        style: const TextStyle(
+                          color: Color(0xFF0F2942),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                          // Tablo rakamlari: her basamak esit genislikte,
+                          // boylece alt alta tutarlar hizali gorunur.
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
                     ),
                   ),
                 ),

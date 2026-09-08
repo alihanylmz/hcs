@@ -11,6 +11,23 @@ import 'package:uzalteklif/services/quote_repository.dart';
 import 'package:uzalteklif/services/user_profile_repository.dart';
 import 'package:uzalteklif/theme/app_theme.dart';
 
+// Helper to navigate to a specific step
+Future<void> _goToStep(WidgetTester tester, int step) async {
+  await tester.tap(find.byKey(ValueKey('quote-step-$step')));
+  await tester.pumpAndSettle();
+}
+
+// Helper to enable advanced options
+Future<void> _enableAdvanced(WidgetTester tester) async {
+  // Toggle adim 2 icerigindeki listenin altinda kaliyor; once gorunur hale
+  // getirilmezse tap() ekran disina dusup sessizce iskaliyor.
+  final toggle = find.byKey(const ValueKey('quote-advanced-toggle'));
+  await tester.ensureVisible(toggle);
+  await tester.pumpAndSettle();
+  await tester.tap(toggle);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -77,6 +94,9 @@ void main() {
     expect(find.text('Teklif Kodu'), findsOneWidget);
     expect(find.textContaining('UZ-'), findsWidgets);
 
+    // Navigate to step 1 (Kalemler ve fiyat)
+    await _goToStep(tester, 1);
+
     await tester.tap(find.byIcon(Icons.add_shopping_cart_rounded));
     await tester.pumpAndSettle();
     final addButton = find.byKey(const ValueKey('catalog-add-p-1'));
@@ -139,6 +159,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // Teklif konusu adim 0'da (Musteri ve konu) yasiyor; kalemlere gecmeden
+    // once dogrulanmali.
+    expect(find.text('Kazan Dairesi Otomasyonu'), findsOneWidget);
+
+    // Navigate to step 1 (Kalemler ve fiyat)
+    await _goToStep(tester, 1);
+
     expect(find.byKey(const ValueKey('quote-line-sensor-1')), findsNWidgets(2));
     expect(
       find.descendant(
@@ -147,7 +174,6 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('Kazan Dairesi Otomasyonu'), findsOneWidget);
     expect(find.text('DDC-01'), findsWidgets);
     expect(find.text('DDC-02'), findsWidgets);
     expect(find.text('Saha Ekipmanları'), findsNWidgets(2));
@@ -219,6 +245,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
+    // Navigate to step 1 (Kalemler ve fiyat)
+    await _goToStep(tester, 1);
+
     expect(find.widgetWithText(TextFormField, '100.00'), findsOneWidget);
   });
 
@@ -287,6 +316,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
+    // Navigate to step 1 (Kalemler ve fiyat)
+    await _goToStep(tester, 1);
+
     expect(find.widgetWithText(TextFormField, '120000.00'), findsOneWidget);
     expect(find.textContaining('kur carpani hatasi'), findsNothing);
   });
@@ -353,15 +385,24 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+
+    // Kopyalama musteri ve konu alanlarini temizlemis olmali (adim 0).
     expect(find.text('Eski firma'), findsNothing);
     expect(find.text('Kopya profil testi'), findsNothing);
+
+    // Kalemler ve fiyatlar adim 1'de tasiniyor.
+    await _goToStep(tester, 1);
     expect(find.text('Kopyalanacak fiyat kalemi'), findsOneWidget);
     expect(find.widgetWithText(TextFormField, '1234.00'), findsOneWidget);
-    await tester.tap(find.text('Bilgileri Düzenle'));
-    await tester.pumpAndSettle();
 
-    expect(find.text('Güncel Kullanıcı'), findsOneWidget);
-    expect(find.text('+90 555 111 22 33'), findsOneWidget);
+    // Gelismis secenek anahtari adim 2'de; hazirlayan alanlarini acmak icin
+    // once oraya gidip toggle'i acmak, sonra adim 0'a donmek gerekiyor.
+    await _goToStep(tester, 2);
+    await _enableAdvanced(tester);
+    await _goToStep(tester, 0);
+
+    expect(find.text('Güncel Kullanıcı', skipOffstage: false), findsOneWidget);
+    expect(find.text('+90 555 111 22 33', skipOffstage: false), findsOneWidget);
     expect(find.text('+90 500 000 00 00', skipOffstage: false), findsNothing);
   });
 }

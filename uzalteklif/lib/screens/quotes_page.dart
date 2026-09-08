@@ -375,7 +375,10 @@ class _QuotesPageState extends State<QuotesPage> {
               backgroundColor: const Color(0xFF254B75),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+              textStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
           const SizedBox(width: 6),
@@ -1843,9 +1846,11 @@ class _QuoteSummaryCard extends StatelessWidget {
                     child: Text(
                       (quote.createdByName.trim().isNotEmpty
                               ? quote.createdByName.trim()
-                              : quote.documentProfile.preparedByName.trim().isNotEmpty
-                                  ? quote.documentProfile.preparedByName.trim()
-                                  : 'S')
+                              : quote.documentProfile.preparedByName
+                                    .trim()
+                                    .isNotEmpty
+                              ? quote.documentProfile.preparedByName.trim()
+                              : 'S')
                           .characters
                           .first
                           .toUpperCase(),
@@ -1861,9 +1866,11 @@ class _QuoteSummaryCard extends StatelessWidget {
                     child: Text(
                       quote.createdByName.trim().isNotEmpty
                           ? 'Sorumlu: ${quote.createdByName.trim()}'
-                          : (quote.documentProfile.preparedByName.trim().isNotEmpty
-                              ? 'Hazırlayan: ${quote.documentProfile.preparedByName.trim()}'
-                              : 'Sorumlu Belirtilmedi'),
+                          : (quote.documentProfile.preparedByName
+                                    .trim()
+                                    .isNotEmpty
+                                ? 'Hazırlayan: ${quote.documentProfile.preparedByName.trim()}'
+                                : 'Sorumlu Belirtilmedi'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1946,6 +1953,8 @@ class _QuoteSummaryCard extends StatelessWidget {
         return const _StatusStyle(bg: Color(0xFFFBE1E3), fg: Color(0xFFC34D59));
       case QuoteStatus.cancelled:
         return const _StatusStyle(bg: Color(0xFFEDE5F3), fg: Color(0xFF76538D));
+      default:
+        return const _StatusStyle(bg: Color(0xFFE9EEF7), fg: Color(0xFF506783));
     }
   }
 }

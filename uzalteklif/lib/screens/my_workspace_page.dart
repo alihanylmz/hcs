@@ -119,30 +119,46 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final quotes = _personQuotes;
 
     // Metrikler
-    final draftQuotes = quotes.where((q) => q.status == QuoteStatus.draft).toList();
-    final pendingQuotes = quotes.where((q) => q.status == QuoteStatus.pending).toList();
-    final approvedQuotes = quotes.where((q) => q.status == QuoteStatus.approved).toList();
-    final wonQuotes = quotes.where((q) => q.status == QuoteStatus.accepted).toList();
+    final draftQuotes = quotes
+        .where((q) => q.status == QuoteStatus.draft)
+        .toList();
+    final pendingQuotes = quotes
+        .where((q) => q.status == QuoteStatus.pending)
+        .toList();
+    final approvedQuotes = quotes
+        .where((q) => q.status == QuoteStatus.approved)
+        .toList();
+    final wonQuotes = quotes
+        .where((q) => q.status == QuoteStatus.accepted)
+        .toList();
 
     // 🚨 Cevap Vermemiş / Zaman Aşımlı Teklifler (3 Günden Fazla Dönüş Olmayanlar)
     final now = DateTime.now();
     final overdueQuotes = approvedQuotes.where((q) {
       final sentDate = q.emailSentAt ?? q.createdAt;
-      return q.customerResponse == CustomerResponse.pending && now.difference(sentDate).inDays >= 3;
+      return q.customerResponse == CustomerResponse.pending &&
+          now.difference(sentDate).inDays >= 3;
     }).toList();
 
     // Aksiyon gerektiren teklifler (Onayli ama e-posta atilmamis)
-    final needsEmail = approvedQuotes.where((q) => q.emailSentAt == null).toList();
+    final needsEmail = approvedQuotes
+        .where((q) => q.emailSentAt == null)
+        .toList();
     // E-posta atilmis ama 3 gunden az süredir cevap bekleyenler
-    final normalAwaiting = approvedQuotes.where((q) => q.emailSentAt != null && q.customerResponse == CustomerResponse.pending && !overdueQuotes.contains(q)).toList();
+    final normalAwaiting = approvedQuotes
+        .where(
+          (q) =>
+              q.emailSentAt != null &&
+              q.customerResponse == CustomerResponse.pending &&
+              !overdueQuotes.contains(q),
+        )
+        .toList();
 
     final wonTotal = wonQuotes.fold<double>(
       0,
@@ -203,7 +219,8 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                                 width: itemWidth,
                                 label: 'Takipte / Cevap Bekleyen',
                                 value: '${approvedQuotes.length}',
-                                subText: '${normalAwaiting.length + overdueQuotes.length} yanıt bekliyor',
+                                subText:
+                                    '${normalAwaiting.length + overdueQuotes.length} yanıt bekliyor',
                                 icon: Icons.mark_email_read_rounded,
                                 color: const Color(0xFF2B82C9),
                               ),
@@ -222,8 +239,14 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                       const SizedBox(height: 20),
 
                       // Aksiyon Gerektirenler Paneli
-                      if (overdueQuotes.isNotEmpty || needsEmail.isNotEmpty || normalAwaiting.isNotEmpty) ...[
-                        _buildActionCenter(overdueQuotes, needsEmail, normalAwaiting),
+                      if (overdueQuotes.isNotEmpty ||
+                          needsEmail.isNotEmpty ||
+                          normalAwaiting.isNotEmpty) ...[
+                        _buildActionCenter(
+                          overdueQuotes,
+                          needsEmail,
+                          normalAwaiting,
+                        ),
                         const SizedBox(height: 20),
                       ],
 
@@ -251,7 +274,10 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
         children: [
           IconButton(
             onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF17304C)),
+            icon: const Icon(
+              Icons.arrow_back_rounded,
+              color: Color(0xFF17304C),
+            ),
           ),
           const SizedBox(width: 8),
           Column(
@@ -266,7 +292,11 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
               ),
               const Text(
                 'Kişisel teklif takibi ve müşteri karar yönetim paneli',
-                style: TextStyle(fontSize: 11, color: Color(0xFF5B6F7F), fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF5B6F7F),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -349,9 +379,14 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
               backgroundColor: const Color(0xFF2B82C9),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
+              textStyle: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+              ),
               elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           ),
           if (widget.isManager && _personList.isNotEmpty) ...[
@@ -373,7 +408,10 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                       color: Color(0xFF17304C),
                     ),
                   ),
-                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF17304C)),
+                  icon: const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: Color(0xFF17304C),
+                  ),
                   items: [
                     const DropdownMenuItem<String>(
                       value: '',
@@ -406,22 +444,27 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
     final targetPhone = cleanPhone.startsWith('90')
         ? cleanPhone
         : cleanPhone.startsWith('0')
-            ? '90${cleanPhone.substring(1)}'
-            : cleanPhone.isNotEmpty
-                ? '90$cleanPhone'
-                : '';
+        ? '90${cleanPhone.substring(1)}'
+        : cleanPhone.isNotEmpty
+        ? '90$cleanPhone'
+        : '';
 
-    final customerTitle = q.documentProfile.customerContactTitle.trim().isNotEmpty
+    final customerTitle =
+        q.documentProfile.customerContactTitle.trim().isNotEmpty
         ? q.documentProfile.customerContactTitle.trim()
         : (q.customerCompany.isNotEmpty ? q.customerCompany : q.customerName);
 
-    final msg = '''
+    final portalLine = q.hasVerifiedPublicLink
+        ? 'Çevrimiçi teklif bağlantısı: ${q.publicShareUrl('https://uzalteknikservis.info')}'
+        : 'Çevrimiçi teklif portalı geçici olarak devre dışıdır; PDF ekte paylaşılacaktır.';
+    final msg =
+        '''
 Sayın $customerTitle,
 
 Tarafınıza sunulmuş olan ${q.code} kodlu teklifimiz hakkında görüşlerinizi öğrenmek ve yardımcı olmak isteriz.
 
 📄 Teklifi Çevrimiçi İncelemek İçin:
-https://uzalteknikservis.info/#/p/${q.publicToken}
+$portalLine
 
 Sorularınız veya revize talepleriniz için bize ulaşabilirsiniz.
 
@@ -439,9 +482,9 @@ Uzal Teknik Servis
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('WhatsApp açılamadı.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('WhatsApp açılamadı.')));
     }
   }
 
@@ -464,11 +507,7 @@ Uzal Teknik Servis
           children: [
             const Row(
               children: [
-                Icon(
-                  Icons.bolt_rounded,
-                  size: 20,
-                  color: Color(0xFFA07028),
-                ),
+                Icon(Icons.bolt_rounded, size: 20, color: Color(0xFFA07028)),
                 SizedBox(width: 8),
                 Text(
                   'Aksiyon Bekleyen Teklifleriniz',
@@ -488,14 +527,21 @@ Uzal Teknik Servis
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFF0F0),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFF9D2C2C), width: 1.5),
+                  border: Border.all(
+                    color: const Color(0xFF9D2C2C),
+                    width: 1.5,
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.warning_amber_rounded, color: Color(0xFF9D2C2C), size: 20),
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Color(0xFF9D2C2C),
+                          size: 20,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           '🚨 KRİTİK: ${overdueQuotes.length} TEKLİFE 3+ GÜNDÜR DÖNÜŞ OLMADI!',
@@ -529,7 +575,11 @@ Uzal Teknik Servis
             if (needsEmail.isNotEmpty) ...[
               const Text(
                 '📧 Müşteriye Henüz E-posta Gönderilmemiş:',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF9D5C1D)),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF9D5C1D),
+                ),
               ),
               const SizedBox(height: 6),
               for (final q in needsEmail) ...[
@@ -548,7 +598,11 @@ Uzal Teknik Servis
             if (normalAwaiting.isNotEmpty) ...[
               const Text(
                 '⏳ Takipte / Müşteri Cevabı Bekleyenler:',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF2B82C9)),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF2B82C9),
+                ),
               ),
               const SizedBox(height: 6),
               for (final q in normalAwaiting) ...[
@@ -576,7 +630,11 @@ Uzal Teknik Servis
           child: Center(
             child: Column(
               children: [
-                Icon(Icons.inbox_rounded, size: 48, color: const Color(0xFF5B6F7F).withValues(alpha: 0.5)),
+                Icon(
+                  Icons.inbox_rounded,
+                  size: 48,
+                  color: const Color(0xFF5B6F7F).withValues(alpha: 0.5),
+                ),
                 const SizedBox(height: 12),
                 Text(
                   'Bu personele ait kayıtlı teklif bulunmuyor.',
@@ -631,17 +689,27 @@ Uzal Teknik Servis
               );
               return ListTile(
                 onTap: () => _openQuoteReview(q),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
                 title: Row(
                   children: [
                     Text(
                       q.code,
-                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Color(0xFF17304C)),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                        color: Color(0xFF17304C),
+                      ),
                     ),
                     if (q.revisionCount > 0) ...[
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFFF4E0),
                           borderRadius: BorderRadius.circular(6),
@@ -649,17 +717,27 @@ Uzal Teknik Servis
                         ),
                         child: Text(
                           'Rev ${q.revisionCount}',
-                          style: const TextStyle(fontSize: 10, color: Color(0xFF9D5C1D), fontWeight: FontWeight.w900),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFF9D5C1D),
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ),
                     ],
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        q.customerCompany.isEmpty ? q.customerName : '${q.customerCompany} - ${q.customerName}',
+                        q.customerCompany.isEmpty
+                            ? q.customerName
+                            : '${q.customerCompany} - ${q.customerName}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF5B6F7F)),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF5B6F7F),
+                        ),
                       ),
                     ),
                   ],
@@ -670,20 +748,32 @@ Uzal Teknik Servis
                     children: [
                       Text(
                         DateFormat('dd.MM.yyyy', 'tr_TR').format(q.createdAt),
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF5B6F7F), fontWeight: FontWeight.w600),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF5B6F7F),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       _StatusChip(status: q.status),
                       if (q.emailSentAt != null) ...[
                         const SizedBox(width: 8),
-                        const Icon(Icons.email_rounded, size: 14, color: Color(0xFF2B82C9)),
+                        const Icon(
+                          Icons.email_rounded,
+                          size: 14,
+                          color: Color(0xFF2B82C9),
+                        ),
                       ],
                     ],
                   ),
                 ),
                 trailing: Text(
                   fmt.format(q.totalFor(q.displayUnit)),
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Color(0xFF17304C)),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                    color: Color(0xFF17304C),
+                  ),
                 ),
               );
             },
@@ -760,16 +850,28 @@ class _WorkspaceMetricCard extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF5B6F7F)),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF5B6F7F),
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     value,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF17304C)),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF17304C),
+                    ),
                   ),
                   Text(
                     subText,
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: color,
+                    ),
                   ),
                 ],
               ),
@@ -779,9 +881,7 @@ class _WorkspaceMetricCard extends StatelessWidget {
       ),
     );
   }
-
 }
-
 
 class _ActionQuoteTile extends StatelessWidget {
   const _ActionQuoteTile({
@@ -804,14 +904,18 @@ class _ActionQuoteTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final diffDays = DateTime.now().difference(quote.emailSentAt ?? quote.createdAt).inDays;
+    final diffDays = DateTime.now()
+        .difference(quote.emailSentAt ?? quote.createdAt)
+        .inDays;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: isOverdue ? const Color(0xFFFFF0F0) : Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: isOverdue ? const Color(0xFF9D2C2C) : const Color(0xFFE8C88B)),
+        border: Border.all(
+          color: isOverdue ? const Color(0xFF9D2C2C) : const Color(0xFFE8C88B),
+        ),
       ),
       child: Row(
         children: [
@@ -826,20 +930,29 @@ class _ActionQuoteTile extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 12.5,
-                        color: isOverdue ? const Color(0xFF9D2C2C) : const Color(0xFF17304C),
+                        color: isOverdue
+                            ? const Color(0xFF9D2C2C)
+                            : const Color(0xFF17304C),
                       ),
                     ),
                     if (isOverdue) ...[
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF9D2C2C),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           '$diffDays Gündür Cevap Bekliyor',
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ],
@@ -847,7 +960,11 @@ class _ActionQuoteTile extends StatelessWidget {
                 ),
                 Text(
                   quote.title.isEmpty ? 'Başlıksız teklif' : quote.title,
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF5B6F7F), fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF5B6F7F),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -860,7 +977,10 @@ class _ActionQuoteTile extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF2B82C9),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+                textStyle: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
             const SizedBox(width: 6),
@@ -872,7 +992,10 @@ class _ActionQuoteTile extends StatelessWidget {
             style: FilledButton.styleFrom(
               backgroundColor: btnColor,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+              textStyle: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],
@@ -890,10 +1013,23 @@ class _StatusChip extends StatelessWidget {
     final (bg, fg) = switch (status) {
       QuoteStatus.draft => (const Color(0xFFF1F4F8), const Color(0xFF5B6F7F)),
       QuoteStatus.pending => (const Color(0xFFFFF4E0), const Color(0xFF8B5918)),
-      QuoteStatus.approved => (const Color(0xFFE6F2FB), const Color(0xFF2B82C9)),
-      QuoteStatus.accepted => (const Color(0xFFE5F5EE), const Color(0xFF29956F)),
-      QuoteStatus.rejected => (const Color(0xFFFBE8E8), const Color(0xFF9D2C2C)),
-      QuoteStatus.cancelled => (const Color(0xFFF3EFEA), const Color(0xFF705C49)),
+      QuoteStatus.approved => (
+        const Color(0xFFE6F2FB),
+        const Color(0xFF2B82C9),
+      ),
+      QuoteStatus.accepted => (
+        const Color(0xFFE5F5EE),
+        const Color(0xFF29956F),
+      ),
+      QuoteStatus.rejected => (
+        const Color(0xFFFBE8E8),
+        const Color(0xFF9D2C2C),
+      ),
+      QuoteStatus.cancelled => (
+        const Color(0xFFF3EFEA),
+        const Color(0xFF705C49),
+      ),
+      _ => (const Color(0xFFF1F4F8), const Color(0xFF5B6F7F)),
     };
 
     return Container(

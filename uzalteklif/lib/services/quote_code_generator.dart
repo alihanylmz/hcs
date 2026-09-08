@@ -14,10 +14,9 @@ class QuoteCodeGenerator {
   /// hata riskini azaltmak icin `base32` benzeri okunur alfabe secildi.
   static const _shareTokenAlphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
 
-  /// Uretilecek paylasim tokeninin karakter sayisi. 4 karakter 31 alfabeyle
-  /// ~923k kombinasyon verir; teklif kodu zaten saniye cozunurlugunde
-  /// benzersiz oldugu icin tahmin edilemez bir "sir" parcasi olarak yeterli.
-  static const int shareTokenLength = 4;
+  /// Public portal doğrulanana kadar yeni token üretilmez. Portal açıldığında
+  /// eski dört karakterli tokenlara dönülmemesi için en az 24 karakter kullanılır.
+  static const int shareTokenLength = 24;
 
   static final Random _secureRandom = Random.secure();
 

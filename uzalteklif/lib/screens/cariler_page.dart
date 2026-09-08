@@ -47,11 +47,13 @@ class _CarilerPageState extends State<CarilerPage> {
   bool _showPhone = true;
   bool _showEmail = true;
   bool _showTax = true;
+  bool _showArchived = false;
 
   List<CariAccount> get _filteredList {
     final query = _query.trim().toLowerCase();
     final list = _list
         .where((cari) {
+          if (!_showArchived && !cari.isActive) return false;
           if (query.isEmpty) return true;
           final contactsStr = cari.contacts
               .map((c) => '${c.name} ${c.title} ${c.phone} ${c.email}')
@@ -98,7 +100,9 @@ class _CarilerPageState extends State<CarilerPage> {
 
   Future<void> _reload() async {
     setState(() => _loading = true);
-    final rows = await widget.repository.fetchAll();
+    final rows = await widget.repository.fetchAll(
+      includeArchived: _showArchived,
+    );
     if (!mounted) return;
     setState(() {
       _list = rows;
@@ -155,7 +159,9 @@ class _CarilerPageState extends State<CarilerPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Cari silinsin mi?'),
+        title: Text(
+          c.isActive ? 'Cari arşivlensin mi?' : 'Cari geri yüklensin mi?',
+        ),
         content: Text(c.menuLabel),
         actions: [
           TextButton(
@@ -167,14 +173,18 @@ class _CarilerPageState extends State<CarilerPage> {
               backgroundColor: const Color(0xFF9D3418),
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Sil'),
+            child: Text(c.isActive ? 'Arşivle' : 'Geri yükle'),
           ),
         ],
       ),
     );
     if (ok != true) return;
     try {
-      await widget.repository.deleteById(c.id);
+      if (c.isActive) {
+        await widget.repository.archiveById(c.id);
+      } else {
+        await widget.repository.restoreById(c.id);
+      }
       if (mounted) await _reload();
     } catch (error) {
       if (!mounted) return;
@@ -190,6 +200,19 @@ class _CarilerPageState extends State<CarilerPage> {
       appBar: AppBar(
         title: const Text('Cari 360'),
         actions: [
+          IconButton(
+            tooltip: _showArchived
+                ? 'Aktif carileri göster'
+                : 'Arşivlenmiş carileri göster',
+            onPressed: _loading
+                ? null
+                : () => setState(() => _showArchived = !_showArchived),
+            icon: Icon(
+              _showArchived
+                  ? Icons.inventory_2_rounded
+                  : Icons.archive_outlined,
+            ),
+          ),
           IconButton(
             tooltip: 'Yenile',
             onPressed: _loading ? null : _reload,

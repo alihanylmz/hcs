@@ -44,24 +44,6 @@ function Read-EnvFile {
 }
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$envFile = Join-Path $projectRoot 'env.txt'
-
-if (-not (Test-Path $envFile)) {
-  throw "env.txt bulunamadi. Proje kokune env.txt dosyasi eklemelisin."
-}
-
-$envValues = Read-EnvFile -Path $envFile
-$supabaseUrl = $envValues['SUPABASE_URL']
-$supabaseAnonKey = $envValues['SUPABASE_ANON_KEY']
-
-if ([string]::IsNullOrWhiteSpace($supabaseAnonKey)) {
-  $supabaseAnonKey = $envValues['SUPABASE_KEY']
-}
-
-if ([string]::IsNullOrWhiteSpace($supabaseUrl) -or [string]::IsNullOrWhiteSpace($supabaseAnonKey)) {
-  throw 'env.txt icinde SUPABASE_URL ve SUPABASE_ANON_KEY (veya SUPABASE_KEY) bulunmali.'
-}
-
 $flutterArgs = @()
 
 switch ($Action) {
@@ -82,6 +64,25 @@ switch ($Action) {
   }
   'build-appbundle' {
     $flutterArgs += @('build', 'appbundle')
+  }
+}
+
+if ($Action -ne 'test') {
+  $envFile = Join-Path $projectRoot 'env.txt'
+  if (-not (Test-Path $envFile)) {
+    throw "env.txt bulunamadi. Calistirma/build icin env.example.txt kopyalayip degerleri doldurun."
+  }
+
+  $envValues = Read-EnvFile -Path $envFile
+  $supabaseUrl = $envValues['SUPABASE_URL']
+  $supabaseAnonKey = $envValues['SUPABASE_ANON_KEY']
+
+  if ([string]::IsNullOrWhiteSpace($supabaseAnonKey)) {
+    $supabaseAnonKey = $envValues['SUPABASE_KEY']
+  }
+
+  if ([string]::IsNullOrWhiteSpace($supabaseUrl) -or [string]::IsNullOrWhiteSpace($supabaseAnonKey)) {
+    throw 'env.txt icinde SUPABASE_URL ve SUPABASE_ANON_KEY (veya SUPABASE_KEY) bulunmali.'
   }
 }
 

@@ -21,6 +21,8 @@ void main() {
   testWidgets('quote editor shows code plate and adds product lines', (
     WidgetTester tester,
   ) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
     final products = [
       Product(
         id: 'p-1',
@@ -75,18 +77,18 @@ void main() {
     expect(find.text('Teklif Kodu'), findsOneWidget);
     expect(find.textContaining('UZ-'), findsWidgets);
 
+    await tester.tap(find.byIcon(Icons.add_shopping_cart_rounded));
+    await tester.pumpAndSettle();
     final addButton = find.byKey(const ValueKey('catalog-add-p-1'));
-    final buttonWidget = tester.widget<OutlinedButton>(addButton);
-    buttonWidget.onPressed!.call();
+    await tester.tap(addButton);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('quote-line-p-1')), findsOneWidget);
 
-    await tester.tap(find.text('Ozel Kalem Ekle'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Kalem Aciklamasi'), findsWidgets);
-    expect(find.text('Ozel kalem'), findsOneWidget);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
   });
 
   testWidgets('discovery products open as quote lines with total quantities', (

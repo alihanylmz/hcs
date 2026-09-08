@@ -31,12 +31,12 @@ class CariContact {
   }
 
   Map<String, dynamic> toJson() => {
-        'name': name.trim(),
-        'title': title.trim(),
-        'phone': phone.trim(),
-        'email': email.trim(),
-        'is_primary': isPrimary,
-      };
+    'name': name.trim(),
+    'title': title.trim(),
+    'phone': phone.trim(),
+    'email': email.trim(),
+    'is_primary': isPrimary,
+  };
 
   factory CariContact.fromJson(Map<String, dynamic> json) {
     return CariContact(
@@ -63,6 +63,7 @@ class CariAccount {
     required this.address,
     required this.notes,
     required this.updatedAt,
+    this.archivedAt,
     this.createdBy,
     this.contacts = const [],
   });
@@ -78,6 +79,8 @@ class CariAccount {
   final String address;
   final String notes;
   final DateTime updatedAt;
+  final DateTime? archivedAt;
+  bool get isActive => archivedAt == null;
   final String? createdBy;
   final List<CariContact> contacts;
 
@@ -139,6 +142,8 @@ class CariAccount {
     String? address,
     String? notes,
     DateTime? updatedAt,
+    DateTime? archivedAt,
+    bool clearArchivedAt = false,
     String? createdBy,
     List<CariContact>? contacts,
   }) {
@@ -154,26 +159,29 @@ class CariAccount {
       address: address ?? this.address,
       notes: notes ?? this.notes,
       updatedAt: updatedAt ?? this.updatedAt,
+      archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
       createdBy: createdBy ?? this.createdBy,
       contacts: contacts ?? this.contacts,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'company_name': companyName,
-        'contact_name': primaryContact?.name ?? contactName,
-        'contact_title': primaryContact?.title ?? contactTitle,
-        'phone': primaryContact?.phone ?? phone,
-        'email': primaryContact?.email ?? email,
-        'tax_office': taxOffice,
-        'tax_number': taxNumber,
-        'address': address,
-        'notes': notes,
-        'updated_at': updatedAt.toIso8601String(),
-        'created_by': createdBy,
-        'contacts': contacts.map((c) => c.toJson()).toList(),
-      };
+    'id': id,
+    'company_name': companyName,
+    'contact_name': primaryContact?.name ?? contactName,
+    'contact_title': primaryContact?.title ?? contactTitle,
+    'phone': primaryContact?.phone ?? phone,
+    'email': primaryContact?.email ?? email,
+    'tax_office': taxOffice,
+    'tax_number': taxNumber,
+    'address': address,
+    'notes': notes,
+    'updated_at': updatedAt.toIso8601String(),
+    'archived_at': archivedAt?.toIso8601String(),
+    'is_active': isActive,
+    'created_by': createdBy,
+    'contacts': contacts.map((c) => c.toJson()).toList(),
+  };
 
   factory CariAccount.fromJson(Map<String, dynamic> json) {
     final rawContacts = json['contacts'] as List<dynamic>? ?? const [];
@@ -227,6 +235,7 @@ class CariAccount {
       address: (json['address'] as String?)?.trim() ?? '',
       notes: (json['notes'] as String?)?.trim() ?? '',
       updatedAt: DateTime.parse(json['updated_at'] as String),
+      archivedAt: DateTime.tryParse((json['archived_at'] as String?) ?? ''),
       createdBy: (json['created_by'] as String?)?.trim(),
       contacts: parsedContacts,
     );

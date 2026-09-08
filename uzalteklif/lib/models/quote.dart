@@ -280,21 +280,45 @@ class QuoteDocumentProfile {
 /// Teklifin profesyonel satış sürecindeki aşaması. Depolama anahtarları eski
 /// kayıtlarla uyumluluk için korunur; kullanıcı arayüzü iç onay yerine satış
 /// operasyonu dilini kullanır.
-enum QuoteStatus { draft, pending, approved, accepted, rejected, cancelled }
+enum QuoteStatus {
+  draft,
+  approvalPending,
+  approved,
+  sent,
+  viewed,
+  negotiating,
+  won,
+  lost,
+  expired,
+  cancelled;
+
+  // Eski kod yolları için geçici derleme uyumluluğu.
+  static const pending = approvalPending;
+  static const accepted = won;
+  static const rejected = lost;
+}
 
 extension QuoteStatusX on QuoteStatus {
   String get storageKey {
     switch (this) {
       case QuoteStatus.draft:
         return 'draft';
-      case QuoteStatus.pending:
-        return 'sent';
+      case QuoteStatus.approvalPending:
+        return 'approval_pending';
       case QuoteStatus.approved:
         return 'approved';
-      case QuoteStatus.accepted:
-        return 'accepted';
-      case QuoteStatus.rejected:
-        return 'rejected';
+      case QuoteStatus.sent:
+        return 'sent';
+      case QuoteStatus.viewed:
+        return 'viewed';
+      case QuoteStatus.negotiating:
+        return 'negotiating';
+      case QuoteStatus.won:
+        return 'won';
+      case QuoteStatus.lost:
+        return 'lost';
+      case QuoteStatus.expired:
+        return 'expired';
       case QuoteStatus.cancelled:
         return 'cancelled';
     }
@@ -304,14 +328,22 @@ extension QuoteStatusX on QuoteStatus {
     switch (this) {
       case QuoteStatus.draft:
         return 'Taslak';
-      case QuoteStatus.pending:
-        return 'Gönderime Hazır';
+      case QuoteStatus.approvalPending:
+        return 'Onay Bekliyor';
       case QuoteStatus.approved:
-        return 'Müşteriye Gönderildi';
-      case QuoteStatus.accepted:
+        return 'Şirket İçinde Onaylandı';
+      case QuoteStatus.sent:
+        return 'Gönderildi';
+      case QuoteStatus.viewed:
+        return 'Görüntülendi';
+      case QuoteStatus.negotiating:
+        return 'Pazarlıkta';
+      case QuoteStatus.won:
         return 'Kazanıldı';
-      case QuoteStatus.rejected:
+      case QuoteStatus.lost:
         return 'Kaybedildi';
+      case QuoteStatus.expired:
+        return 'Süresi Doldu';
       case QuoteStatus.cancelled:
         return 'İptal';
     }
@@ -319,15 +351,25 @@ extension QuoteStatusX on QuoteStatus {
 
   static QuoteStatus fromStorageKey(String? raw) {
     switch (raw) {
-      case 'sent':
+      case 'approval_pending':
       case 'pending':
-        return QuoteStatus.pending;
+        return QuoteStatus.approvalPending;
+      case 'sent':
+        return QuoteStatus.sent;
+      case 'viewed':
+        return QuoteStatus.viewed;
+      case 'negotiating':
+        return QuoteStatus.negotiating;
+      case 'won':
+      case 'accepted':
+        return QuoteStatus.won;
+      case 'lost':
+      case 'rejected':
+        return QuoteStatus.lost;
+      case 'expired':
+        return QuoteStatus.expired;
       case 'approved':
         return QuoteStatus.approved;
-      case 'accepted':
-        return QuoteStatus.accepted;
-      case 'rejected':
-        return QuoteStatus.rejected;
       case 'cancelled':
         return QuoteStatus.cancelled;
       default:
@@ -339,6 +381,25 @@ extension QuoteStatusX on QuoteStatus {
 /// Musterinin teklif kararini temsil eder. Supabase'de `customer_response`
 /// sutununda saklanir.
 enum CustomerResponse { pending, accepted, rejected, noResponse }
+
+/// Raporlanabilir kayıp nedeni kodları; açıklama ayrıca approvalNote'ta tutulur.
+abstract final class QuoteLossReason {
+  static const price = 'price';
+  static const competitor = 'competitor';
+  static const timing = 'timing';
+  static const scope = 'scope';
+  static const noResponse = 'no_response';
+  static const other = 'other';
+
+  static const labels = <String, String>{
+    price: 'Fiyat',
+    competitor: 'Rakip',
+    timing: 'Zamanlama',
+    scope: 'Kapsam',
+    noResponse: 'Cevap yok',
+    other: 'Diğer',
+  };
+}
 
 extension CustomerResponseX on CustomerResponse {
   String get storageKey {
@@ -458,11 +519,22 @@ class Quote {
     this.acceptedByName = '',
     this.revisionCount = 0,
     this.cariId = '',
+    this.ownerUserId,
+    this.validUntil,
+    this.nextActionAt,
+    this.expectedCloseAt,
+    this.lossReasonCode = '',
+    this.statusChangedAt,
     this.createdBy,
     this.createdByName = '',
     this.archivedAt,
     this.emailSentAt,
     this.emailSentTo = '',
+    this.emailSentBy,
+    this.emailSentByName = '',
+    this.emailSentNote = '',
+    this.emailDraftOpenedAt,
+    this.emailDraftOpenedTo = '',
     this.emailViewedAt,
     this.customerResponse = CustomerResponse.pending,
     this.sharedWith = const [],
@@ -475,6 +547,26 @@ class Quote {
 
   /// [customer_accounts] kaydi; bos ise manuel musteri girisi.
   final String cariId;
+  final String? ownerUserId;
+  final DateTime? validUntil;
+  final DateTime? nextActionAt;
+  final DateTime? expectedCloseAt;
+  final String lossReasonCode;
+  final DateTime? statusChangedAt;
+
+  bool get isExpired =>
+      validUntil != null && DateTime.now().toUtc().isAfter(validUntil!);
+
+  bool get isOpen =>
+      !isExpired &&
+      const {
+        QuoteStatus.draft,
+        QuoteStatus.approvalPending,
+        QuoteStatus.approved,
+        QuoteStatus.sent,
+        QuoteStatus.viewed,
+        QuoteStatus.negotiating,
+      }.contains(status);
   final String title;
   final String note;
   final DateTime createdAt;
@@ -574,6 +666,15 @@ class Quote {
   /// Teklifin gonderildigi e-posta adresi. Bos ise henuz gonderilmemistir.
   final String emailSentTo;
 
+  /// Manuel gönderim teyidini veren kullanıcı ve açıklaması.
+  final String? emailSentBy;
+  final String emailSentByName;
+  final String emailSentNote;
+
+  /// E-posta istemcisinde taslak açıldığı an; gönderim kanıtı değildir.
+  final DateTime? emailDraftOpenedAt;
+  final String emailDraftOpenedTo;
+
   /// Musterinin public teklif linkini ilk actigi tarih (UTC).
   final DateTime? emailViewedAt;
 
@@ -604,14 +705,17 @@ class Quote {
     final email = currentUserEmail?.trim().toLowerCase();
     if (email != null && email.isNotEmpty) {
       if (emailSentTo.trim().toLowerCase() == email) return true;
-      if (sharedWith.map((e) => e.trim().toLowerCase()).contains(email)) return true;
+      if (sharedWith.map((e) => e.trim().toLowerCase()).contains(email))
+        return true;
     }
 
     final name = currentUserName?.trim().toLowerCase();
     if (name != null && name.isNotEmpty) {
       if (createdByName.trim().toLowerCase() == name) return true;
-      if (documentProfile.preparedByName.trim().toLowerCase() == name) return true;
-      if (sharedWith.map((e) => e.trim().toLowerCase()).contains(name)) return true;
+      if (documentProfile.preparedByName.trim().toLowerCase() == name)
+        return true;
+      if (sharedWith.map((e) => e.trim().toLowerCase()).contains(name))
+        return true;
     }
 
     return false;
@@ -667,6 +771,10 @@ class Quote {
     if (token.isEmpty) return code;
     return '$code-$token';
   }
+
+  /// Public portal doğrulanana kadar hiçbir token müşteri bağlantısı olarak
+  /// kullanılmaz. Eski/eksik token kayıtları güvenli biçimde pasif kalır.
+  bool get hasVerifiedPublicLink => false;
 
   /// Verilen kok URL'yi slug ile birlestirerek paylasilabilir linki uretir.
   /// Kok bos ise sadece slug doner (offline kopya / manuel yerlestirme icin).
@@ -769,6 +877,12 @@ class Quote {
     String? acceptedByName,
     int? revisionCount,
     String? cariId,
+    String? ownerUserId,
+    DateTime? validUntil,
+    DateTime? nextActionAt,
+    DateTime? expectedCloseAt,
+    String? lossReasonCode,
+    DateTime? statusChangedAt,
     String? createdBy,
     String? createdByName,
     DateTime? archivedAt,
@@ -777,6 +891,11 @@ class Quote {
     DateTime? emailSentAt,
     bool clearEmailSentAt = false,
     String? emailSentTo,
+    String? emailSentBy,
+    String? emailSentByName,
+    String? emailSentNote,
+    DateTime? emailDraftOpenedAt,
+    String? emailDraftOpenedTo,
     DateTime? emailViewedAt,
     bool clearEmailViewedAt = false,
     CustomerResponse? customerResponse,
@@ -817,12 +936,25 @@ class Quote {
       acceptedByName: acceptedByName ?? this.acceptedByName,
       revisionCount: revisionCount ?? this.revisionCount,
       cariId: cariId ?? this.cariId,
+      ownerUserId: ownerUserId ?? this.ownerUserId,
+      validUntil: validUntil ?? this.validUntil,
+      nextActionAt: nextActionAt ?? this.nextActionAt,
+      expectedCloseAt: expectedCloseAt ?? this.expectedCloseAt,
+      lossReasonCode: lossReasonCode ?? this.lossReasonCode,
+      statusChangedAt: statusChangedAt ?? this.statusChangedAt,
       createdBy: createdBy ?? this.createdBy,
       createdByName: createdByName ?? this.createdByName,
       archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
       emailSentAt: clearEmailSentAt ? null : (emailSentAt ?? this.emailSentAt),
       emailSentTo: emailSentTo ?? this.emailSentTo,
-      emailViewedAt: clearEmailViewedAt ? null : (emailViewedAt ?? this.emailViewedAt),
+      emailSentBy: emailSentBy ?? this.emailSentBy,
+      emailSentByName: emailSentByName ?? this.emailSentByName,
+      emailSentNote: emailSentNote ?? this.emailSentNote,
+      emailDraftOpenedAt: emailDraftOpenedAt ?? this.emailDraftOpenedAt,
+      emailDraftOpenedTo: emailDraftOpenedTo ?? this.emailDraftOpenedTo,
+      emailViewedAt: clearEmailViewedAt
+          ? null
+          : (emailViewedAt ?? this.emailViewedAt),
       customerResponse: customerResponse ?? this.customerResponse,
       sharedWith: sharedWith ?? this.sharedWith,
     );
@@ -864,11 +996,22 @@ class Quote {
     'accepted_by_name': acceptedByName,
     'revision_count': revisionCount,
     'cari_id': cariId,
+    'owner_user_id': ownerUserId,
+    'valid_until': validUntil?.toIso8601String(),
+    'next_action_at': nextActionAt?.toIso8601String(),
+    'expected_close_at': expectedCloseAt?.toIso8601String(),
+    'loss_reason_code': lossReasonCode,
+    'status_changed_at': statusChangedAt?.toIso8601String(),
     'created_by': createdBy,
     'created_by_name': createdByName,
     'archived_at': archivedAt?.toIso8601String(),
     'email_sent_at': emailSentAt?.toIso8601String(),
     'email_sent_to': emailSentTo,
+    'email_sent_by': emailSentBy,
+    'email_sent_by_name': emailSentByName,
+    'email_sent_note': emailSentNote,
+    'email_draft_opened_at': emailDraftOpenedAt?.toIso8601String(),
+    'email_draft_opened_to': emailDraftOpenedTo,
     'email_viewed_at': emailViewedAt?.toIso8601String(),
     'customer_response': customerResponse.storageKey,
     'shared_with': sharedWith,
@@ -930,11 +1073,23 @@ class Quote {
       acceptedByName: (json['accepted_by_name'] as String?)?.trim() ?? '',
       revisionCount: (json['revision_count'] as num?)?.toInt() ?? 0,
       cariId: (json['cari_id'] as String?)?.trim() ?? '',
+      ownerUserId: _parseOptionalUuid(json['owner_user_id']),
+      validUntil: _parseDateTime(json['valid_until']),
+      nextActionAt: _parseDateTime(json['next_action_at']),
+      expectedCloseAt: _parseDateTime(json['expected_close_at']),
+      lossReasonCode: (json['loss_reason_code'] as String?)?.trim() ?? '',
+      statusChangedAt: _parseDateTime(json['status_changed_at']),
       createdBy: _parseOptionalUuid(json['created_by']),
       createdByName: (json['created_by_name'] as String?)?.trim() ?? '',
       archivedAt: _parseDateTime(json['archived_at']),
       emailSentAt: _parseDateTime(json['email_sent_at']),
       emailSentTo: (json['email_sent_to'] as String?)?.trim() ?? '',
+      emailSentBy: _parseOptionalUuid(json['email_sent_by']),
+      emailSentByName: (json['email_sent_by_name'] as String?)?.trim() ?? '',
+      emailSentNote: (json['email_sent_note'] as String?) ?? '',
+      emailDraftOpenedAt: _parseDateTime(json['email_draft_opened_at']),
+      emailDraftOpenedTo:
+          (json['email_draft_opened_to'] as String?)?.trim() ?? '',
       emailViewedAt: _parseDateTime(json['email_viewed_at']),
       customerResponse: CustomerResponseX.fromStorageKey(
         json['customer_response'] as String?,

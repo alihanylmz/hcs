@@ -37,6 +37,9 @@ class UserQuoteProfile {
   bool get isManager => role == 'admin' || role == 'manager';
   bool get canManageUsers => isAdmin;
   bool get canApproveQuotes => isManager || role == 'finance';
+  bool get canEditQuotes => role != 'viewer';
+  bool get canCommentQuotes => role != 'viewer';
+  bool get isReadOnly => role == 'viewer';
   bool get canSeeTeamQuotes => switch (role) {
     'admin' ||
     'manager' ||
@@ -161,10 +164,16 @@ class UserQuoteProfile {
       case 'admin':
         return 'admin';
       case 'manager':
+      case 'sales_manager':
         return 'manager';
       case 'finance':
       case 'accountant':
+      case 'finance_approver':
         return 'finance';
+      case 'system_admin':
+        return 'admin';
+      case 'read_only':
+        return 'viewer';
       case 'operations':
         return 'operations';
       case 'viewer':

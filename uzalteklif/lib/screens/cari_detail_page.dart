@@ -95,7 +95,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
   }
 
   /// E-posta ile teklif gonder (url_launcher ile sistem e-posta istemcisi acar).
-  /// Gonderim sonrasi email_sent_at ve email_sent_to guncellenir.
+  /// Taslak açılınca yalnız draft-opened alanları güncellenir; gönderim manuel teyit ister.
   /// E-posta ile teklif gonder dialogu (Alici yetkili & Gonderen hesap secimi)
   Future<void> _sendQuoteEmail(Quote q, [String? initialEmail]) async {
     // Cari yetkili e-postalari
@@ -115,7 +115,8 @@ class _CariDetailPageState extends State<CariDetailPage> {
     String selectedToEmail = emailList.isNotEmpty ? emailList.first : '';
     final customEmailCtrl = TextEditingController();
 
-    final authUserEmail = Supabase.instance.client.auth.currentUser?.email?.trim() ?? '';
+    final authUserEmail =
+        Supabase.instance.client.auth.currentUser?.email?.trim() ?? '';
     final companyEmail = q.documentProfile.companyEmail.trim();
 
     // Hazirlayan e-postasi bossa veya varsayilansa canli giris yapmis kullanicinin e-postasini al
@@ -124,14 +125,21 @@ class _CariDetailPageState extends State<CariDetailPage> {
       preparedByEmail = authUserEmail;
     }
 
-    String selectedSenderAccount = preparedByEmail.isNotEmpty ? 'preparedBy' : 'default';
+    String selectedSenderAccount = preparedByEmail.isNotEmpty
+        ? 'preparedBy'
+        : 'default';
     final customSenderCtrl = TextEditingController();
 
-    final contactNameStr = _cari.contactName.trim().isNotEmpty ? _cari.contactName.trim() : "Yetkili";
-    final subjectCtrl = TextEditingController(text: 'Teklif: ${q.code} - Uzal Teklif');
+    final contactNameStr = _cari.contactName.trim().isNotEmpty
+        ? _cari.contactName.trim()
+        : "Yetkili";
+    final subjectCtrl = TextEditingController(
+      text: 'Teklif: ${q.code} - Uzal Teklif',
+    );
 
     final bodyCtrl = TextEditingController(
-      text: 'Sayın $contactNameStr,\n\n'
+      text:
+          'Sayın $contactNameStr,\n\n'
           '${q.code} kodlu teklifimizi ekte bilgilerinize sunuyoruz.\n\n'
           'Bilgilerinize saygılarımızla,\n'
           'Uzal Teknik Servis',
@@ -143,7 +151,10 @@ class _CariDetailPageState extends State<CariDetailPage> {
         builder: (context, setDlgState) => AlertDialog(
           title: Row(
             children: [
-              const Icon(Icons.mark_email_read_rounded, color: Color(0xFF2B82C9)),
+              const Icon(
+                Icons.mark_email_read_rounded,
+                color: Color(0xFF2B82C9),
+              ),
               const SizedBox(width: 8),
               Text('Teklif E-postası Gönder (${q.code})'),
             ],
@@ -156,7 +167,11 @@ class _CariDetailPageState extends State<CariDetailPage> {
               children: [
                 const Text(
                   'ALICI E-POSTA ADRESİ (MÜŞTERİ)',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF5B6F7F),
+                  ),
                 ),
                 const SizedBox(height: 6),
                 if (emailList.isNotEmpty) ...[
@@ -166,9 +181,17 @@ class _CariDetailPageState extends State<CariDetailPage> {
                     children: emailList.map((e) {
                       final isSelected = selectedToEmail == e;
                       return ChoiceChip(
-                        label: Text(e, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                        label: Text(
+                          e,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                         selected: isSelected,
-                        selectedColor: const Color(0xFF2B82C9).withValues(alpha: 0.18),
+                        selectedColor: const Color(
+                          0xFF2B82C9,
+                        ).withValues(alpha: 0.18),
                         onSelected: (val) {
                           if (val) setDlgState(() => selectedToEmail = e);
                         },
@@ -193,11 +216,18 @@ class _CariDetailPageState extends State<CariDetailPage> {
                 const SizedBox(height: 16),
                 const Text(
                   'BİLGİ (CC) / OTOMATİK ARŞİV HESABI',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF5B6F7F),
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFE6F2FB),
                     borderRadius: BorderRadius.circular(10),
@@ -205,22 +235,38 @@ class _CariDetailPageState extends State<CariDetailPage> {
                   ),
                   child: const Row(
                     children: [
-                      Icon(Icons.copy_rounded, size: 16, color: Color(0xFF2B82C9)),
+                      Icon(
+                        Icons.copy_rounded,
+                        size: 16,
+                        color: Color(0xFF2B82C9),
+                      ),
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'teklif@uzalteknik.com (Otomatik kopyalanır)',
-                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Color(0xFF17304C)),
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF17304C),
+                          ),
                         ),
                       ),
-                      Icon(Icons.check_rounded, size: 16, color: Color(0xFF29956F)),
+                      Icon(
+                        Icons.check_rounded,
+                        size: 16,
+                        color: Color(0xFF29956F),
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
                 const Text(
                   'GÖNDEREN E-POSTA YÖNTEMİ / HESABI',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF5B6F7F),
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Container(
@@ -232,10 +278,17 @@ class _CariDetailPageState extends State<CariDetailPage> {
                   child: Column(
                     children: [
                       InkWell(
-                        onTap: () => setDlgState(() => selectedSenderAccount = 'default'),
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+                        onTap: () => setDlgState(
+                          () => selectedSenderAccount = 'default',
+                        ),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(10),
+                        ),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                           child: Row(
                             children: [
                               Icon(
@@ -252,8 +305,21 @@ class _CariDetailPageState extends State<CariDetailPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('Varsayılan İstemci (Outlook/Mail App)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
-                                    Text('Cihazınızda açık olan varsayılan e-posta hesabınız kullanılır.', style: TextStyle(fontSize: 10, color: Color(0xFF5B6F7F))),
+                                    Text(
+                                      'Varsayılan İstemci (Outlook/Mail App)',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF17304C),
+                                      ),
+                                    ),
+                                    Text(
+                                      'Cihazınızda açık olan varsayılan e-posta hesabınız kullanılır.',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Color(0xFF5B6F7F),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -264,9 +330,14 @@ class _CariDetailPageState extends State<CariDetailPage> {
                       if (preparedByEmail.isNotEmpty) ...[
                         const Divider(height: 1),
                         InkWell(
-                          onTap: () => setDlgState(() => selectedSenderAccount = 'preparedBy'),
+                          onTap: () => setDlgState(
+                            () => selectedSenderAccount = 'preparedBy',
+                          ),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
                             child: Row(
                               children: [
                                 Icon(
@@ -281,10 +352,25 @@ class _CariDetailPageState extends State<CariDetailPage> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      const Text('Hazırlayan Personel Hesabı', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
-                                      Text(preparedByEmail, style: const TextStyle(fontSize: 10.5, color: Color(0xFF9D5C1D), fontWeight: FontWeight.w700)),
+                                      const Text(
+                                        'Hazırlayan Personel Hesabı',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFF17304C),
+                                        ),
+                                      ),
+                                      Text(
+                                        preparedByEmail,
+                                        style: const TextStyle(
+                                          fontSize: 10.5,
+                                          color: Color(0xFF9D5C1D),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -296,9 +382,14 @@ class _CariDetailPageState extends State<CariDetailPage> {
                       if (companyEmail.isNotEmpty) ...[
                         const Divider(height: 1),
                         InkWell(
-                          onTap: () => setDlgState(() => selectedSenderAccount = 'company'),
+                          onTap: () => setDlgState(
+                            () => selectedSenderAccount = 'company',
+                          ),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
                             child: Row(
                               children: [
                                 Icon(
@@ -313,10 +404,25 @@ class _CariDetailPageState extends State<CariDetailPage> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      const Text('Kurumsal Şirket Hesabı', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
-                                      Text(companyEmail, style: const TextStyle(fontSize: 10.5, color: Color(0xFF2B82C9), fontWeight: FontWeight.w700)),
+                                      const Text(
+                                        'Kurumsal Şirket Hesabı',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFF17304C),
+                                        ),
+                                      ),
+                                      Text(
+                                        companyEmail,
+                                        style: const TextStyle(
+                                          fontSize: 10.5,
+                                          color: Color(0xFF2B82C9),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -327,10 +433,16 @@ class _CariDetailPageState extends State<CariDetailPage> {
                       ],
                       const Divider(height: 1),
                       InkWell(
-                        onTap: () => setDlgState(() => selectedSenderAccount = 'custom'),
-                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(10)),
+                        onTap: () =>
+                            setDlgState(() => selectedSenderAccount = 'custom'),
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(10),
+                        ),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -346,7 +458,14 @@ class _CariDetailPageState extends State<CariDetailPage> {
                                         : const Color(0xFF5B6F7F),
                                   ),
                                   const SizedBox(width: 8),
-                                  const Text('➕ Farklı Gönderen E-posta Adresi Ekle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF8B5CC7))),
+                                  const Text(
+                                    '➕ Farklı Gönderen E-posta Adresi Ekle',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF8B5CC7),
+                                    ),
+                                  ),
                                 ],
                               ),
                               if (selectedSenderAccount == 'custom') ...[
@@ -356,7 +475,10 @@ class _CariDetailPageState extends State<CariDetailPage> {
                                   decoration: const InputDecoration(
                                     labelText: 'Gönderen E-posta Adresiniz',
                                     hintText: 'ad.soyad@firma.com',
-                                    prefixIcon: Icon(Icons.mark_email_unread_rounded, size: 16),
+                                    prefixIcon: Icon(
+                                      Icons.mark_email_unread_rounded,
+                                      size: 16,
+                                    ),
                                     isDense: true,
                                   ),
                                 ),
@@ -371,7 +493,11 @@ class _CariDetailPageState extends State<CariDetailPage> {
                 const SizedBox(height: 16),
                 const Text(
                   'E-POSTA KONUSU',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF5B6F7F),
+                  ),
                 ),
                 const SizedBox(height: 6),
                 TextField(
@@ -384,7 +510,11 @@ class _CariDetailPageState extends State<CariDetailPage> {
                 const SizedBox(height: 16),
                 const Text(
                   'E-POSTA İÇERİĞİ / MESAJI (DÜZENLENEBİLİR)',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF5B6F7F),
+                  ),
                 ),
                 const SizedBox(height: 6),
                 TextField(
@@ -412,9 +542,12 @@ class _CariDetailPageState extends State<CariDetailPage> {
                 if (target.isEmpty) return;
 
                 String senderAddr = '';
-                if (selectedSenderAccount == 'preparedBy') senderAddr = preparedByEmail;
-                if (selectedSenderAccount == 'company') senderAddr = companyEmail;
-                if (selectedSenderAccount == 'custom') senderAddr = customSenderCtrl.text.trim();
+                if (selectedSenderAccount == 'preparedBy')
+                  senderAddr = preparedByEmail;
+                if (selectedSenderAccount == 'company')
+                  senderAddr = companyEmail;
+                if (selectedSenderAccount == 'custom')
+                  senderAddr = customSenderCtrl.text.trim();
 
                 Navigator.pop(ctx, {
                   'toEmail': target,
@@ -425,7 +558,9 @@ class _CariDetailPageState extends State<CariDetailPage> {
               },
               icon: const Icon(Icons.send_rounded, size: 16),
               label: const Text('E-posta Gönder'),
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF2B82C9)),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF2B82C9),
+              ),
             ),
           ],
         ),
@@ -439,9 +574,13 @@ class _CariDetailPageState extends State<CariDetailPage> {
     final customBody = result['body'] ?? '';
 
     // mailto URL'sinde + işaretlerini önlemek için %20 dönüşümü
-    final encodedSubject = Uri.encodeComponent(customSubject).replaceAll('+', '%20');
+    final encodedSubject = Uri.encodeComponent(
+      customSubject,
+    ).replaceAll('+', '%20');
     final encodedBody = Uri.encodeComponent(customBody).replaceAll('+', '%20');
-    final encodedCc = Uri.encodeComponent('teklif@uzalteknik.com').replaceAll('+', '%20');
+    final encodedCc = Uri.encodeComponent(
+      'teklif@uzalteknik.com',
+    ).replaceAll('+', '%20');
 
     if (_outlookEmailService.isSupported) {
       await _openWindowsOutlookEmail(
@@ -454,7 +593,9 @@ class _CariDetailPageState extends State<CariDetailPage> {
       return;
     }
 
-    final uri = Uri.parse('mailto:$finalToEmail?cc=$encodedCc&subject=$encodedSubject&body=$encodedBody');
+    final uri = Uri.parse(
+      'mailto:$finalToEmail?cc=$encodedCc&subject=$encodedSubject&body=$encodedBody',
+    );
 
     try {
       bool launched = false;
@@ -465,13 +606,13 @@ class _CariDetailPageState extends State<CariDetailPage> {
       }
 
       if (launched) {
-        await widget.quoteRepository.markEmailSent(q.id, finalToEmail);
+        await widget.quoteRepository.markEmailDraftOpened(q.id, finalToEmail);
         await _reload();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'E-posta istemcisi açıldı.${selectedSender.isNotEmpty ? " (Gönderen: $selectedSender)" : ""} Alıcı: $finalToEmail',
+                'E-posta taslağı açıldı.${selectedSender.isNotEmpty ? " (Gönderen: $selectedSender)" : ""} Alıcı: $finalToEmail',
               ),
               backgroundColor: const Color(0xFF29956F),
             ),
@@ -484,7 +625,9 @@ class _CariDetailPageState extends State<CariDetailPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('E-posta istemcisi açılamadı ($finalToEmail). Lütfen cihazınızda aktif mail istemcisi tanımlı olduğundan emin olun.'),
+            content: Text(
+              'E-posta istemcisi açılamadı ($finalToEmail). Lütfen cihazınızda aktif mail istemcisi tanımlı olduğundan emin olun.',
+            ),
             backgroundColor: Colors.red.shade700,
           ),
         );
@@ -522,7 +665,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
         throw Exception('Outlook acilamadi.');
       }
 
-      await widget.quoteRepository.markEmailSent(quote.id, toEmail);
+      await widget.quoteRepository.markEmailDraftOpened(quote.id, toEmail);
       await _reload();
       if (!mounted) return;
 
@@ -534,7 +677,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Outlook taslagi PDF ekli acildi.$senderInfo Alici: $toEmail',
+            'E-posta taslağı (PDF ekli) açıldı.$senderInfo Alıcı: $toEmail',
           ),
           backgroundColor: const Color(0xFF29956F),
         ),
@@ -557,21 +700,28 @@ class _CariDetailPageState extends State<CariDetailPage> {
     final phoneCtrl = TextEditingController(text: rawPhone);
 
     final String quoteUrl;
-    if (q.publicShareSlug.startsWith('http://') || q.publicShareSlug.startsWith('https://')) {
+    if (q.hasVerifiedPublicLink &&
+        (q.publicShareSlug.startsWith('http://') ||
+            q.publicShareSlug.startsWith('https://'))) {
       quoteUrl = q.publicShareSlug;
-    } else if (q.publicShareSlug.isNotEmpty) {
-      final cleanSlug = q.publicShareSlug.startsWith('/') ? q.publicShareSlug : '/${q.publicShareSlug}';
+    } else if (q.hasVerifiedPublicLink && q.publicShareSlug.isNotEmpty) {
+      final cleanSlug = q.publicShareSlug.startsWith('/')
+          ? q.publicShareSlug
+          : '/${q.publicShareSlug}';
       quoteUrl = 'https://uzalteknikservis.info/#$cleanSlug';
-    } else if (q.publicToken.isNotEmpty) {
+    } else if (q.hasVerifiedPublicLink && q.publicToken.isNotEmpty) {
       quoteUrl = 'https://uzalteknikservis.info/#/p/${q.publicToken}';
     } else {
-      quoteUrl = 'https://uzalteknikservis.info/#/quote/${q.id}';
+      quoteUrl = 'Çevrimiçi portal geçici olarak devre dışı';
     }
 
-    final contactNameStr = _cari.contactName.trim().isNotEmpty ? _cari.contactName.trim() : "Yetkili";
+    final contactNameStr = _cari.contactName.trim().isNotEmpty
+        ? _cari.contactName.trim()
+        : "Yetkili";
 
     final msgCtrl = TextEditingController(
-      text: 'Sayın $contactNameStr,\n\n'
+      text:
+          'Sayın $contactNameStr,\n\n'
           '${q.code} kodlu teklif detaylarımızı bilgilerinize sunarız.\n\n'
           '📄 Teklifi Çevrimiçi İncelemek & İndirmek İçin Bağlantı:\n'
           '$quoteUrl\n\n'
@@ -638,7 +788,9 @@ class _CariDetailPageState extends State<CariDetailPage> {
     if (targetPhone.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Lütfen geçerli bir telefon numarası girin.')),
+          const SnackBar(
+            content: Text('Lütfen geçerli bir telefon numarası girin.'),
+          ),
         );
       }
       return;
@@ -656,7 +808,10 @@ class _CariDetailPageState extends State<CariDetailPage> {
     final waUri = Uri.parse('https://wa.me/$cleanDigits?text=$encodedMsg');
 
     try {
-      final launched = await launchUrl(waUri, mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(
+        waUri,
+        mode: LaunchMode.externalApplication,
+      );
       if (!launched) {
         await launchUrl(waUri, mode: LaunchMode.platformDefault);
       }
@@ -667,17 +822,16 @@ class _CariDetailPageState extends State<CariDetailPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Teklif WhatsApp üzerinden $cleanDigits numarasına yönlendirildi!'),
+          content: Text(
+            'Teklif WhatsApp üzerinden $cleanDigits numarasına yönlendirildi!',
+          ),
           backgroundColor: const Color(0xFF25D366),
         ),
       );
     }
   }
 
-  Future<void> _updateQuoteResponse(
-    Quote q,
-    CustomerResponse response,
-  ) async {
+  Future<void> _updateQuoteResponse(Quote q, CustomerResponse response) async {
     await widget.quoteRepository.updateCustomerResponse(q.id, response);
     await _reload();
   }
@@ -1017,9 +1171,12 @@ class _CariDetailPageState extends State<CariDetailPage> {
                                 quote: _filteredQuotes[i],
                                 cariContacts: _cari.contacts,
                                 onTap: () => _openQuote(_filteredQuotes[i]),
-                                onSendEmail: (email) => _sendQuoteEmail(_filteredQuotes[i], email),
-                                onSendWhatsApp: () => _sendWhatsApp(_filteredQuotes[i]),
-                                onUpdateResponse: (r) => _updateQuoteResponse(_filteredQuotes[i], r),
+                                onSendEmail: (email) =>
+                                    _sendQuoteEmail(_filteredQuotes[i], email),
+                                onSendWhatsApp: () =>
+                                    _sendWhatsApp(_filteredQuotes[i]),
+                                onUpdateResponse: (r) =>
+                                    _updateQuoteResponse(_filteredQuotes[i], r),
                               ),
                             ],
                           ],
@@ -1622,14 +1779,17 @@ class _CariDetailPageState extends State<CariDetailPage> {
 
   Widget _buildEmailActionPanel(BuildContext context) {
     // Gonderilmemis veya cevap bekleyen teklifler — aksiyon gerektiren
-    final actionRequired = _quotes.where((q) {
-      final needsSend = q.status == QuoteStatus.approved &&
-          q.emailSentAt == null;
-      final needsResponse = q.status == QuoteStatus.approved &&
-          q.emailSentAt != null &&
-          q.customerResponse == CustomerResponse.pending;
-      return needsSend || needsResponse;
-    }).toList(growable: false);
+    final actionRequired = _quotes
+        .where((q) {
+          final needsSend =
+              q.status == QuoteStatus.approved && q.emailSentAt == null;
+          final needsResponse =
+              q.status == QuoteStatus.approved &&
+              q.emailSentAt != null &&
+              q.customerResponse == CustomerResponse.pending;
+          return needsSend || needsResponse;
+        })
+        .toList(growable: false);
 
     if (actionRequired.isEmpty) return const SizedBox.shrink();
 
@@ -1842,12 +2002,11 @@ class _QuoteDataRow extends StatelessWidget {
     );
     final effectiveDate =
         quote.acceptedAt ?? quote.approvedAt ?? quote.createdAt;
-    final dateStr = DateFormat(
-      'dd.MM.yyyy',
-      'tr_TR',
-    ).format(effectiveDate);
+    final dateStr = DateFormat('dd.MM.yyyy', 'tr_TR').format(effectiveDate);
     final emailSent = quote.emailSentAt != null;
-    final emailViewed = quote.emailViewedAt != null;
+    // Public portal doğrulanmadığı için eski email_viewed_at değerleri
+    // müşterinin kesin görüntülemesi olarak gösterilmez.
+    final emailViewed = false;
     final response = quote.customerResponse;
 
     return Material(
@@ -1888,7 +2047,9 @@ class _QuoteDataRow extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: const Color(0xFFFFF4E0),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFE3B86C)),
+                              border: Border.all(
+                                color: const Color(0xFFE3B86C),
+                              ),
                             ),
                             child: Text(
                               'Rev ${quote.revisionCount}',
@@ -1927,9 +2088,11 @@ class _QuoteDataRow extends StatelessWidget {
                       child: Text(
                         (quote.createdByName.trim().isNotEmpty
                                 ? quote.createdByName.trim()
-                                : quote.documentProfile.preparedByName.trim().isNotEmpty
-                                    ? quote.documentProfile.preparedByName.trim()
-                                    : 'S')
+                                : quote.documentProfile.preparedByName
+                                      .trim()
+                                      .isNotEmpty
+                                ? quote.documentProfile.preparedByName.trim()
+                                : 'S')
                             .characters
                             .first
                             .toUpperCase(),
@@ -1945,9 +2108,11 @@ class _QuoteDataRow extends StatelessWidget {
                       child: Text(
                         quote.createdByName.trim().isNotEmpty
                             ? quote.createdByName.trim()
-                            : (quote.documentProfile.preparedByName.trim().isNotEmpty
-                                ? quote.documentProfile.preparedByName.trim()
-                                : 'Belirtilmedi'),
+                            : (quote.documentProfile.preparedByName
+                                      .trim()
+                                      .isNotEmpty
+                                  ? quote.documentProfile.preparedByName.trim()
+                                  : 'Belirtilmedi'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -1975,7 +2140,10 @@ class _QuoteDataRow extends StatelessWidget {
               // Durum rozeti
               Expanded(
                 flex: 2,
-                child: _StatusBadge(status: quote.status, hasDeal: quote.acceptedTotalTl != null),
+                child: _StatusBadge(
+                  status: quote.status,
+                  hasDeal: quote.acceptedTotalTl != null,
+                ),
               ),
               // İletisim durumu (e-posta + cevap)
               Expanded(
@@ -1995,7 +2163,11 @@ class _QuoteDataRow extends StatelessWidget {
                       const SizedBox(width: 4),
                       IconButton(
                         tooltip: 'WhatsApp ile Gönder',
-                        icon: const Icon(Icons.chat_rounded, size: 18, color: Color(0xFF25D366)),
+                        icon: const Icon(
+                          Icons.chat_rounded,
+                          size: 18,
+                          color: Color(0xFF25D366),
+                        ),
                         onPressed: onSendWhatsApp,
                       ),
                     ],
@@ -2038,15 +2210,48 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (hasDeal) {
-      return _badge('Anlasildi', const Color(0xFF29956F), const Color(0xFFE5F5EE));
+      return _badge(
+        'Anlasildi',
+        const Color(0xFF29956F),
+        const Color(0xFFE5F5EE),
+      );
     }
     return switch (status) {
-      QuoteStatus.draft => _badge('Taslak', const Color(0xFF5B6F7F), const Color(0xFFF1F4F8)),
-      QuoteStatus.pending => _badge('Hazir', const Color(0xFF8B5918), const Color(0xFFFFF4E0)),
-      QuoteStatus.approved => _badge('Gonderildi', const Color(0xFF2B82C9), const Color(0xFFE6F2FB)),
-      QuoteStatus.accepted => _badge('Kazanildi', const Color(0xFF29956F), const Color(0xFFE5F5EE)),
-      QuoteStatus.rejected => _badge('Kaybedildi', const Color(0xFF9D2C2C), const Color(0xFFFBE8E8)),
-      QuoteStatus.cancelled => _badge('Iptal', const Color(0xFF5B6F7F), const Color(0xFFF1F4F8)),
+      QuoteStatus.draft => _badge(
+        'Taslak',
+        const Color(0xFF5B6F7F),
+        const Color(0xFFF1F4F8),
+      ),
+      QuoteStatus.pending => _badge(
+        'Hazir',
+        const Color(0xFF8B5918),
+        const Color(0xFFFFF4E0),
+      ),
+      QuoteStatus.approved => _badge(
+        'Gonderildi',
+        const Color(0xFF2B82C9),
+        const Color(0xFFE6F2FB),
+      ),
+      QuoteStatus.accepted => _badge(
+        'Kazanildi',
+        const Color(0xFF29956F),
+        const Color(0xFFE5F5EE),
+      ),
+      QuoteStatus.rejected => _badge(
+        'Kaybedildi',
+        const Color(0xFF9D2C2C),
+        const Color(0xFFFBE8E8),
+      ),
+      QuoteStatus.cancelled => _badge(
+        'Iptal',
+        const Color(0xFF5B6F7F),
+        const Color(0xFFF1F4F8),
+      ),
+      _ => _badge(
+        status.displayLabel,
+        const Color(0xFF5B6F7F),
+        const Color(0xFFF1F4F8),
+      ),
     };
   }
 
@@ -2102,9 +2307,9 @@ class _EmailIcon extends StatelessWidget {
       return Tooltip(
         message: tooltip,
         child: Icon(
-          viewed ? Icons.mark_email_read_rounded : Icons.email_rounded,
+          Icons.email_rounded,
           size: 18,
-          color: viewed ? const Color(0xFF29956F) : const Color(0xFF2B82C9),
+          color: const Color(0xFF2B82C9),
         ),
       );
     }
@@ -2151,12 +2356,7 @@ class _EmailIcon extends StatelessWidget {
       iconSize: 18,
       padding: EdgeInsets.zero,
       itemBuilder: (ctx) => emailOptions
-          .map(
-            (e) => PopupMenuItem<String>(
-              value: e,
-              child: Text(e),
-            ),
-          )
+          .map((e) => PopupMenuItem<String>(value: e, child: Text(e)))
           .toList(),
       onSelected: (email) => onSendEmail!(email),
     );
@@ -2196,7 +2396,10 @@ class _ResponseIcon extends StatelessWidget {
     };
 
     if (onUpdateResponse == null) {
-      return Tooltip(message: tip, child: Icon(icon, size: 17, color: color));
+      return Tooltip(
+        message: tip,
+        child: Icon(icon, size: 17, color: color),
+      );
     }
 
     return PopupMenuButton<CustomerResponse>(

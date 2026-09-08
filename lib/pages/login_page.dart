@@ -297,8 +297,9 @@ class _LoginPageState extends State<LoginPage> {
                         const SizedBox(height: 24),
                         const Divider(color: Colors.white24, height: 1),
                         const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text(
                               'Hesabınız yok mu?',

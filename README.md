@@ -10,9 +10,13 @@ Use the local wrapper instead of raw `flutter run`:
 .\run_local.bat
 .\run_local.bat test
 .\run_local.bat build-web
+
+# Teklif uygulamasinin tum analiz ve testleri
+.\run_quote_checks.bat
 ```
 
 The wrapper reads `env.txt` locally and injects the required `--dart-define` values.
+Test action does not require Supabase credentials. Use `env.example.txt` as the local configuration template.
 
 ## Core Docs
 

@@ -352,7 +352,10 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 children: [
                   Icon(Icons.group_add_rounded, color: Color(0xFF2B82C9)),
                   SizedBox(width: 8),
-                  Text('Mesai Arkadaşıyla Paylaş', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(
+                    'Mesai Arkadaşıyla Paylaş',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
                 ],
               ),
               content: SizedBox(
@@ -363,13 +366,18 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                   children: [
                     const Text(
                       'Bu teklifi görmesini ve üzerinde çalışabilmesini istediğiniz arkadaşlarınızı seçin:',
-                      style: TextStyle(fontSize: 12.5, color: Color(0xFF5B6F7F)),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: Color(0xFF5B6F7F),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     if (allProfiles.isEmpty)
                       const Padding(
                         padding: EdgeInsets.all(16.0),
-                        child: Center(child: Text('Kayıtlı başka personel bulunamadı.')),
+                        child: Center(
+                          child: Text('Kayıtlı başka personel bulunamadı.'),
+                        ),
                       )
                     else
                       Flexible(
@@ -378,20 +386,28 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                           itemCount: allProfiles.length,
                           itemBuilder: (context, index) {
                             final p = allProfiles[index];
-                            final identifier = p.preparedByName.trim().isNotEmpty
+                            final identifier =
+                                p.preparedByName.trim().isNotEmpty
                                 ? p.preparedByName.trim()
                                 : p.preparedByEmail.trim();
-                            if (identifier.isEmpty) return const SizedBox.shrink();
+                            if (identifier.isEmpty)
+                              return const SizedBox.shrink();
 
-                            final isChecked = tempSelection.contains(identifier) ||
+                            final isChecked =
+                                tempSelection.contains(identifier) ||
                                 tempSelection.contains(p.userId) ||
                                 tempSelection.contains(p.preparedByEmail);
 
                             return CheckboxListTile(
                               value: isChecked,
                               title: Text(
-                                p.preparedByName.isEmpty ? p.preparedByEmail : p.preparedByName,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                p.preparedByName.isEmpty
+                                    ? p.preparedByEmail
+                                    : p.preparedByName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                               ),
                               subtitle: Text(
                                 '${p.preparedByTitle} • ${p.preparedByEmail}',
@@ -421,10 +437,13 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                   child: const Text('İptal'),
                 ),
                 FilledButton.icon(
-                  onPressed: () => Navigator.of(context).pop(tempSelection.toList()),
+                  onPressed: () =>
+                      Navigator.of(context).pop(tempSelection.toList()),
                   icon: const Icon(Icons.check_rounded, size: 16),
                   label: const Text('Kaydet ve Paylaş'),
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF2B82C9)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF2B82C9),
+                  ),
                 ),
               ],
             );
@@ -517,25 +536,34 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
 
   /// WhatsApp uzerinden teklif baglantisi ve ozeti gonderir.
   Future<void> _sendWhatsApp([String? initialPhone]) async {
-    final rawPhone = (initialPhone ?? _quote.documentProfile.customerPhone).trim();
+    final rawPhone = (initialPhone ?? _quote.documentProfile.customerPhone)
+        .trim();
     final phoneCtrl = TextEditingController(text: rawPhone);
 
     final String quoteUrl;
-    if (_quote.publicShareSlug.startsWith('http://') || _quote.publicShareSlug.startsWith('https://')) {
+    if (_quote.hasVerifiedPublicLink &&
+        (_quote.publicShareSlug.startsWith('http://') ||
+            _quote.publicShareSlug.startsWith('https://'))) {
       quoteUrl = _quote.publicShareSlug;
-    } else if (_quote.publicShareSlug.isNotEmpty) {
-      final cleanSlug = _quote.publicShareSlug.startsWith('/') ? _quote.publicShareSlug : '/${_quote.publicShareSlug}';
+    } else if (_quote.hasVerifiedPublicLink &&
+        _quote.publicShareSlug.isNotEmpty) {
+      final cleanSlug = _quote.publicShareSlug.startsWith('/')
+          ? _quote.publicShareSlug
+          : '/${_quote.publicShareSlug}';
       quoteUrl = 'https://uzalteknikservis.info/#$cleanSlug';
-    } else if (_quote.publicToken.isNotEmpty) {
+    } else if (_quote.hasVerifiedPublicLink && _quote.publicToken.isNotEmpty) {
       quoteUrl = 'https://uzalteknikservis.info/#/p/${_quote.publicToken}';
     } else {
-      quoteUrl = 'https://uzalteknikservis.info/#/quote/${_quote.id}';
+      quoteUrl = 'Çevrimiçi portal geçici olarak devre dışı';
     }
 
-    final contactNameStr = _quote.customerName.trim().isNotEmpty ? _quote.customerName.trim() : "Yetkili";
+    final contactNameStr = _quote.customerName.trim().isNotEmpty
+        ? _quote.customerName.trim()
+        : "Yetkili";
 
     final msgCtrl = TextEditingController(
-      text: 'Sayın $contactNameStr,\n\n'
+      text:
+          'Sayın $contactNameStr,\n\n'
           '${_quote.code} kodlu teklif detaylarımızı bilgilerinize sunarız.\n\n'
           '📄 Teklifi Çevrimiçi İncelemek & İndirmek İçin Bağlantı:\n'
           '$quoteUrl\n\n'
@@ -602,7 +630,9 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     if (targetPhone.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Lütfen geçerli bir telefon numarası girin.')),
+          const SnackBar(
+            content: Text('Lütfen geçerli bir telefon numarası girin.'),
+          ),
         );
       }
       return;
@@ -620,7 +650,10 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     final waUri = Uri.parse('https://wa.me/$cleanDigits?text=$encodedMsg');
 
     try {
-      final launched = await launchUrl(waUri, mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(
+        waUri,
+        mode: LaunchMode.externalApplication,
+      );
       if (!launched) {
         await launchUrl(waUri, mode: LaunchMode.platformDefault);
       }
@@ -633,7 +666,9 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Teklif WhatsApp üzerinden $cleanDigits numarasına yönlendirildi!'),
+          content: Text(
+            'Teklif WhatsApp üzerinden $cleanDigits numarasına yönlendirildi!',
+          ),
           backgroundColor: const Color(0xFF25D366),
         ),
       );
@@ -654,7 +689,8 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     String selectedToEmail = emailList.isNotEmpty ? emailList.first : '';
     final customEmailCtrl = TextEditingController();
 
-    final authUserEmail = Supabase.instance.client.auth.currentUser?.email?.trim() ?? '';
+    final authUserEmail =
+        Supabase.instance.client.auth.currentUser?.email?.trim() ?? '';
     final companyEmail = _quote.documentProfile.companyEmail.trim();
 
     // Hazirlayan e-postasi bossa veya varsayilansa canli giris yapmis kullanicinin e-postasini al
@@ -663,14 +699,21 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
       preparedByEmail = authUserEmail;
     }
 
-    String selectedSenderAccount = preparedByEmail.isNotEmpty ? 'preparedBy' : 'default';
+    String selectedSenderAccount = preparedByEmail.isNotEmpty
+        ? 'preparedBy'
+        : 'default';
     final customSenderCtrl = TextEditingController();
 
-    final contactNameStr = _quote.customerName.trim().isNotEmpty ? _quote.customerName.trim() : "Yetkili";
-    final subjectCtrl = TextEditingController(text: 'Teklif: ${_quote.code} - Uzal Teklif');
+    final contactNameStr = _quote.customerName.trim().isNotEmpty
+        ? _quote.customerName.trim()
+        : "Yetkili";
+    final subjectCtrl = TextEditingController(
+      text: 'Teklif: ${_quote.code} - Uzal Teklif',
+    );
 
     final bodyCtrl = TextEditingController(
-      text: 'Sayın $contactNameStr,\n\n'
+      text:
+          'Sayın $contactNameStr,\n\n'
           '${_quote.code} kodlu teklifimizi ekte bilgilerinize sunuyoruz.\n\n'
           'Bilgilerinize saygılarımızla,\n'
           'Uzal Teknik Servis',
@@ -682,7 +725,10 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
         builder: (context, setDlgState) => AlertDialog(
           title: Row(
             children: [
-              const Icon(Icons.mark_email_read_rounded, color: Color(0xFF2B82C9)),
+              const Icon(
+                Icons.mark_email_read_rounded,
+                color: Color(0xFF2B82C9),
+              ),
               const SizedBox(width: 8),
               Text('Teklif E-postası Gönder (${_quote.code})'),
             ],
@@ -695,7 +741,11 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
               children: [
                 const Text(
                   'ALICI E-POSTA ADRESİ (MÜŞTERİ)',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF5B6F7F),
+                  ),
                 ),
                 const SizedBox(height: 6),
                 if (emailList.isNotEmpty) ...[
@@ -705,9 +755,17 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                     children: emailList.map((e) {
                       final isSelected = selectedToEmail == e;
                       return ChoiceChip(
-                        label: Text(e, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                        label: Text(
+                          e,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                         selected: isSelected,
-                        selectedColor: const Color(0xFF2B82C9).withValues(alpha: 0.18),
+                        selectedColor: const Color(
+                          0xFF2B82C9,
+                        ).withValues(alpha: 0.18),
                         onSelected: (val) {
                           if (val) setDlgState(() => selectedToEmail = e);
                         },
@@ -732,11 +790,18 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 const SizedBox(height: 16),
                 const Text(
                   'BİLGİ (CC) / OTOMATİK ARŞİV HESABI',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF5B6F7F),
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFE6F2FB),
                     borderRadius: BorderRadius.circular(10),
@@ -744,22 +809,38 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                   ),
                   child: const Row(
                     children: [
-                      Icon(Icons.copy_rounded, size: 16, color: Color(0xFF2B82C9)),
+                      Icon(
+                        Icons.copy_rounded,
+                        size: 16,
+                        color: Color(0xFF2B82C9),
+                      ),
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'teklif@uzalteknik.com (Otomatik kopyalanır)',
-                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Color(0xFF17304C)),
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF17304C),
+                          ),
                         ),
                       ),
-                      Icon(Icons.check_rounded, size: 16, color: Color(0xFF29956F)),
+                      Icon(
+                        Icons.check_rounded,
+                        size: 16,
+                        color: Color(0xFF29956F),
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
                 const Text(
                   'GÖNDEREN E-POSTA YÖNTEMİ / HESABI',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF5B6F7F),
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Container(
@@ -771,10 +852,17 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                   child: Column(
                     children: [
                       InkWell(
-                        onTap: () => setDlgState(() => selectedSenderAccount = 'default'),
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+                        onTap: () => setDlgState(
+                          () => selectedSenderAccount = 'default',
+                        ),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(10),
+                        ),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                           child: Row(
                             children: [
                               Icon(
@@ -791,8 +879,21 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('Varsayılan İstemci (Outlook/Mail App)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
-                                    Text('Cihazınızda açık olan varsayılan e-posta hesabınız kullanılır.', style: TextStyle(fontSize: 10, color: Color(0xFF5B6F7F))),
+                                    Text(
+                                      'Varsayılan İstemci (Outlook/Mail App)',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF17304C),
+                                      ),
+                                    ),
+                                    Text(
+                                      'Cihazınızda açık olan varsayılan e-posta hesabınız kullanılır.',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Color(0xFF5B6F7F),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -803,9 +904,14 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                       if (preparedByEmail.isNotEmpty) ...[
                         const Divider(height: 1),
                         InkWell(
-                          onTap: () => setDlgState(() => selectedSenderAccount = 'preparedBy'),
+                          onTap: () => setDlgState(
+                            () => selectedSenderAccount = 'preparedBy',
+                          ),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
                             child: Row(
                               children: [
                                 Icon(
@@ -820,10 +926,25 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      const Text('Hazırlayan Personel Hesabı', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
-                                      Text(preparedByEmail, style: const TextStyle(fontSize: 10.5, color: Color(0xFF9D5C1D), fontWeight: FontWeight.w700)),
+                                      const Text(
+                                        'Hazırlayan Personel Hesabı',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFF17304C),
+                                        ),
+                                      ),
+                                      Text(
+                                        preparedByEmail,
+                                        style: const TextStyle(
+                                          fontSize: 10.5,
+                                          color: Color(0xFF9D5C1D),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -835,9 +956,14 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                       if (companyEmail.isNotEmpty) ...[
                         const Divider(height: 1),
                         InkWell(
-                          onTap: () => setDlgState(() => selectedSenderAccount = 'company'),
+                          onTap: () => setDlgState(
+                            () => selectedSenderAccount = 'company',
+                          ),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
                             child: Row(
                               children: [
                                 Icon(
@@ -852,10 +978,25 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      const Text('Kurumsal Şirket Hesabı', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF17304C))),
-                                      Text(companyEmail, style: const TextStyle(fontSize: 10.5, color: Color(0xFF2B82C9), fontWeight: FontWeight.w700)),
+                                      const Text(
+                                        'Kurumsal Şirket Hesabı',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFF17304C),
+                                        ),
+                                      ),
+                                      Text(
+                                        companyEmail,
+                                        style: const TextStyle(
+                                          fontSize: 10.5,
+                                          color: Color(0xFF2B82C9),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -866,10 +1007,16 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                       ],
                       const Divider(height: 1),
                       InkWell(
-                        onTap: () => setDlgState(() => selectedSenderAccount = 'custom'),
-                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(10)),
+                        onTap: () =>
+                            setDlgState(() => selectedSenderAccount = 'custom'),
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(10),
+                        ),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -885,7 +1032,14 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                                         : const Color(0xFF5B6F7F),
                                   ),
                                   const SizedBox(width: 8),
-                                  const Text('➕ Farklı Gönderen E-posta Adresi Ekle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF8B5CC7))),
+                                  const Text(
+                                    '➕ Farklı Gönderen E-posta Adresi Ekle',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF8B5CC7),
+                                    ),
+                                  ),
                                 ],
                               ),
                               if (selectedSenderAccount == 'custom') ...[
@@ -895,7 +1049,10 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                                   decoration: const InputDecoration(
                                     labelText: 'Gönderen E-posta Adresiniz',
                                     hintText: 'ad.soyad@firma.com',
-                                    prefixIcon: Icon(Icons.mark_email_unread_rounded, size: 16),
+                                    prefixIcon: Icon(
+                                      Icons.mark_email_unread_rounded,
+                                      size: 16,
+                                    ),
                                     isDense: true,
                                   ),
                                 ),
@@ -910,7 +1067,11 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 const SizedBox(height: 16),
                 const Text(
                   'E-POSTA KONUSU',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF5B6F7F),
+                  ),
                 ),
                 const SizedBox(height: 6),
                 TextField(
@@ -923,7 +1084,11 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 const SizedBox(height: 16),
                 const Text(
                   'E-POSTA İÇERİĞİ / MESAJI (DÜZENLENEBİLİR)',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF5B6F7F)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF5B6F7F),
+                  ),
                 ),
                 const SizedBox(height: 6),
                 TextField(
@@ -951,9 +1116,12 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 if (target.isEmpty) return;
 
                 String senderAddr = '';
-                if (selectedSenderAccount == 'preparedBy') senderAddr = preparedByEmail;
-                if (selectedSenderAccount == 'company') senderAddr = companyEmail;
-                if (selectedSenderAccount == 'custom') senderAddr = customSenderCtrl.text.trim();
+                if (selectedSenderAccount == 'preparedBy')
+                  senderAddr = preparedByEmail;
+                if (selectedSenderAccount == 'company')
+                  senderAddr = companyEmail;
+                if (selectedSenderAccount == 'custom')
+                  senderAddr = customSenderCtrl.text.trim();
 
                 Navigator.pop(ctx, {
                   'toEmail': target,
@@ -964,7 +1132,9 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
               },
               icon: const Icon(Icons.send_rounded, size: 16),
               label: const Text('E-posta Gönder'),
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF2B82C9)),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF2B82C9),
+              ),
             ),
           ],
         ),
@@ -978,9 +1148,13 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     final customBody = result['body'] ?? '';
 
     // mailto URL'sinde + işaretlerini önlemek için %20 dönüşümü
-    final encodedSubject = Uri.encodeComponent(customSubject).replaceAll('+', '%20');
+    final encodedSubject = Uri.encodeComponent(
+      customSubject,
+    ).replaceAll('+', '%20');
     final encodedBody = Uri.encodeComponent(customBody).replaceAll('+', '%20');
-    final encodedCc = Uri.encodeComponent('teklif@uzalteknik.com').replaceAll('+', '%20');
+    final encodedCc = Uri.encodeComponent(
+      'teklif@uzalteknik.com',
+    ).replaceAll('+', '%20');
 
     if (_outlookEmailService.isSupported) {
       await _openWindowsOutlookEmail(
@@ -992,7 +1166,9 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
       return;
     }
 
-    final uri = Uri.parse('mailto:$finalToEmail?cc=$encodedCc&subject=$encodedSubject&body=$encodedBody');
+    final uri = Uri.parse(
+      'mailto:$finalToEmail?cc=$encodedCc&subject=$encodedSubject&body=$encodedBody',
+    );
 
     try {
       bool launched = false;
@@ -1003,17 +1179,20 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
       }
 
       if (launched) {
-        await widget.quoteRepository.markEmailSent(_quote.id, finalToEmail);
+        await widget.quoteRepository.markEmailDraftOpened(
+          _quote.id,
+          finalToEmail,
+        );
         final updated = _quote.copyWith(
-          emailSentAt: DateTime.now().toUtc(),
-          emailSentTo: finalToEmail,
+          emailDraftOpenedAt: DateTime.now().toUtc(),
+          emailDraftOpenedTo: finalToEmail,
         );
         if (!mounted) return;
         setState(() => _quote = updated);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'E-posta istemcisi açıldı.${selectedSender.isNotEmpty ? " (Gönderen: $selectedSender)" : ""} Alıcı: $finalToEmail',
+              'E-posta taslağı açıldı.${selectedSender.isNotEmpty ? " (Gönderen: $selectedSender)" : ""} Alıcı: $finalToEmail',
             ),
             backgroundColor: const Color(0xFF29956F),
           ),
@@ -1025,7 +1204,9 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('E-posta istemcisi açılamadı ($finalToEmail). Lütfen cihazınızda aktif mail istemcisi tanımlı olduğundan emin olun.'),
+            content: Text(
+              'E-posta istemcisi açılamadı ($finalToEmail). Lütfen cihazınızda aktif mail istemcisi tanımlı olduğundan emin olun.',
+            ),
             backgroundColor: Colors.red.shade700,
           ),
         );
@@ -1062,10 +1243,10 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
         throw Exception('Outlook acilamadi.');
       }
 
-      await widget.quoteRepository.markEmailSent(_quote.id, toEmail);
+      await widget.quoteRepository.markEmailDraftOpened(_quote.id, toEmail);
       final updated = _quote.copyWith(
-        emailSentAt: DateTime.now().toUtc(),
-        emailSentTo: toEmail,
+        emailDraftOpenedAt: DateTime.now().toUtc(),
+        emailDraftOpenedTo: toEmail,
       );
       if (!mounted) return;
       setState(() => _quote = updated);
@@ -1078,7 +1259,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Outlook taslagi PDF ekli acildi.$senderInfo Alici: $toEmail',
+            'E-posta taslağı (PDF ekli) açıldı.$senderInfo Alıcı: $toEmail',
           ),
           backgroundColor: const Color(0xFF29956F),
         ),
@@ -1101,7 +1282,9 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     if (!mounted) return;
     setState(() => _quote = _quote.copyWith(customerResponse: response));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Musteri karari guncellendi: ${response.displayLabel}')),
+      SnackBar(
+        content: Text('Musteri karari guncellendi: ${response.displayLabel}'),
+      ),
     );
   }
 
@@ -1181,7 +1364,10 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 child: ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.group_add_rounded, color: Color(0xFF2B82C9)),
+                  leading: Icon(
+                    Icons.group_add_rounded,
+                    color: Color(0xFF2B82C9),
+                  ),
                   title: Text('Mesai arkadaşıyla paylaş'),
                 ),
               ),
@@ -1332,6 +1518,12 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
         const Color(0xFFF3EFEA),
         Icons.cancel_schedule_send_rounded,
       ),
+      _ => (
+        status.displayLabel,
+        _slate,
+        const Color(0xFFF1F4F8),
+        Icons.info_outline_rounded,
+      ),
     };
 
     return Card(
@@ -1375,12 +1567,20 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        const Icon(Icons.group_rounded, size: 14, color: Color(0xFF2B82C9)),
+                        const Icon(
+                          Icons.group_rounded,
+                          size: 14,
+                          color: Color(0xFF2B82C9),
+                        ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             'Paylaşılan Arkadaş(lar): ${_quote.sharedWith.join(', ')}',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2B82C9)),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF2B82C9),
+                            ),
                           ),
                         ),
                       ],
@@ -1433,6 +1633,8 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
         return 'Teklif kaybedildi; gerekçe aşağıdadır.';
       case QuoteStatus.cancelled:
         return 'Teklif iptal edildi; gerekçe kayıtlarda saklanır.';
+      default:
+        return status.displayLabel;
     }
   }
 
@@ -1499,7 +1701,8 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
               _workflowConnector(),
               _workflowStep(
                 title: 'E-posta gönderildi',
-                subtitle: '${_friendly(_quote.emailSentAt!)} — ${_quote.emailSentTo}',
+                subtitle:
+                    '${_friendly(_quote.emailSentAt!)} — ${_quote.emailSentTo}',
                 icon: Icons.email_rounded,
                 color: const Color(0xFF2B82C9),
               ),
@@ -1509,7 +1712,8 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 _quote.customerResponse != CustomerResponse.pending) ...[
               _workflowConnector(),
               _workflowStep(
-                title: 'Müşteri kararı: ${_quote.customerResponse.displayLabel}',
+                title:
+                    'Müşteri kararı: ${_quote.customerResponse.displayLabel}',
                 subtitle: switch (_quote.customerResponse) {
                   CustomerResponse.accepted => 'Müşteri kabul etti.',
                   CustomerResponse.rejected => 'Müşteri reddetti.',
@@ -1745,6 +1949,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
       emails.add(_quote.documentProfile.customerEmail.trim());
     }
     final alreadySent = _quote.emailSentAt != null;
+    final draftOpened = !alreadySent && _quote.emailDraftOpenedAt != null;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1855,8 +2060,14 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                     ),
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFF2B82C9),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ),
@@ -1867,13 +2078,36 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                   label: const Text('💬 WhatsApp İle Gönder'),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF25D366),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ],
             ),
           ] else ...[
+            if (draftOpened) ...[
+              const SizedBox(height: 6),
+              Text(
+                '${DateFormat('dd.MM.yyyy HH:mm', 'tr_TR').format(_quote.emailDraftOpenedAt!)} — ${_quote.emailDraftOpenedTo}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF2B82C9),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _markEmailSentManually,
+                icon: const Icon(Icons.check_circle_outline_rounded, size: 16),
+                label: const Text('Gönderildi olarak işaretle'),
+              ),
+            ],
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -1913,6 +2147,86 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _markEmailSentManually() async {
+    final toController = TextEditingController(
+      text: _quote.emailSentTo.isNotEmpty
+          ? _quote.emailSentTo
+          : _quote.emailDraftOpenedTo,
+    );
+    final noteController = TextEditingController();
+    try {
+      final result = await showDialog<Map<String, String>>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Gönderimi teyit et'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: toController,
+                decoration: const InputDecoration(labelText: 'Alıcı e-posta'),
+              ),
+              TextField(
+                controller: noteController,
+                decoration: const InputDecoration(labelText: 'Not (opsiyonel)'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Vazgeç'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, {
+                'to': toController.text.trim(),
+                'note': noteController.text.trim(),
+              }),
+              child: const Text('Kaydet'),
+            ),
+          ],
+        ),
+      );
+      final to = result?['to']?.trim() ?? '';
+      if (to.isEmpty) return;
+      final profile = await widget.userProfileRepository.fetchMine();
+      final name = profile?.preparedByName.trim() ?? '';
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final note = result?['note'] ?? '';
+      await widget.quoteRepository.markEmailSent(
+        _quote.id,
+        to,
+        sentBy: userId,
+        sentByName: name,
+        note: note,
+      );
+      if (!mounted) return;
+      setState(
+        () => _quote = _quote.copyWith(
+          emailSentAt: DateTime.now().toUtc(),
+          emailSentTo: to,
+          emailSentBy: userId,
+          emailSentByName: name,
+          emailSentNote: note,
+        ),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gönderim manuel olarak kaydedildi.')),
+      );
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gönderim kaydedilemedi.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+    } finally {
+      toController.dispose();
+      noteController.dispose();
+    }
   }
 
   Widget _buildMiniChip(String label, String value) {

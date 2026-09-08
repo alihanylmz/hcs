@@ -1,10 +1,23 @@
 import 'dart:convert';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../config/app_config.dart';
+
+/// Guncelleme paketi indirilemedigi zaman firlatilir.
+///
+/// Daha once `dart:io`'daki `HttpException` kullaniliyordu; o import webde
+/// uygulamayi kirdigi icin kendi tipimizi tanimliyoruz.
+class AppUpdateDownloadException implements Exception {
+  const AppUpdateDownloadException(this.statusCode);
+
+  final int statusCode;
+
+  @override
+  String toString() => 'Indirme basarisiz: $statusCode';
+}
 
 /// GitHub Releases [latest] yanitindan secilen surum bilgisi.
 class GithubLatestRelease {
@@ -42,7 +55,11 @@ class AppUpdateService {
 
   /// GitHub'da daha yeni bir surum varsa bilgi doner; yoksa veya hata olursa null.
   Future<GithubLatestRelease?> fetchNewerRelease() async {
-    if (!Platform.isWindows) return null;
+    // Otomatik guncelleme yalnizca Windows kurulumu icin anlamli. Webde
+    // `dart:io` yok; `Platform.isWindows` cagrisi orada
+    // "Unsupported operation: Platform._operatingSystem" firlatiyordu.
+    // kIsWeb once bakildigi icin Platform'a hic dokunulmuyor.
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) return null;
     final pair = AppConfig.updateGithubOwnerRepo;
     if (pair == null) return null;
 
@@ -119,7 +136,7 @@ class AppUpdateService {
       headers: const {'User-Agent': _userAgent},
     );
     if (response.statusCode != 200) {
-      throw HttpException('Indirme basarisiz: ${response.statusCode}');
+      throw AppUpdateDownloadException(response.statusCode);
     }
     return response.bodyBytes;
   }

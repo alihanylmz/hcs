@@ -20,6 +20,7 @@ import '../services/own_company_repository.dart';
 import '../services/price_adjustment_rule_repository.dart';
 import '../services/product_repository.dart';
 import '../services/quote_code_generator.dart';
+import '../services/quote_editor_autosave_service.dart';
 import '../services/quote_repository.dart';
 import '../services/quote_editor_pricing_service.dart';
 import '../services/quote_editor_hidden_cost_service.dart';
@@ -27,6 +28,7 @@ import '../services/quote_editor_line_total_service.dart';
 import '../services/quote_editor_product_filter_service.dart';
 import '../services/user_profile_repository.dart';
 import '../utils/product_category_labels.dart';
+import '../widgets/quote_editor_autosave_status.dart';
 import '../widgets/workspace_background.dart';
 import '../widgets/quote_editor_commercial_terms_fields.dart';
 import '../widgets/quote_editor_section_card.dart';
@@ -64,6 +66,23 @@ import '../widgets/quote_editor_line_table_header.dart';
 import '../widgets/quote_editor_line_table.dart';
 import 'cariler_page.dart';
 
+/// Teklifin kalici olarak saklandigi kayit yollari. Bu yollarda nota
+/// "Cikti bicimi" etiketi EKLENMEZ.
+///
+/// Etiket, PDF/Excel gibi tek seferlik ciktilarin hangi bicimde uretildigini
+/// belgede gostermek icindir. Kalici bir kayitta eklenirse teklifin notuna
+/// yazilir, teklif tekrar acildiginda nota geri yuklenir ve sonraki her
+/// kayitta bir yenisi eklenerek not sinirsiz buyur. Autosave 12 saniyede bir
+/// kaydettigi icin bu ozellikle yikici olur.
+const _persistingQuoteSources = {'ARSIV', 'AUTOSAVE'};
+
+/// [source] kalici bir kayit yolu ise notu oldugu gibi, degilse sonuna
+/// cikti bicimi etiketi ekleyerek dondurur.
+String quoteNoteForSource(String baseNote, String source) {
+  if (_persistingQuoteSources.contains(source)) return baseNote;
+  return '$baseNote\nCikti bicimi: $source';
+}
+
 class QuoteInitialProductLine {
   const QuoteInitialProductLine({
     required this.productId,
@@ -94,6 +113,7 @@ class QuoteEditorPage extends StatefulWidget {
     CariRepository? cariRepository,
     OwnCompanyRepository? ownCompanyRepository,
     PriceAdjustmentRuleRepository? priceAdjustmentRuleRepository,
+    this.autosaveService,
   }) : userProfileRepository = userProfileRepository ?? UserProfileRepository(),
        cariRepository = cariRepository ?? CariRepository(),
        ownCompanyRepository =
@@ -128,6 +148,9 @@ class QuoteEditorPage extends StatefulWidget {
   final CariRepository cariRepository;
   final OwnCompanyRepository ownCompanyRepository;
   final PriceAdjustmentRuleRepository priceAdjustmentRuleRepository;
+
+  /// Testlerde enjekte edilir; null ise sayfa kendi servisini kurar.
+  final QuoteEditorAutosaveService? autosaveService;
 
   @override
   State<QuoteEditorPage> createState() => _QuoteEditorPageState();
@@ -205,6 +228,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   List<CariAccount> _cariler = const [];
   List<Product> _availableProducts = const [];
   String _selectedCariId = '';
+  QuoteEditorAutosaveService? _autosaveService;
 
   @override
   void initState() {
@@ -231,10 +255,150 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       _selectedDisplayUnit = 'TL';
     }
 
+    _registerDirtyListeners();
     _refreshDraftQuoteCode();
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _bootstrapEditorContext(),
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _bootstrapEditorContext();
+      _initializeAutosave();
+    });
+  }
+
+  Future<void> _initializeAutosave() async {
+    if (widget.autosaveService != null) {
+      if (!mounted) return;
+      setState(() => _autosaveService = widget.autosaveService);
+      _checkRecoveryDraft();
+      return;
+    }
+    final service = await QuoteEditorAutosaveService.create(
+      buildQuote: () => _buildQuote(source: 'AUTOSAVE', forAutosave: true),
+      draftKey: _recoveryDraftKey,
+      debounceDuration: const Duration(seconds: 12),
     );
+    if (!mounted) {
+      service.dispose();
+      return;
+    }
+    setState(() => _autosaveService = service);
+    _checkRecoveryDraft();
+  }
+
+  /// Kaydedilecek bir icerik degistiginde cagrilir; adim gezinme veya
+  /// filtre gibi salt-gorsel degisikliklerde cagrilmaz.
+  void _markDirty() => _autosaveService?.markDirty();
+
+  /// Kurtarma kopyasinin SharedPreferences anahtari.
+  ///
+  /// Oturumlar arasi SABIT olmali: okuma editor acilirken, yazma ise ilk
+  /// otomatik kayitta olur. `_draftQuoteId` kullanilamaz, cunku yeni bir
+  /// teklifte acilista henuz null olur ve `_ensureDraftIdentity()` ilk
+  /// kayitta rastgele bir id uretir; boylece yazilan anahtar okunan
+  /// anahtarla asla eslesmez ve yeni tekliflerde kurtarma hic calismaz.
+  ///
+  /// Mevcut bir teklif duzenleniyorsa onun id'si zaten sabittir. Yeni
+  /// teklifte tek bir 'new' yuvasi kullanilir.
+  String _recoveryDraftKey() => widget.quoteToRevise?.id ?? 'new';
+
+  /// Editor acilirken yerel kurtarma kopyasi varsa kullaniciya sunar.
+  Future<void> _checkRecoveryDraft() async {
+    final service = _autosaveService;
+    if (service == null || !mounted) return;
+
+    final key = _recoveryDraftKey();
+    final draft = await service.readRecoveryDraft(key);
+    if (draft == null || !mounted) return;
+
+    // Sunucudaki surum taslaktan yeni ya da esitse taslak bayat demektir;
+    // kullaniciyi mesgul etmeden atiyoruz.
+    final knownUpdatedAt = widget.quoteToRevise?.updatedAt;
+    if (knownUpdatedAt != null && !draft.savedAt.isAfter(knownUpdatedAt)) {
+      await service.discardRecoveryDraft(key);
+      return;
+    }
+    if (!mounted) return;
+    _showRecoveryBanner(draft, key);
+  }
+
+  void _showRecoveryBanner(RecoveryDraft draft, String key) {
+    final messenger = ScaffoldMessenger.of(context);
+    final savedAt = DateFormat(
+      'dd.MM.yyyy HH:mm',
+      'tr_TR',
+    ).format(draft.savedAt.toLocal());
+    messenger.showMaterialBanner(
+      MaterialBanner(
+        content: Text(
+          '$savedAt tarihli kaydedilmemis bir taslak bulundu. '
+          'Geri yuklemek ister misiniz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              messenger.hideCurrentMaterialBanner();
+              _restoreRecoveryDraft(draft, key);
+            },
+            child: const Text('Geri Yukle'),
+          ),
+          TextButton(
+            onPressed: () {
+              messenger.hideCurrentMaterialBanner();
+              _autosaveService?.discardRecoveryDraft(key);
+            },
+            child: const Text('Yoksay'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Formu taslaktaki icerikle yeniden doldurur. `_loadFromExistingQuote`
+  /// listelere ekleme yaptigi icin once mevcut kalem/bolum draft'lari
+  /// temizlenip dispose ediliyor.
+  void _restoreRecoveryDraft(RecoveryDraft draft, String key) {
+    setState(() {
+      for (final item in _items) {
+        item.dispose();
+      }
+      _items.clear();
+      for (final section in _sections) {
+        section.dispose();
+      }
+      _sections.clear();
+      _hiddenCosts.clear();
+      _loadFromExistingQuote(draft.quote);
+    });
+    _autosaveService?.discardRecoveryDraft(key);
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Taslak geri yuklendi.')));
+  }
+
+  /// Teklif icerigini tasiyan tum metin alanlarini autosave'e baglar.
+  /// `_productSearchController` bilerek disarida: urun arama kutusu sadece
+  /// katalog filtresi, teklifin bir parcasi degil. Listener'lari ayrica
+  /// kaldirmaya gerek yok, controller'lar dispose'ta zaten yok ediliyor.
+  void _registerDirtyListeners() {
+    for (final c in <TextEditingController>[
+      _customerNameController,
+      _customerCompanyController,
+      _customerTitleController,
+      _customerPhoneController,
+      _customerEmailController,
+      _preparedByNameController,
+      _preparedByTitleController,
+      _preparedByPhoneController,
+      _preparedByEmailController,
+      _titleController,
+      _noteController,
+      _validityController,
+      _paymentTermsController,
+      _paymentTermDaysController,
+      _deliveryTermsController,
+      _uncategorizedBulkDiscountController,
+    ]) {
+      c.addListener(_markDirty);
+    }
   }
 
   void _loadInitialProducts() {
@@ -661,7 +825,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   /// Kullanıcı dropdown'dan bir cariyi bilerek seçmişse ve firma adını değiştirmemişse, seçilen cari'yi koru.
   /// Aksi takdirde: 1) yazılan firma adıyla mevcut cariler içinde eşleştir, 2) eşleşme yoksa yeni cari oluştur.
   /// Firma adı tamamen boşsa boş string döndür (NULL olarak kaydedilir, FK kısıtını kırmaz).
-  Future<String> _resolveCariIdForSave() async {
+  /// [allowCreate] false ise (autosave) eslesme yoksa yeni cari ACMAZ, bos
+  /// doner; teklif cari_id'siz kaydedilir ve cari gercek kayitta olusur.
+  Future<String> _resolveCariIdForSave({bool allowCreate = true}) async {
     final companyText = _customerCompanyController.text.trim();
 
     // Firma adı boşsa NULL'a git (FK'ye müsaade)
@@ -685,7 +851,8 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       return matched.id;
     }
 
-    // Eşleşme yoksa otomatik yeni cari oluştur
+    // Eşleşme yoksa otomatik yeni cari oluştur (autosave'de atlanir)
+    if (!allowCreate) return '';
     final newCariId = await _createCariFromForm();
     if (newCariId.isNotEmpty) {
       // Listeyi yenile ve seçili id'yi güncelle
@@ -832,6 +999,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
   @override
   void dispose() {
+    // Autosave zamanlayicisi buildQuote uzerinden controller'lari okuyor;
+    // onlar dispose edilmeden once durdurulmali.
+    _autosaveService?.flushAndDispose();
     _customerNameController.dispose();
     _customerCompanyController.dispose();
     _customerCompanyFocusNode.dispose();
@@ -1157,6 +1327,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       }
 
       final savedQuote = await widget.quoteRepository.saveQuote(quote);
+      // Gercek kayit yapildi; yerel kurtarma kopyasi artik bayat, yoksa
+      // teklif tekrar acildiginda gereksiz yere geri yukleme onerilir.
+      await _autosaveService?.discardRecoveryDraft(_recoveryDraftKey());
       if (!mounted) {
         return;
       }
@@ -1204,6 +1377,8 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       );
 
       await widget.quoteRepository.saveQuote(quote);
+      // Kayit kalici hale geldi; yerel kurtarma kopyasini temizle.
+      await _autosaveService?.discardRecoveryDraft(_recoveryDraftKey());
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1403,26 +1578,38 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     }
   }
 
-  Future<Quote?> _buildQuote({required String source}) async {
+  /// [forAutosave] true ise arka planda sessiz calisir: kullaniciya uyari
+  /// gostermez ve cari kayitlarina yazmaz. Autosave her 12 saniyede bir
+  /// cagrildigi icin, kullanici firma adini yazarken yarim isimlerle cari
+  /// olusturmamasi ve form eksikken uyari yagdirmamasi gerekir. Cari acma
+  /// isi gercek kayda (Kaydet/Tamamla) birakilir.
+  Future<Quote?> _buildQuote({
+    required String source,
+    bool forAutosave = false,
+  }) async {
     final formState = _formKey.currentState;
     if (formState == null) {
       return null;
     }
     if (!formState.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Form alanlarinda hata var. Kirmizi kutucuklari kontrol edin.',
+      if (!forAutosave) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Form alanlarinda hata var. Kirmizi kutucuklari kontrol edin.',
+            ),
           ),
-        ),
-      );
+        );
+      }
       return null;
     }
 
     if (_items.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('En az bir kalem ekleyin.')));
+      if (!forAutosave) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('En az bir kalem ekleyin.')),
+        );
+      }
       return null;
     }
 
@@ -1431,14 +1618,19 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
       return null;
     }
 
-    // Resolve cari_id: mevcut cariler içinde eşleştir ya da otomatik yeni cari oluştur
-    final resolvedCariId = await _resolveCariIdForSave();
+    // Resolve cari_id: mevcut cariler içinde eşleştir ya da otomatik yeni cari
+    // oluştur (autosave'de oluşturma kapalı, sadece eşleştirir).
+    final resolvedCariId = await _resolveCariIdForSave(
+      allowCreate: !forAutosave,
+    );
     if (!mounted) {
       return null;
     }
 
     final contactNameInput = _customerNameController.text.trim();
-    if (_selectedCariId.isNotEmpty && contactNameInput.isNotEmpty) {
+    if (!forAutosave &&
+        _selectedCariId.isNotEmpty &&
+        contactNameInput.isNotEmpty) {
       final matches = _cariler.where((c) => c.id == _selectedCariId);
       if (matches.isNotEmpty) {
         try {
@@ -1508,9 +1700,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     }
 
     final baseNote = _sanitizeLongText(_noteController.text).trim();
-    final taggedNote = source == 'ARSIV'
-        ? baseNote
-        : '$baseNote\nCikti bicimi: $source';
+    final taggedNote = quoteNoteForSource(baseNote, source);
 
     final hiddenCosts = _hiddenCosts
         .where((draft) => draft.totalTl > 0)
@@ -1950,49 +2140,104 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     final compact = screenWidth < 700;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Teklif Olustur')),
-      body: WorkspaceBackground(
-        child: SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              compact ? 8 : 24,
-              compact ? 8 : 12,
-              compact ? 8 : 24,
-              compact ? 12 : 24,
+      appBar: AppBar(
+        title: const Text('Teklif Olustur'),
+        actions: [
+          if (_autosaveService != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Center(
+                child: ListenableBuilder(
+                  listenable: _autosaveService!,
+                  builder: (context, _) =>
+                      QuoteEditorAutosaveStatus(status: _autosaveService!.status),
+                ),
+              ),
             ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  // Step header
-                  QuoteEditorStepHeader(
-                    currentStep: _currentStep,
-                    onStepSelected: (step) => setState(() => _currentStep = step),
-                  ),
-                  const SizedBox(height: 16),
-                  // Form content based on layout
-                  Expanded(
-                    child: isWide
-                        ? Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(child: _buildFormPanel(expandList: true)),
-                              const SizedBox(width: 16),
-                              SizedBox(
-                                width: 300,
-                                child: _buildSummaryPanel(expandActions: true),
-                              ),
-                            ],
-                          )
-                        : ListView(
-                            children: [
-                              _buildFormPanel(expandList: false),
-                              const SizedBox(height: 20),
-                              _buildSummaryPanel(expandActions: false),
-                            ],
-                          ),
-                  ),
-                ],
+        ],
+      ),
+      // PopScope kendini cevreleyen route'a kaydolur, bu yuzden Scaffold'u
+      // sarmasi gerekmez; body'de olmasi yeterli ve dev build agacini
+      // yeniden girintilemekten kurtariyor.
+      body: PopScope(
+        canPop: !(_autosaveService?.isDirty ?? false),
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop || !mounted) return;
+          final navigator = Navigator.of(context);
+          final leave = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Kaydedilmemis degisiklikler'),
+              content: const Text(
+                'Teklif henuz sisteme kaydedilmedi. Cikarsaniz bu '
+                'degisiklikler silinir.\n\n'
+                'Saklamak icin once "Taslak Olarak Kaydet" kullanin.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Vazgec'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Cik'),
+                ),
+              ],
+            ),
+          );
+          if ((leave ?? false) && mounted) {
+            // Bilincli cikis temiz kapanistir: yerel taslagi siliyoruz.
+            // Boylece diskte taslak kalmasi yalnizca duzensiz kapanmayi
+            // (sekme kapatma, yenileme, cokme) isaret eder ve kurtarma
+            // bandi her acilista degil, sadece gercekten gerektiginde cikar.
+            await _autosaveService?.discardRecoveryDraft(_recoveryDraftKey());
+            navigator.pop();
+          }
+        },
+        child: WorkspaceBackground(
+          child: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                compact ? 8 : 24,
+                compact ? 8 : 12,
+                compact ? 8 : 24,
+                compact ? 12 : 24,
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    QuoteEditorStepHeader(
+                      currentStep: _currentStep,
+                      onStepSelected: (step) =>
+                          setState(() => _currentStep = step),
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: isWide
+                          ? Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _buildFormPanel(expandList: true),
+                                ),
+                                const SizedBox(width: 16),
+                                SizedBox(
+                                  width: 300,
+                                  child: _buildSummaryPanel(expandActions: true),
+                                ),
+                              ],
+                            )
+                          : ListView(
+                              children: [
+                                _buildFormPanel(expandList: false),
+                                const SizedBox(height: 20),
+                                _buildSummaryPanel(expandActions: false),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

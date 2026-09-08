@@ -211,8 +211,8 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
           : () => setState(() => _selectedDay = isSelected ? null : day),
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        height: 38,
-        margin: const EdgeInsets.all(1),
+        height: 46,
+        margin: const EdgeInsets.all(1.5),
         decoration: BoxDecoration(
           color: isSelected
               ? const Color(0xFFE3EAF2)
@@ -228,7 +228,7 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
             Text(
               '${day.day}',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: isToday ? FontWeight.w900 : FontWeight.w600,
                 color: _ink,
               ),
@@ -249,8 +249,8 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
   }
 
   Widget _dot(Color c) => Container(
-    width: 5,
-    height: 5,
+    width: 6,
+    height: 6,
     decoration: BoxDecoration(color: c, shape: BoxShape.circle),
   );
 

@@ -13,6 +13,7 @@ import '../services/product_repository.dart';
 import '../services/quote_repository.dart';
 import '../services/user_profile_repository.dart';
 import '../services/module_switcher.dart';
+import '../widgets/open_drafts_card.dart';
 import '../widgets/quote_calendar_card.dart';
 import '../widgets/workspace_background.dart';
 import 'quote_review_page.dart';
@@ -239,28 +240,112 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Aksiyon Gerektirenler Paneli
-                      if (overdueQuotes.isNotEmpty ||
-                          needsEmail.isNotEmpty ||
-                          normalAwaiting.isNotEmpty) ...[
-                        _buildActionCenter(
-                          overdueQuotes,
-                          needsEmail,
-                          normalAwaiting,
-                        ),
-                        const SizedBox(height: 20),
+                      // Pano duzeni: alt alta tam genislik seritler yerine
+                      // kutular. Genis ekranda solda is akisi (aksiyon +
+                      // teklif listesi), sagda sabit genislikte yan panel
+                      // (takvim + bekleyen taslaklar) duruyor.
+                      LayoutBuilder(
+                        builder: (ctx, constraints) {
+                          const sideWidth = 380.0;
+                          final hasAction =
+                              overdueQuotes.isNotEmpty ||
+                              needsEmail.isNotEmpty ||
+                              normalAwaiting.isNotEmpty;
 
-                      // Takvim: gecerlilik bitisi ve takip gunleri teklif
-                      // kayitlarindan turetiliyor, ayrica tarih girilmiyor.
-                      QuoteCalendarCard(
-                        quotes: quotes,
-                        onQuoteTap: _openQuoteReview,
+                          final actionPanel = hasAction
+                              ? _buildActionCenter(
+                                  overdueQuotes,
+                                  needsEmail,
+                                  normalAwaiting,
+                                )
+                              : null;
+
+                          final calendar = QuoteCalendarCard(
+                            quotes: quotes,
+                            onQuoteTap: _openQuoteReview,
+                          );
+                          final drafts = OpenDraftsCard(
+                            quotes: quotes,
+                            onQuoteTap: _openQuoteReview,
+                          );
+                          final list = _buildQuotesSection(context, quotes);
+
+                          // Iki sutunun yan yana durabilmesi icin yan panel
+                          // (380) + ana sutuna makul bir genislik gerekiyor.
+                          if (constraints.maxWidth >= 1180) {
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      if (actionPanel != null) ...[
+                                        actionPanel,
+                                        const SizedBox(height: 16),
+                                      ],
+                                      list,
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                SizedBox(
+                                  width: sideWidth,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      calendar,
+                                      const SizedBox(height: 16),
+                                      drafts,
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          }
+
+                          // Orta genislik: takvim ve taslaklar yan yana,
+                          // digerleri altta.
+                          if (constraints.maxWidth >= 860) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SizedBox(width: sideWidth, child: calendar),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: drafts),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                if (actionPanel != null) ...[
+                                  actionPanel,
+                                  const SizedBox(height: 16),
+                                ],
+                                list,
+                              ],
+                            );
+                          }
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              calendar,
+                              const SizedBox(height: 16),
+                              drafts,
+                              const SizedBox(height: 16),
+                              if (actionPanel != null) ...[
+                                actionPanel,
+                                const SizedBox(height: 16),
+                              ],
+                              list,
+                            ],
+                          );
+                        },
                       ),
-                      const SizedBox(height: 20),
-                      ],
-
-                      // Personel Teklif Listesi
-                      _buildQuotesSection(context, quotes),
                     ],
                   ),
                 ),

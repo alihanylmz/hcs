@@ -16,6 +16,7 @@ import '../services/price_adjustment_rule_repository.dart';
 import '../services/product_repository.dart';
 import '../services/quote_repository.dart';
 import '../services/user_profile_repository.dart';
+import '../utils/quote_activity_summary.dart';
 import '../widgets/workspace_background.dart';
 import 'my_workspace_page.dart';
 import 'quote_editor_page.dart';
@@ -100,6 +101,8 @@ class _QuotesPageState extends State<QuotesPage> {
   bool _showQuoteDate = true;
   bool _showQuoteStatus = true;
   bool _showQuoteAmount = true;
+  bool _showQuoteOwner = true;
+  bool _showQuoteActivity = true;
   _QuoteWorkspaceView _workspaceView = _QuoteWorkspaceView.list;
 
   List<Quote> get _filteredQuotes {
@@ -565,6 +568,8 @@ class _QuotesPageState extends State<QuotesPage> {
                   _columnMenuItem('date', 'Tarih', _showQuoteDate),
                   _columnMenuItem('status', 'Durum', _showQuoteStatus),
                   _columnMenuItem('amount', 'Tutar', _showQuoteAmount),
+                  _columnMenuItem('owner', 'Sorumlu', _showQuoteOwner),
+                  _columnMenuItem('activity', 'Son Hareket', _showQuoteActivity),
                 ],
                 onSelected: (value) {
                   setState(() {
@@ -577,6 +582,10 @@ class _QuotesPageState extends State<QuotesPage> {
                       _showQuoteStatus = !_showQuoteStatus;
                     }
                     if (value == 'amount') _showQuoteAmount = !_showQuoteAmount;
+                    if (value == 'owner') _showQuoteOwner = !_showQuoteOwner;
+                    if (value == 'activity') {
+                      _showQuoteActivity = !_showQuoteActivity;
+                    }
                   });
                 },
               ),
@@ -904,6 +913,8 @@ class _QuotesPageState extends State<QuotesPage> {
             showDate: _showQuoteDate,
             showStatus: _showQuoteStatus,
             showAmount: _showQuoteAmount,
+            showOwner: _showQuoteOwner,
+            showActivity: _showQuoteActivity,
           );
 
     return LayoutBuilder(
@@ -1169,6 +1180,8 @@ class _QuoteTable extends StatelessWidget {
     this.showDate = true,
     this.showStatus = true,
     this.showAmount = true,
+    this.showOwner = true,
+    this.showActivity = true,
   });
 
   final List<Quote> quotes;
@@ -1180,6 +1193,8 @@ class _QuoteTable extends StatelessWidget {
   final bool showDate;
   final bool showStatus;
   final bool showAmount;
+  final bool showOwner;
+  final bool showActivity;
 
   @override
   Widget build(BuildContext context) {
@@ -1217,12 +1232,19 @@ class _QuoteTable extends StatelessWidget {
                     const Expanded(flex: 3, child: _TableHeader('Başlık')),
                   if (showDate)
                     const SizedBox(width: 132, child: _TableHeader('Tarih')),
+                  if (showOwner)
+                    const SizedBox(width: 150, child: _TableHeader('Sorumlu')),
                   if (showStatus)
                     const SizedBox(width: 118, child: _TableHeader('Durum')),
                   if (showAmount)
                     const SizedBox(
                       width: 126,
                       child: _TableHeader('Tutar', align: TextAlign.end),
+                    ),
+                  if (showActivity)
+                    const SizedBox(
+                      width: 168,
+                      child: _TableHeader('Son Hareket'),
                     ),
                   const SizedBox(width: 44),
                 ],
@@ -1242,6 +1264,8 @@ class _QuoteTable extends StatelessWidget {
                     showDate: showDate,
                     showStatus: showStatus,
                     showAmount: showAmount,
+                    showOwner: showOwner,
+                    showActivity: showActivity,
                     onTap: () => onOpen(quote),
                     onCopy: () => onCopy(quote),
                   );
@@ -1402,6 +1426,8 @@ class _QuoteTableRow extends StatelessWidget {
     required this.showDate,
     required this.showStatus,
     required this.showAmount,
+    required this.showOwner,
+    required this.showActivity,
   });
 
   final Quote quote;
@@ -1413,12 +1439,31 @@ class _QuoteTableRow extends StatelessWidget {
   final bool showDate;
   final bool showStatus;
   final bool showAmount;
+  final bool showOwner;
+  final bool showActivity;
+
+  /// Teklifi hazirlayan. `createdByName` bos ise belge profilindeki
+  /// hazirlayan adina duser; ikisi de bossa acikca belirtilmedigi soylenir.
+  String get _ownerName {
+    final owner = quote.createdByName.trim();
+    if (owner.isNotEmpty) return owner;
+    final prepared = quote.documentProfile.preparedByName.trim();
+    if (prepared.isNotEmpty) return prepared;
+    return 'Belirtilmedi';
+  }
+
+  String get _ownerInitial {
+    final name = _ownerName;
+    if (name == 'Belirtilmedi') return '?';
+    return name.characters.first.toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
     const ink = Color(0xFF17304C);
     const slate = Color(0xFF5B6F7F);
     final statusStyle = _QuoteSummaryCard._statusStyleFor(quote.status);
+    final activity = summarizeQuoteActivity(quote);
     final formatter = NumberFormat.currency(
       locale: 'tr_TR',
       symbol: switch (quote.displayUnit) {
@@ -1514,6 +1559,39 @@ class _QuoteTableRow extends StatelessWidget {
                     ),
                   ),
                 ),
+              if (showOwner)
+                SizedBox(
+                  width: 150,
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 9,
+                        backgroundColor: const Color(0xFFE3EAF2),
+                        child: Text(
+                          _ownerInitial,
+                          style: const TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w900,
+                            color: ink,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _ownerName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: slate,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               if (showStatus)
                 SizedBox(
                   width: 118,
@@ -1552,6 +1630,38 @@ class _QuoteTableRow extends StatelessWidget {
                       fontWeight: FontWeight.w900,
                       fontSize: 13,
                     ),
+                  ),
+                ),
+              if (showActivity)
+                SizedBox(
+                  width: 168,
+                  child: Row(
+                    children: [
+                      if (activity.isStale) ...[
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          size: 14,
+                          color: Color(0xFFC2410C),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Expanded(
+                        child: Text(
+                          activity.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: activity.isStale
+                                ? const Color(0xFFC2410C)
+                                : slate,
+                            fontWeight: activity.isStale
+                                ? FontWeight.w900
+                                : FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               SizedBox(

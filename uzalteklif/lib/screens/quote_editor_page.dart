@@ -3030,9 +3030,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   /// Kalemleri kategoriye gore gruplayarak uretir. Bos durum icin mevcut
   /// `_buildEmptyLineState()` kullanilir. Her grup kendi kartinda, varsa
   /// ara toplamla birlikte gorunur.
-  Widget _buildSectionedItemsList({required bool expandList}) {
-    if (_items.isEmpty) return _buildEmptyLineState();
-
+  /// Kalemlerin ekranda gorundugu bolum gruplari: once `_sections` sirasiyla
+  /// dolu bolumler, en sonda bolumsuz kalanlar.
+  ///
+  /// Hem listeyi cizen kod hem de Enter ile satir atlama bunu kullanir; ayri
+  /// ayri hesaplanirsa gorsel sira ile odak sirasi zamanla ayrisir.
+  List<_SectionGroup> _buildSectionGroups() {
     final groups = <_SectionGroup>[];
     for (final section in _sections) {
       final bucket = _items
@@ -3048,6 +3051,44 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     if (orphaned.isNotEmpty) {
       groups.add(_SectionGroup(draft: null, items: orphaned));
     }
+    return groups;
+  }
+
+  /// Kalem tablosundaki hucre sutunlari. Enter, ayni sutunda bir alt satira
+  /// gecmek icin bu kimligi kullanir.
+  ///
+  /// Not: gorsel sira Aciklama, Miktar, Birim, Fiyat, Iskonto seklinde; Tab
+  /// zaten bu sirayi Flutter'in kendi odak gezinmesiyle izliyor.
+  /// Kalemleri ekrandaki sirayla duz bir liste halinde verir.
+  List<_LineDraft> _visualLineOrder() => [
+    for (final group in _buildSectionGroups()) ...group.items,
+  ];
+
+  /// Verilen kalemin [column] sutunundaki metin alaninin odak dugumu.
+  FocusNode _lineFocusNode(_LineDraft draft, _LineColumn column) {
+    return switch (column) {
+      _LineColumn.description => draft.descriptionFocus,
+      _LineColumn.quantity => draft.quantityFocus,
+      _LineColumn.unit => draft.unitFocus,
+      _LineColumn.unitPrice => draft.unitPriceFocus,
+      _LineColumn.discount => draft.discountFocus,
+    };
+  }
+
+  /// Enter'a basildiginda ayni sutunda bir alt satira gecer (Excel gibi).
+  /// Son satirdaysa odak oldugu yerde kalir; sarmalamiyoruz cunku listenin
+  /// basina donmek yanlislikla ustteki veriyi ezmeye davet ediyor.
+  void _focusNextLineRow(_LineDraft current, _LineColumn column) {
+    final order = _visualLineOrder();
+    final index = order.indexWhere((d) => identical(d, current));
+    if (index == -1 || index + 1 >= order.length) return;
+    _lineFocusNode(order[index + 1], column).requestFocus();
+  }
+
+  Widget _buildSectionedItemsList({required bool expandList}) {
+    if (_items.isEmpty) return _buildEmptyLineState();
+
+    final groups = _buildSectionGroups();
 
     final children = <Widget>[];
     for (var i = 0; i < groups.length; i++) {
@@ -3229,6 +3270,8 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                       rowNumber: i + 1,
                       product: product,
                       draft: draft,
+                      onSubmitColumn: (column) =>
+                          _focusNextLineRow(draft, column),
                       onChanged: () => setState(() {}),
                       onRemove: () => _removeLine(draft),
                       lineTotalText: _formatTlForDisplayUnit(
@@ -3978,6 +4021,11 @@ class _QuotePriceChange {
   final String newText;
 }
 
+/// Kalem tablosundaki hucre sutunlari. Enter, ayni sutunda bir alt satira
+/// gecmek icin bu kimligi kullanir. Gorsel sira: Aciklama, Miktar, Birim,
+/// Fiyat, Iskonto - Tab bu sirayi Flutter'in kendi odak gezinmesiyle izler.
+enum _LineColumn { description, quantity, unit, unitPrice, discount }
+
 class _LineDraft {
   _LineDraft({
     required this.lineId,
@@ -4009,12 +4057,25 @@ class _LineDraft {
   /// Kalemin baglandigi kategori kimligi. Bos ise "Kategorisiz" kovasinda.
   String sectionId;
 
+  /// Enter ile ayni sutunda bir alt satira gecebilmek icin her hucrenin kendi
+  /// odak dugumu var; hedef satirin dugumune dogrudan odak isteniyor.
+  final FocusNode descriptionFocus = FocusNode();
+  final FocusNode unitFocus = FocusNode();
+  final FocusNode quantityFocus = FocusNode();
+  final FocusNode unitPriceFocus = FocusNode();
+  final FocusNode discountFocus = FocusNode();
+
   void dispose() {
     descriptionController.dispose();
     unitController.dispose();
     quantityController.dispose();
     unitPriceController.dispose();
     discountController.dispose();
+    descriptionFocus.dispose();
+    unitFocus.dispose();
+    quantityFocus.dispose();
+    unitPriceFocus.dispose();
+    discountFocus.dispose();
   }
 }
 
@@ -4397,6 +4458,7 @@ class _QuoteLineEditorRow extends StatelessWidget {
     this.product,
     this.availableSections = const [],
     this.onMoveToSection,
+    this.onSubmitColumn,
   });
 
   final int rowNumber;
@@ -4417,6 +4479,10 @@ class _QuoteLineEditorRow extends StatelessWidget {
 
   /// Seciminde `target.id` ile cagrilir; bos string "Kategorisiz" demek.
   final ValueChanged<String>? onMoveToSection;
+
+  /// Bir hucrede Enter'a basildiginda o sutunla cagrilir; sayfa ayni sutunda
+  /// bir alt satirin alanina odaklanir.
+  final void Function(_LineColumn column)? onSubmitColumn;
 
   String get _priceCurrencyLabel => switch (displayUnit) {
     'USDTRY' => 'USD',
@@ -4480,6 +4546,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                     Expanded(
                       child: QuoteEditorLineDescriptionField(
                         controller: draft.descriptionController,
+                        focusNode: draft.descriptionFocus,
+                        onSubmitted: () => onSubmitColumn?.call(_LineColumn.description),
                         validator: requiredTextValidator,
                         onChanged: (_) => onChanged(),
                       ),
@@ -4495,6 +4563,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                     Expanded(
                       child: QuoteEditorLineQuantityField(
                         controller: draft.quantityController,
+                        focusNode: draft.quantityFocus,
+                        onSubmitted: () => onSubmitColumn?.call(_LineColumn.quantity),
                         validator: numberValidator,
                         onChanged: (_) => onChanged(),
                       ),
@@ -4503,6 +4573,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                     Expanded(
                       child: QuoteEditorLineUnitField(
                         controller: draft.unitController,
+                        focusNode: draft.unitFocus,
+                        onSubmitted: () => onSubmitColumn?.call(_LineColumn.unit),
                         validator: requiredTextValidator,
                         onChanged: (_) => onChanged(),
                       ),
@@ -4511,6 +4583,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                     Expanded(
                       child: QuoteEditorLineUnitPriceField(
                         controller: draft.unitPriceController,
+                        focusNode: draft.unitPriceFocus,
+                        onSubmitted: () => onSubmitColumn?.call(_LineColumn.unitPrice),
                         validator: numberValidator,
                         onChanged: (_) => onChanged(),
                         currencyLabel: _priceCurrencyLabel,
@@ -4520,6 +4594,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                     Expanded(
                       child: QuoteEditorLineDiscountField(
                         controller: draft.discountController,
+                        focusNode: draft.discountFocus,
+                        onSubmitted: () => onSubmitColumn?.call(_LineColumn.discount),
                         validator: discountValidator,
                         onChanged: (_) => onChanged(),
                         locked: discountLocked,
@@ -4584,6 +4660,10 @@ class _QuoteLineEditorRow extends StatelessWidget {
                   children: [
                     TextFormField(
                       controller: draft.descriptionController,
+                      focusNode: draft.descriptionFocus,
+                      textInputAction: TextInputAction.next,
+                      onFieldSubmitted: (_) =>
+                          onSubmitColumn?.call(_LineColumn.description),
                       decoration: const InputDecoration(
                         hintText: 'Ürün veya hizmet açıklaması',
                         isDense: true,
@@ -4605,6 +4685,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                 width: 72,
                 child: QuoteEditorLineUnitField(
                   controller: draft.unitController,
+                  focusNode: draft.unitFocus,
+                  onSubmitted: () => onSubmitColumn?.call(_LineColumn.unit),
                   validator: requiredTextValidator,
                   onChanged: (_) => onChanged(),
                   desktop: true,
@@ -4615,6 +4697,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                 width: 78,
                 child: QuoteEditorLineQuantityField(
                   controller: draft.quantityController,
+                  focusNode: draft.quantityFocus,
+                  onSubmitted: () => onSubmitColumn?.call(_LineColumn.quantity),
                   validator: numberValidator,
                   onChanged: (_) => onChanged(),
                   desktop: true,
@@ -4625,6 +4709,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                 width: 112,
                 child: QuoteEditorLineUnitPriceField(
                   controller: draft.unitPriceController,
+                  focusNode: draft.unitPriceFocus,
+                  onSubmitted: () => onSubmitColumn?.call(_LineColumn.unitPrice),
                   validator: numberValidator,
                   onChanged: (_) => onChanged(),
                   currencyLabel: _priceCurrencyLabel,
@@ -4636,6 +4722,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                 width: 80,
                 child: QuoteEditorLineDiscountField(
                   controller: draft.discountController,
+                  focusNode: draft.discountFocus,
+                  onSubmitted: () => onSubmitColumn?.call(_LineColumn.discount),
                   validator: discountValidator,
                   onChanged: (_) => onChanged(),
                   locked: discountLocked,

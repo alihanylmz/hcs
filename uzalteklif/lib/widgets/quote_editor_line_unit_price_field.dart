@@ -7,6 +7,8 @@ class QuoteEditorLineUnitPriceField extends StatelessWidget {
     required this.validator,
     required this.onChanged,
     required this.currencyLabel,
+    this.focusNode,
+    this.onSubmitted,
     this.desktop = false,
   });
 
@@ -14,12 +16,20 @@ class QuoteEditorLineUnitPriceField extends StatelessWidget {
   final String? Function(String?) validator;
   final ValueChanged<String> onChanged;
   final String currencyLabel;
+  /// Enter ile ayni sutunda bir alt satira gecmek icin gerekli.
+  final FocusNode? focusNode;
+
+  /// Enter'a basildiginda cagrilir; null ise varsayilan davranis.
+  final VoidCallback? onSubmitted;
   final bool desktop;
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
+      textInputAction: TextInputAction.next,
+      onFieldSubmitted: onSubmitted == null ? null : (_) => onSubmitted!(),
       textAlign: desktop ? TextAlign.end : TextAlign.start,
       decoration: InputDecoration(
         labelText: desktop ? null : 'Birim Fiyat ($currencyLabel)',

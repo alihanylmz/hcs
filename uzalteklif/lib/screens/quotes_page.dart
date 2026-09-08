@@ -569,7 +569,11 @@ class _QuotesPageState extends State<QuotesPage> {
                   _columnMenuItem('status', 'Durum', _showQuoteStatus),
                   _columnMenuItem('amount', 'Tutar', _showQuoteAmount),
                   _columnMenuItem('owner', 'Sorumlu', _showQuoteOwner),
-                  _columnMenuItem('activity', 'Son Hareket', _showQuoteActivity),
+                  _columnMenuItem(
+                    'activity',
+                    'Son Hareket',
+                    _showQuoteActivity,
+                  ),
                 ],
                 onSelected: (value) {
                   setState(() {
@@ -1242,9 +1246,12 @@ class _QuoteTable extends StatelessWidget {
                       child: _TableHeader('Tutar', align: TextAlign.end),
                     ),
                   if (showActivity)
-                    const SizedBox(
-                      width: 168,
-                      child: _TableHeader('Son Hareket'),
+                    const Padding(
+                      padding: EdgeInsets.only(left: 16),
+                      child: SizedBox(
+                        width: 168,
+                        child: _TableHeader('Son Hareket'),
+                      ),
                     ),
                   const SizedBox(width: 44),
                 ],
@@ -1633,35 +1640,38 @@ class _QuoteTableRow extends StatelessWidget {
                   ),
                 ),
               if (showActivity)
-                SizedBox(
-                  width: 168,
-                  child: Row(
-                    children: [
-                      if (activity.isStale) ...[
-                        const Icon(
-                          Icons.error_outline_rounded,
-                          size: 14,
-                          color: Color(0xFFC2410C),
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                      Expanded(
-                        child: Text(
-                          activity.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: activity.isStale
-                                ? const Color(0xFFC2410C)
-                                : slate,
-                            fontWeight: activity.isStale
-                                ? FontWeight.w900
-                                : FontWeight.w700,
-                            fontSize: 12,
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: SizedBox(
+                    width: 168,
+                    child: Row(
+                      children: [
+                        if (activity.isStale) ...[
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            size: 14,
+                            color: Color(0xFFC2410C),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Expanded(
+                          child: Text(
+                            activity.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: activity.isStale
+                                  ? const Color(0xFFC2410C)
+                                  : slate,
+                              fontWeight: activity.isStale
+                                  ? FontWeight.w900
+                                  : FontWeight.w700,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               SizedBox(

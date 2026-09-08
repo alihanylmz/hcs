@@ -13,6 +13,7 @@ import '../services/product_repository.dart';
 import '../services/quote_repository.dart';
 import '../services/user_profile_repository.dart';
 import '../services/module_switcher.dart';
+import '../widgets/quote_calendar_card.dart';
 import '../widgets/workspace_background.dart';
 import 'quote_review_page.dart';
 
@@ -248,6 +249,14 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                           normalAwaiting,
                         ),
                         const SizedBox(height: 20),
+
+                      // Takvim: gecerlilik bitisi ve takip gunleri teklif
+                      // kayitlarindan turetiliyor, ayrica tarih girilmiyor.
+                      QuoteCalendarCard(
+                        quotes: quotes,
+                        onQuoteTap: _openQuoteReview,
+                      ),
+                      const SizedBox(height: 20),
                       ],
 
                       // Personel Teklif Listesi

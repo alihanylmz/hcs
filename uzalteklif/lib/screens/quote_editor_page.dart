@@ -50,6 +50,7 @@ import '../widgets/quote_editor_line_unit_field.dart';
 import '../widgets/quote_editor_line_quantity_field.dart';
 import '../widgets/quote_editor_line_unit_price_field.dart';
 import '../widgets/quote_editor_line_discount_field.dart';
+import '../widgets/quote_editor_line_duplicate_button.dart';
 import '../widgets/quote_editor_line_remove_button.dart';
 import '../widgets/quote_editor_move_menu.dart';
 import '../widgets/quote_editor_total_card.dart';
@@ -2024,6 +2025,36 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
     return result.trim().isEmpty ? null : result.trim();
   }
 
+  /// Kalemi tum degerleriyle kopyalar ve kaynagin hemen altina yerlestirir.
+  ///
+  /// Benzer kalemleri arka arkaya girerken en cok zaman kazandiran islem;
+  /// kopya sona eklenirse kullanici onu yukari tasimak zorunda kalir, o
+  /// yuzden `_items` icinde kaynagin bir sonrasina ekleniyor. Kategori de
+  /// korunuyor, aksi halde kopya "Kategorisiz" kovasina duserdi.
+  void _duplicateLine(_LineDraft source) {
+    final copy = _LineDraft(
+      lineId: _newId('line'),
+      productId: source.productId,
+      productCode: source.productCode,
+      priceCurrencyCode: source.priceCurrencyCode,
+      description: source.descriptionController.text,
+      unit: source.unitController.text,
+      quantity: source.quantityController.text,
+      unitPriceTl: source.unitPriceController.text,
+      discount: source.discountController.text,
+      sectionId: source.sectionId,
+    );
+    setState(() {
+      final index = _items.indexWhere((d) => identical(d, source));
+      if (index == -1) {
+        _items.add(copy);
+      } else {
+        _items.insert(index + 1, copy);
+      }
+    });
+    _markDirty();
+  }
+
   void _removeLine(_LineDraft draft) {
     setState(() {
       _items.remove(draft);
@@ -3274,6 +3305,7 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                           _focusNextLineRow(draft, column),
                       onChanged: () => setState(() {}),
                       onRemove: () => _removeLine(draft),
+                      onDuplicate: () => _duplicateLine(draft),
                       lineTotalText: _formatTlForDisplayUnit(
                         _lineNetTotal(draft),
                       ),
@@ -4459,6 +4491,7 @@ class _QuoteLineEditorRow extends StatelessWidget {
     this.availableSections = const [],
     this.onMoveToSection,
     this.onSubmitColumn,
+    this.onDuplicate,
   });
 
   final int rowNumber;
@@ -4483,6 +4516,9 @@ class _QuoteLineEditorRow extends StatelessWidget {
   /// Bir hucrede Enter'a basildiginda o sutunla cagrilir; sayfa ayni sutunda
   /// bir alt satirin alanina odaklanir.
   final void Function(_LineColumn column)? onSubmitColumn;
+
+  /// Satiri cogaltma istegi. Null ise cogalt butonu gosterilmez.
+  final VoidCallback? onDuplicate;
 
   String get _priceCurrencyLabel => switch (displayUnit) {
     'USDTRY' => 'USD',
@@ -4553,6 +4589,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                       ),
                     ),
                     _buildMoveMenu(const Color(0xFF5B6F7F)),
+                    if (onDuplicate != null)
+                      QuoteEditorLineDuplicateButton(onPressed: onDuplicate!),
                     QuoteEditorLineRemoveButton(onPressed: onRemove),
                   ],
                 ),
@@ -4740,6 +4778,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
               ),
               const QuoteEditorSheetDivider(),
               _buildMoveMenu(const Color(0xFF5B6F7F)),
+              if (onDuplicate != null)
+                QuoteEditorLineDuplicateButton(onPressed: onDuplicate!),
               QuoteEditorLineRemoveButton(onPressed: onRemove),
             ],
           ),

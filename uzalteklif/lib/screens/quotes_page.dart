@@ -1224,10 +1224,13 @@ class _QuoteTable extends StatelessWidget {
         child: Column(
           children: [
             Container(
-              height: 44,
+              height: 38,
               padding: const EdgeInsets.symmetric(horizontal: 14),
               color: const Color(0xFFF6F8FA),
               child: Row(
+                // Sutunlar arasi tutarli aralik. Tutar sagа hizali oldugu
+                // icin bosluksuz birakildiginda komsu sutuna yapisiyordu.
+                spacing: 18,
                 children: [
                   const SizedBox(width: 126, child: _TableHeader('Teklif No')),
                   if (showCustomer)
@@ -1246,12 +1249,9 @@ class _QuoteTable extends StatelessWidget {
                       child: _TableHeader('Tutar', align: TextAlign.end),
                     ),
                   if (showActivity)
-                    const Padding(
-                      padding: EdgeInsets.only(left: 16),
-                      child: SizedBox(
-                        width: 168,
-                        child: _TableHeader('Son Hareket'),
-                      ),
+                    const SizedBox(
+                      width: 168,
+                      child: _TableHeader('Son Hareket'),
                     ),
                   const SizedBox(width: 44),
                 ],
@@ -1492,8 +1492,10 @@ class _QuoteTableRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           child: Row(
+            // Baslik satiriyla ayni aralik; sutunlarin hizasi bozulmasin.
+            spacing: 18,
             children: [
               SizedBox(
                 width: 126,
@@ -1640,38 +1642,35 @@ class _QuoteTableRow extends StatelessWidget {
                   ),
                 ),
               if (showActivity)
-                Padding(
-                  padding: const EdgeInsets.only(left: 16),
-                  child: SizedBox(
-                    width: 168,
-                    child: Row(
-                      children: [
-                        if (activity.isStale) ...[
-                          const Icon(
-                            Icons.error_outline_rounded,
-                            size: 14,
-                            color: Color(0xFFC2410C),
-                          ),
-                          const SizedBox(width: 4),
-                        ],
-                        Expanded(
-                          child: Text(
-                            activity.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: activity.isStale
-                                  ? const Color(0xFFC2410C)
-                                  : slate,
-                              fontWeight: activity.isStale
-                                  ? FontWeight.w900
-                                  : FontWeight.w700,
-                              fontSize: 12,
-                            ),
+                SizedBox(
+                  width: 168,
+                  child: Row(
+                    children: [
+                      if (activity.isStale) ...[
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          size: 14,
+                          color: Color(0xFFC2410C),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Expanded(
+                        child: Text(
+                          activity.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: activity.isStale
+                                ? const Color(0xFFC2410C)
+                                : slate,
+                            fontWeight: activity.isStale
+                                ? FontWeight.w900
+                                : FontWeight.w700,
+                            fontSize: 12,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               SizedBox(

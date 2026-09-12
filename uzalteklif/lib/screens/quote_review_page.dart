@@ -9,6 +9,7 @@ import '../models/quote.dart';
 import '../services/cari_repository.dart';
 import '../services/outlook_attachment_email_service.dart';
 import '../services/pdf_export_service.dart';
+import '../services/quote_email_send_service.dart';
 import '../services/pdf_file_saver_stub.dart';
 import '../services/own_company_repository.dart';
 import '../services/price_adjustment_rule_repository.dart';
@@ -63,6 +64,9 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
 
   final _pdfService = const PdfExportService();
   final _outlookEmailService = const OutlookAttachmentEmailService();
+  final _quoteEmailSendService = QuoteEmailSendService(
+    client: Supabase.instance.client,
+  );
 
   late Quote _quote;
   bool _isBusy = false;
@@ -1166,6 +1170,19 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
       return;
     }
 
+    // Windows disindaki platformlarda (web dahil) yerel mail istemcisine
+    // guvenen mailto: linki cogu zaman calismiyor (tarayicida kayitli bir
+    // mail uygulamasi olmayabilir). Onun yerine sunucudan gercek gonderim
+    // deneriz; yalnizca o da basarisiz olursa mailto'ya duseriz.
+    if (_quoteEmailSendService.isSupported) {
+      await _sendViaServer(
+        toEmail: finalToEmail,
+        subject: customSubject,
+        body: customBody,
+      );
+      return;
+    }
+
     final uri = Uri.parse(
       'mailto:$finalToEmail?cc=$encodedCc&subject=$encodedSubject&body=$encodedBody',
     );
@@ -1211,6 +1228,62 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
           ),
         );
       }
+    }
+  }
+
+  /// Supabase Edge Function (`send-quote-email`) uzerinden teklif@uzalteknik.com
+  /// adresinden gercek e-posta gonderir. Basarili olursa teyide gerek kalmadan
+  /// dogrudan `emailSent` olarak isaretlenir; Outlook/mailto akislarinda
+  /// kullanicinin ayrica "Gonderildi olarak isaretle" demesi gerekiyordu.
+  Future<void> _sendViaServer({
+    required String toEmail,
+    required String subject,
+    required String body,
+  }) async {
+    try {
+      final pdfBytes = await _pdfService.buildQuotePdfBytes(_quote);
+      await _quoteEmailSendService.send(
+        to: toEmail,
+        cc: 'teklif@uzalteknik.com',
+        subject: subject,
+        body: body,
+        attachmentBytes: pdfBytes,
+        attachmentFilename: '${_quote.code}.pdf',
+      );
+
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final profile = await widget.userProfileRepository.fetchMine();
+      final name = profile?.preparedByName.trim() ?? '';
+      await widget.quoteRepository.markEmailSent(
+        _quote.id,
+        toEmail,
+        sentBy: userId,
+        sentByName: name,
+      );
+
+      if (!mounted) return;
+      setState(
+        () => _quote = _quote.copyWith(
+          emailSentAt: DateTime.now().toUtc(),
+          emailSentTo: toEmail,
+          emailSentBy: userId,
+          emailSentByName: name,
+        ),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('E-posta gönderildi. Alıcı: $toEmail'),
+          backgroundColor: const Color(0xFF29956F),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('E-posta gönderilemedi ($toEmail): $e'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
     }
   }
 

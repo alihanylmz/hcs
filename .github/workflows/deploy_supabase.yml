@@ -9,6 +9,7 @@ on:
     paths:
       - "supabase/functions/approve-user/**"
       - "supabase/functions/send-notification/**"
+      - "supabase/functions/send-quote-email/**"
       - ".github/workflows/deploy_supabase.yml"
 
 jobs:
@@ -23,6 +24,7 @@ jobs:
         function_name:
           - approve-user
           - send-notification
+          - send-quote-email
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,6 +44,25 @@ jobs:
         uses: supabase/setup-cli@v1
         with:
           version: latest
+
+      - name: Set quote mail secrets
+        if: matrix.function_name == 'send-quote-email'
+        env:
+          QUOTE_MAIL_HOST: ${{ secrets.QUOTE_MAIL_HOST }}
+          QUOTE_MAIL_SMTP_PORT: ${{ secrets.QUOTE_MAIL_SMTP_PORT }}
+          QUOTE_MAIL_USER: ${{ secrets.QUOTE_MAIL_USER }}
+          QUOTE_MAIL_PASSWORD: ${{ secrets.QUOTE_MAIL_PASSWORD }}
+        run: |
+          if [[ -z "$QUOTE_MAIL_HOST" || -z "$QUOTE_MAIL_USER" || -z "$QUOTE_MAIL_PASSWORD" ]]; then
+            echo "QUOTE_MAIL_* GitHub secrets not set - skipping (function will fail to send until they are added)."
+            exit 0
+          fi
+          supabase secrets set \
+            QUOTE_MAIL_HOST="$QUOTE_MAIL_HOST" \
+            QUOTE_MAIL_SMTP_PORT="${QUOTE_MAIL_SMTP_PORT:-465}" \
+            QUOTE_MAIL_USER="$QUOTE_MAIL_USER" \
+            QUOTE_MAIL_PASSWORD="$QUOTE_MAIL_PASSWORD" \
+            --project-ref "$SUPABASE_PROJECT_REF"
 
       - name: Deploy ${{ matrix.function_name }}
         run: supabase functions deploy "${{ matrix.function_name }}" --project-ref "$SUPABASE_PROJECT_REF" --use-api

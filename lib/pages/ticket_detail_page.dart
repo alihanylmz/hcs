@@ -13,6 +13,7 @@ import '../services/ticket_service.dart'; // <--- Yeni Service
 import '../services/activity_log_service.dart';
 import '../services/stock_service.dart'; // <--- Stock Service
 import '../services/service_form_service.dart'; // <--- Servis Formu
+import '../services/service_form_pdf_service.dart';
 import '../models/fault_record.dart';
 import '../models/fault_record_note.dart';
 import '../models/structured_ticket_note.dart';
@@ -353,6 +354,22 @@ class _TicketDetailPageState extends State<TicketDetailPage>
   /// 1. Aktif şablonları listeler.
   /// 2. Kullanıcıdan şablon seçmesini ister.
   /// 3. Formu oluşturup WhatsApp linkini açar.
+  Future<void> _openServiceFormPdf(TicketServiceForm form) async {
+    final jobCode = Formatters.safeText(_ticket?['job_code']);
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PdfViewerPage(
+          title: 'Servis Formu: ${form.template?.name ?? ''}',
+          pdfFileName: 'Servis_Formu_${form.id}.pdf',
+          pdfGenerator: () => ServiceFormPdfService.generateAnswersPdfBytes(
+            form,
+            ticketCode: jobCode == '-' ? null : jobCode,
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _sendServiceForm() async {
     // Şablonları çek
     List<ServiceFormTemplate> templates;
@@ -799,9 +816,27 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                             ),
                           ),
                         ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _openServiceFormPdf(form),
+                            icon: const Icon(Icons.picture_as_pdf_outlined,
+                                size: 16),
+                            label: const Text('PDF Çıkart',
+                                style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.corporateBlue,
+                              side: const BorderSide(
+                                  color: AppColors.corporateBlue),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                            ),
+                          ),
+                        ),
                       ],
                       // Butonlar
-                      if (isPending) ...[  
+                      if (isPending) ...[
                         const SizedBox(height: 10),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,

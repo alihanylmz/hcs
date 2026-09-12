@@ -727,8 +727,63 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                 color: _secondaryTextColor(context)),
                           ),
                       ],
+                      // Madde cevapları (Evet/Hayır) - "Hayır" da kayıt altında
+                      // tutulan geçerli bir cevaptır, gizlenmez.
+                      if (isSigned &&
+                          template != null &&
+                          template.checkboxes.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        ...List.generate(template.checkboxes.length, (i) {
+                          final item = template.checkboxes[i];
+                          final answer = form.answers[i];
+                          final String answerLabel;
+                          final Color answerColor;
+                          if (answer == true) {
+                            answerLabel = 'Evet';
+                            answerColor = Colors.green;
+                          } else if (answer == false) {
+                            answerLabel = 'Hayır';
+                            answerColor = Colors.red;
+                          } else {
+                            // Eski kayitlarda `answers` sutunu bos olabilir;
+                            // checkedItems'a bakarak en iyi tahmini yap.
+                            final wasChecked =
+                                form.checkedItems.contains(i);
+                            answerLabel =
+                                wasChecked ? 'Evet' : 'Cevaplanmadı';
+                            answerColor =
+                                wasChecked ? Colors.green : Colors.grey;
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item.label,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: _secondaryTextColor(context),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  answerLabel,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: answerColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
                       // İmza görüntüsü
-                      if (isSigned && form.signatureData != null) ...[  
+                      if (isSigned && form.signatureData != null) ...[
                         const SizedBox(height: 10),
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),

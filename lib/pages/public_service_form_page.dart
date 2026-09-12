@@ -34,8 +34,10 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
   bool _submitted = false;
   String? _error;
 
-  // Checkbox durumları: true = işaretli
-  List<bool> _checkboxStates = [];
+  // Her maddenin cevabi: null = henuz cevaplanmadi, true = Evet, false = Hayir.
+  // "Hayir" da gecerli ve gonderilebilir bir cevaptir; zorunluluk sadece
+  // cevapsiz birakilmamasi anlamina gelir.
+  List<bool?> _answers = [];
 
   @override
   void initState() {
@@ -84,9 +86,9 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
 
       setState(() {
         _form = form;
-        _checkboxStates = List.filled(
+        _answers = List<bool?>.filled(
           form.template?.checkboxes.length ?? 0,
-          false,
+          null,
         );
         _loading = false;
       });
@@ -98,11 +100,11 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
     }
   }
 
-  bool get _allRequiredChecked {
+  bool get _allRequiredAnswered {
     final template = _form?.template;
     if (template == null) return false;
     for (int i = 0; i < template.checkboxes.length; i++) {
-      if (template.checkboxes[i].required && !_checkboxStates[i]) {
+      if (template.checkboxes[i].required && _answers[i] == null) {
         return false;
       }
     }
@@ -112,7 +114,7 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
   bool get _canSubmit {
     if (_nameController.text.trim().isEmpty) return false;
     if (_signatureController.isEmpty) return false;
-    if (!_allRequiredChecked) return false;
+    if (!_allRequiredAnswered) return false;
     return true;
   }
 
@@ -124,16 +126,17 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
       final Uint8List? signatureBytes = await _signatureController.toPngBytes();
       if (signatureBytes == null) throw Exception('İmza alınamadı.');
 
-      final checkedIndices = <int>[];
-      for (int i = 0; i < _checkboxStates.length; i++) {
-        if (_checkboxStates[i]) checkedIndices.add(i);
+      final answersMap = <int, bool>{};
+      for (int i = 0; i < _answers.length; i++) {
+        final answer = _answers[i];
+        if (answer != null) answersMap[i] = answer;
       }
 
       await _service.signForm(
         formId: widget.formId,
         customerName: _nameController.text.trim(),
         signatureBytes: signatureBytes,
-        checkedItems: checkedIndices,
+        answers: answersMap,
       );
 
       if (mounted) {
@@ -509,82 +512,123 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Devam etmek için zorunlu maddeleri onaylayın.',
+            'Zorunlu maddeleri cevaplayın. "Hayır" da geçerli bir cevaptır.',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
           ),
           const SizedBox(height: 14),
           ...List.generate(template.checkboxes.length, (i) {
             final item = template.checkboxes[i];
-            return InkWell(
-              onTap: () {
-                setState(() => _checkboxStates[i] = !_checkboxStates[i]);
-              },
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.fromLTRB(10, 9, 12, 9),
-                decoration: BoxDecoration(
-                  color:
-                      _checkboxStates[i]
-                          ? const Color(0xFFEFF8F4)
-                          : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color:
-                        _checkboxStates[i]
-                            ? const Color(0xFF96D4B3)
-                            : const Color(0xFFE2E8F0),
-                  ),
+            final answer = _answers[i];
+            final unansweredAndRequired = item.required && answer == null;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              decoration: BoxDecoration(
+                color: unansweredAndRequired
+                    ? const Color(0xFFFEF3F2)
+                    : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: unansweredAndRequired
+                      ? const Color(0xFFF0B4AC)
+                      : const Color(0xFFE2E8F0),
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: Checkbox(
-                        value: _checkboxStates[i],
-                        onChanged: (v) {
-                          setState(() => _checkboxStates[i] = v ?? false);
-                        },
-                        activeColor: AppColors.corporateBlue,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text.rich(
+                    TextSpan(
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade800,
+                        height: 1.45,
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 3),
-                        child: Text.rich(
-                          TextSpan(
+                      children: [
+                        TextSpan(text: item.label),
+                        if (item.required)
+                          const TextSpan(
+                            text: ' *',
                             style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey.shade800,
-                              height: 1.45,
+                              color: Color(0xFFB42318),
+                              fontWeight: FontWeight.bold,
                             ),
-                            children: [
-                              TextSpan(text: item.label),
-                              if (item.required)
-                                const TextSpan(
-                                  text: ' *',
-                                  style: TextStyle(
-                                    color: Color(0xFFB42318),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                            ],
                           ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _answerChoiceButton(
+                          label: 'Evet',
+                          icon: Icons.check_circle_outline,
+                          selected: answer == true,
+                          activeColor: const Color(0xFF29956F),
+                          onTap: () => setState(() => _answers[i] = true),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _answerChoiceButton(
+                          label: 'Hayır',
+                          icon: Icons.cancel_outlined,
+                          selected: answer == false,
+                          activeColor: const Color(0xFFB42318),
+                          onTap: () => setState(() => _answers[i] = false),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             );
           }),
         ],
+      ),
+    );
+  }
+
+  Widget _answerChoiceButton({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required Color activeColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? activeColor.withOpacity(0.10) : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? activeColor : const Color(0xFFE2E8F0),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: selected ? activeColor : Colors.grey.shade400,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: selected ? activeColor : Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -162,11 +162,16 @@ class ServiceFormService {
 
   /// Formu imzala (anonim - müşteri tarafı)
   /// İmzayı Supabase Storage'a yükler, formu günceller.
+  ///
+  /// [answers], her maddenin (index -> Evet/Hayır) gerçek cevabını taşır.
+  /// Zorunlu bir madde "Hayır" olarak cevaplanabilir; önemli olan cevaplanmış
+  /// olmasıdır. `checked_items`, geriye dönük uyumluluk için `answers`
+  /// içinde true olan indekslerden türetilip ayrıca saklanır.
   Future<void> signForm({
     required String formId,
     required String customerName,
     required Uint8List signatureBytes,
-    required List<int> checkedItems,
+    required Map<int, bool> answers,
     String? customerIp,
   }) async {
     // 1. İmzayı storage'a yükle
@@ -179,12 +184,18 @@ class ServiceFormService {
     // 2. Base64 olarak da sakla (offline görüntüleme kolaylığı için)
     final signatureBase64 = base64Encode(signatureBytes);
 
+    final checkedItems = answers.entries
+        .where((e) => e.value)
+        .map((e) => e.key)
+        .toList();
+
     // 3. Formu güncelle
     await _supabase.from('ticket_service_forms').update({
       'status': 'signed',
       'customer_name': customerName,
       'signature_data': signatureBase64,
       'checked_items': checkedItems,
+      'answers': answers.map((key, value) => MapEntry(key.toString(), value)),
       'customer_ip': customerIp,
       'signed_at': DateTime.now().toIso8601String(),
     }).eq('id', formId);

@@ -83,7 +83,11 @@ class TicketServiceForm {
   final String status; // 'pending' | 'signed' | 'cancelled'
   final String? customerName;
   final String? signatureData; // Base64 PNG
-  final List<int> checkedItems; // İşaretlenen maddelerin index listesi
+  final List<int> checkedItems; // Geriye donuk uyumluluk: Evet cevaplananlar
+  /// Her maddenin gercek cevabi: index -> true (Evet) / false (Hayir).
+  /// Haritada olmayan bir index, o maddenin henuz cevaplanmadigi (eski
+  /// kayitlarda `answers` sutunu bos oldugu) anlamina gelir.
+  final Map<int, bool> answers;
   final String? customerIp;
   final DateTime? signedAt;
   final String? createdBy;
@@ -102,6 +106,7 @@ class TicketServiceForm {
     this.customerName,
     this.signatureData,
     this.checkedItems = const [],
+    this.answers = const {},
     this.customerIp,
     this.signedAt,
     this.createdBy,
@@ -122,6 +127,17 @@ class TicketServiceForm {
       checked = rawChecked.map((e) => (e as num).toInt()).toList();
     }
 
+    final rawAnswers = json['answers'];
+    final answers = <int, bool>{};
+    if (rawAnswers is Map) {
+      rawAnswers.forEach((key, value) {
+        final index = int.tryParse(key.toString());
+        if (index != null && value is bool) {
+          answers[index] = value;
+        }
+      });
+    }
+
     ServiceFormTemplate? template;
     if (json['service_form_templates'] is Map<String, dynamic>) {
       template = ServiceFormTemplate.fromJson(
@@ -137,6 +153,7 @@ class TicketServiceForm {
       customerName: json['customer_name'] as String?,
       signatureData: json['signature_data'] as String?,
       checkedItems: checked,
+      answers: answers,
       customerIp: json['customer_ip'] as String?,
       signedAt: json['signed_at'] != null
           ? DateTime.tryParse(json['signed_at'] as String)

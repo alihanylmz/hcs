@@ -8,7 +8,7 @@
 // {
 //   "quoteId": "...",           // sadece log/hata mesaji icin, zorunlu degil
 //   "to": "musteri@firma.com",
-//   "cc": "teklif@uzalteknik.com", // opsiyonel
+//   "cc": "teklif@uzalteknik.com,personel@uzalteknik.com", // opsiyonel, virgulle ayrik
 //   "subject": "...",
 //   "body": "...",              // duz metin
 //   "attachmentBase64": "...",  // opsiyonel, PDF icerigi
@@ -70,7 +70,15 @@ Deno.serve(async (req) => {
 
     const payload = await req.json();
     const to = (payload.to as string | undefined)?.trim();
-    const cc = (payload.cc as string | undefined)?.trim();
+    const ccRaw = (payload.cc as string | undefined)?.trim();
+    // Birden fazla adres virgulle ayrilmis tek string olarak gelebilir
+    // (ornek: kurumsal kutu + gonderen personel).
+    const cc = ccRaw
+      ? ccRaw
+          .split(",")
+          .map((addr) => addr.trim())
+          .filter((addr) => addr.length > 0)
+      : undefined;
     const subject = (payload.subject as string | undefined)?.trim() ?? "";
     const body = (payload.body as string | undefined) ?? "";
     const attachmentBase64 = payload.attachmentBase64 as string | undefined;
@@ -104,7 +112,7 @@ Deno.serve(async (req) => {
       await client.send({
         from: mailUser,
         to,
-        cc: cc || undefined,
+        cc,
         subject,
         content: body,
         attachments: attachmentBase64

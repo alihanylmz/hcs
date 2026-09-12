@@ -1235,6 +1235,10 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
   /// adresinden gercek e-posta gonderir. Basarili olursa teyide gerek kalmadan
   /// dogrudan `emailSent` olarak isaretlenir; Outlook/mailto akislarinda
   /// kullanicinin ayrica "Gonderildi olarak isaretle" demesi gerekiyordu.
+  ///
+  /// Gonderen her zaman tek/kurumsal kutu (teklif@uzalteknik.com); butun
+  /// teklifler boylece tek yerde toplanir. Gonderiyi tetikleyen personelin
+  /// kendi kutusunda da kaydi kalsin diye o da cc'ye eklenir.
   Future<void> _sendViaServer({
     required String toEmail,
     required String subject,
@@ -1242,9 +1246,15 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
   }) async {
     try {
       final pdfBytes = await _pdfService.buildQuotePdfBytes(_quote);
+      final senderEmail =
+          Supabase.instance.client.auth.currentUser?.email?.trim() ?? '';
+      final ccList = <String>{
+        'teklif@uzalteknik.com',
+        if (senderEmail.isNotEmpty) senderEmail,
+      };
       await _quoteEmailSendService.send(
         to: toEmail,
-        cc: 'teklif@uzalteknik.com',
+        cc: ccList.join(','),
         subject: subject,
         body: body,
         attachmentBytes: pdfBytes,

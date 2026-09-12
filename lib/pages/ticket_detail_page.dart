@@ -32,6 +32,7 @@ import '../theme/app_colors.dart'; // <--- Renkler
 import '../utils/formatters.dart'; // <--- Formatlayıcılar
 import '../widgets/add_note_dialog.dart';
 import '../widgets/ticket_backup_request_dialog.dart';
+import '../widgets/ticket_detail/ticket_detail_leaf_widgets.dart';
 
 class TicketDetailPage extends StatefulWidget {
   final String ticketId;
@@ -1746,12 +1747,12 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildStatusChip(
+                      TicketDetailStatusChip(
                         TicketStatus.labelOf(status),
                         _getStatusColor(status),
                       ),
                       const SizedBox(width: 8),
-                      _buildPriorityBadge(
+                      TicketDetailPriorityBadge(
                         _priorityLabels[priority] ?? priority,
                         priority,
                       ),
@@ -1790,19 +1791,19 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             runSpacing: 8,
             children: [
               if (_canCurrentUserAddNotes())
-                _buildHeaderActionButton(
+                TicketDetailHeaderActionButton(
                   icon: Icons.playlist_add_outlined,
                   label: isPartnerUser ? 'Partner Kaydi' : 'Not Ekle',
                   onPressed:
                       () => _openNoteDialog(isPartnerNote: isPartnerUser),
                 ),
               if (_canCurrentUserAddNotes())
-                _buildHeaderActionButton(
+                TicketDetailHeaderActionButton(
                   icon: Icons.photo_camera_back_outlined,
                   label: 'Fotograf',
                   onPressed: _showAddPhotoDialog,
                 ),
-              _buildHeaderActionButton(
+              TicketDetailHeaderActionButton(
                 icon: Icons.swap_horiz_outlined,
                 label: 'Durum Guncelle',
                 onPressed:
@@ -1810,13 +1811,13 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                         ? null
                         : () => _showStatusQuickPicker(status),
               ),
-              _buildHeaderActionButton(
+              TicketDetailHeaderActionButton(
                 icon: Icons.print_outlined,
                 label: 'PDF',
                 onPressed: _loading || _ticket == null ? null : _exportToPdf,
               ),
               if (_canEditTicket)
-                _buildHeaderActionButton(
+                TicketDetailHeaderActionButton(
                   icon: Icons.edit_outlined,
                   label: 'Düzenle',
                   onPressed: () async {
@@ -1830,12 +1831,12 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   },
                 ),
               if (_canManageTicketSignatures)
-                _buildHeaderActionButton(
+                TicketDetailHeaderActionButton(
                   icon: Icons.edit_document,
                   label: 'İmzalar',
                   onPressed: () => _showSignatureMenu(),
                 ),
-              _buildHeaderActionButton(
+              TicketDetailHeaderActionButton(
                 icon: Icons.refresh_outlined,
                 label: 'Yenile',
                 onPressed: _loading ? null : _loadTicket,
@@ -1856,7 +1857,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
               children: [
                 SizedBox(
                   width: isWide ? 180 : double.infinity,
-                  child: _buildCompactDropdown(
+                  child: TicketDetailCompactDropdown(
                     label: 'İş Durumu',
                     value: status,
                     items: _availableStatusItems(status),
@@ -1865,11 +1866,12 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                             ? null
                             : (val) => _changeStatus(val!),
                     isDisabled: !_canManageWorkflow,
+                    updating: _isUpdating,
                   ),
                 ),
                 SizedBox(
                   width: isWide ? 180 : double.infinity,
-                  child: _buildCompactDropdown(
+                  child: TicketDetailCompactDropdown(
                     label: 'Öncelik',
                     value: priority,
                     items: _priorityLabels,
@@ -1878,6 +1880,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                             ? null
                             : (val) => _changePriority(val!),
                     isDisabled: !_canManageWorkflow,
+                    updating: _isUpdating,
                   ),
                 ),
                 SizedBox(
@@ -2071,7 +2074,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                         runSpacing: 8,
                         alignment: WrapAlignment.end,
                         children: [
-                          _buildStatusChip(
+                          TicketDetailStatusChip(
                             isProject
                                 ? _projectStatusLabel(
                                   ticket['project_status'] as String?,
@@ -2079,7 +2082,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                 : TicketStatus.labelOf(status),
                             _getStatusColor(status),
                           ),
-                          _buildPriorityBadge(
+                          TicketDetailPriorityBadge(
                             _priorityLabels[priority] ?? priority,
                             priority,
                           ),
@@ -2093,12 +2096,12 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   spacing: 12,
                   runSpacing: 12,
                   children: [
-                    _buildHeaderInfoPanel(
+                    TicketDetailHeaderInfoPanel(
                       title: 'Is kodu',
                       value: Formatters.safeText(ticket['job_code']),
                       icon: Icons.confirmation_number_outlined,
                     ),
-                    _buildHeaderInfoPanel(
+                    TicketDetailHeaderInfoPanel(
                       title: 'Son durum',
                       value:
                           isProject
@@ -2108,12 +2111,12 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                               : TicketStatus.labelOf(status),
                       icon: Icons.track_changes_outlined,
                     ),
-                    _buildHeaderInfoPanel(
+                    TicketDetailHeaderInfoPanel(
                       title: 'Planlanan',
                       value: plannedLabel,
                       icon: Icons.event_outlined,
                     ),
-                    _buildHeaderInfoPanel(
+                    TicketDetailHeaderInfoPanel(
                       title: 'Sorumlu',
                       value: ownerLabel,
                       icon: Icons.engineering_outlined,
@@ -2177,7 +2180,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildHeaderInfoPanel(
+                        TicketDetailHeaderInfoPanel(
                           title: 'Olusturma',
                           value: createdAt,
                           icon: Icons.calendar_today_outlined,
@@ -2188,7 +2191,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                           runSpacing: 10,
                           children: [
                             if (_canCurrentUserAddNotes())
-                              _buildHeaderActionButton(
+                              TicketDetailHeaderActionButton(
                                 icon: Icons.playlist_add_outlined,
                                 label:
                                     isPartnerUser
@@ -2200,12 +2203,12 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                     ),
                               ),
                             if (_canCurrentUserAddNotes())
-                              _buildHeaderActionButton(
+                              TicketDetailHeaderActionButton(
                                 icon: Icons.photo_camera_back_outlined,
                                 label: 'Fotograf',
                                 onPressed: _showAddPhotoDialog,
                               ),
-                            _buildHeaderActionButton(
+                            TicketDetailHeaderActionButton(
                               icon: Icons.swap_horiz_outlined,
                               label: 'Durum guncelle',
                               onPressed:
@@ -2213,7 +2216,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                       ? null
                                       : () => _showStatusQuickPicker(status),
                             ),
-                            _buildHeaderActionButton(
+                            TicketDetailHeaderActionButton(
                               icon: Icons.print_outlined,
                               label: 'PDF',
                               onPressed:
@@ -2222,7 +2225,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                       : _exportToPdf,
                             ),
                             if (_canEditTicket)
-                              _buildHeaderActionButton(
+                              TicketDetailHeaderActionButton(
                                 icon: Icons.edit_outlined,
                                 label: 'Duzenle',
                                 onPressed: () async {
@@ -2238,12 +2241,12 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                 },
                               ),
                             if (_canManageTicketSignatures)
-                              _buildHeaderActionButton(
+                              TicketDetailHeaderActionButton(
                                 icon: Icons.edit_document,
                                 label: 'Imzalar',
                                 onPressed: _showSignatureMenu,
                               ),
-                            _buildHeaderActionButton(
+                            TicketDetailHeaderActionButton(
                               icon: Icons.refresh_outlined,
                               label: 'Yenile',
                               onPressed: _loading ? null : _loadTicket,
@@ -2264,7 +2267,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                             children: [
                               SizedBox(
                                 width: isWide ? 220 : double.infinity,
-                                child: _buildCompactDropdown(
+                                child: TicketDetailCompactDropdown(
                                   label: 'Is durumu',
                                   value: status,
                                   items: _availableStatusItems(status),
@@ -2273,11 +2276,12 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                           ? null
                                           : (val) => _changeStatus(val!),
                                   isDisabled: !_canManageWorkflow,
+                                  updating: _isUpdating,
                                 ),
                               ),
                               SizedBox(
                                 width: isWide ? 220 : double.infinity,
-                                child: _buildCompactDropdown(
+                                child: TicketDetailCompactDropdown(
                                   label: 'Oncelik',
                                   value: priority,
                                   items: _priorityLabels,
@@ -2286,6 +2290,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                                           ? null
                                           : (val) => _changePriority(val!),
                                   isDisabled: !_canManageWorkflow,
+                                  updating: _isUpdating,
                                 ),
                               ),
                               SizedBox(
@@ -2386,142 +2391,11 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     );
   }
 
-  Widget _buildMetaPill({required IconData icon, required String label}) {
-    final theme = Theme.of(context);
+  // _buildMetaPill, TicketDetailMetaPill olarak widgets/ticket_detail/
+  // altina tasindi.
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: _surfaceMutedColor(context),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: _borderColor(context)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: theme.colorScheme.primary),
-          const SizedBox(width: 8),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 260),
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: _primaryTextColor(context),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeaderInfoPanel({
-    required String title,
-    required String value,
-    required IconData icon,
-    bool isCompact = false,
-  }) {
-    final theme = Theme.of(context);
-    final accent = _pageAccentColor(context);
-
-    return Container(
-      width: isCompact ? 240 : 184,
-      padding: EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: isCompact ? 12 : 14,
-      ),
-      decoration: BoxDecoration(
-        color: _surfaceColor(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _borderColor(context)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: accent.withOpacity(0.10),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, size: 18, color: accent),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title.toUpperCase(),
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: _secondaryTextColor(context),
-                    fontSize: 10,
-                    letterSpacing: 0.9,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  maxLines: isCompact ? 3 : 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: _primaryTextColor(context),
-                    fontSize: isCompact ? 14 : 15,
-                    fontWeight: FontWeight.w700,
-                    height: 1.25,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeaderActionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback? onPressed,
-  }) {
-    final theme = Theme.of(context);
-    final accent = _pageAccentColor(context);
-    final isEnabled = onPressed != null;
-    final foregroundColor = isEnabled ? accent : _secondaryTextColor(context);
-
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-        decoration: BoxDecoration(
-          color:
-              isEnabled ? _surfaceColor(context) : _surfaceMutedColor(context),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isEnabled ? accent.withOpacity(0.18) : _borderColor(context),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: foregroundColor),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: theme.textTheme.labelLarge?.copyWith(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: foregroundColor,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // _buildHeaderInfoPanel ve _buildHeaderActionButton, TicketDetailHeaderInfoPanel
+  // ve TicketDetailHeaderActionButton olarak widgets/ticket_detail/ altina tasindi.
 
   void _showSignatureMenu() {
     final hasCustomerSignature = _ticket?['signature_data'] != null;
@@ -2760,92 +2634,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     await _loadLinkedFaults();
   }
 
-  Widget _buildSummaryMetricCard({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    final theme = Theme.of(context);
-    return Container(
-      constraints: const BoxConstraints(minWidth: 180, maxWidth: 240),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _surfaceColor(context),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color:
-              _isDark(context)
-                  ? _borderColor(context)
-                  : color.withOpacity(0.18),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(_isDark(context) ? 0.16 : 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(height: 12),
-          Text(
-            label,
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontSize: 11,
-              color: _secondaryTextColor(context),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: _primaryTextColor(context),
-              height: 1.3,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailDisclosure({
-    required String title,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: _surfaceColor(context),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _borderColor(context)),
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          leading: Icon(icon, color: theme.colorScheme.primary),
-          title: Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: _primaryTextColor(context),
-            ),
-          ),
-          children: children,
-        ),
-      ),
-    );
-  }
+  // _buildSummaryMetricCard ve _buildDetailDisclosure, TicketDetailSummaryMetricCard
+  // ve TicketDetailDisclosure olarak widgets/ticket_detail/ altina tasindi.
 
   // ignore: unused_element
   Widget _buildDetailsTab(
@@ -2867,22 +2657,22 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Müşteri Kartı
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Müşteri Bilgileri',
                 icon: Icons.business,
                 children: [
-                  _buildInfoRow(
+                  TicketDetailInfoRow(
                     'Müşteri Adı',
                     customer['name'] as String?,
                     isBold: true,
                   ),
-                  _buildInfoRow('Telefon', customer['phone'] as String?),
-                  _buildInfoRow(
+                  TicketDetailInfoRow('Telefon', customer['phone'] as String?),
+                  TicketDetailInfoRow(
                     'Adres',
                     customer['address'] as String?,
                     isMultiLine: true,
                   ),
-                  _buildInfoRow(
+                  TicketDetailInfoRow(
                     'Partner Firma',
                     ticket['device_brand'] as String?,
                   ),
@@ -2890,7 +2680,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
               ),
               const SizedBox(height: 20),
               // İş Açıklaması
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'İş Emri Açıklaması',
                 icon: Icons.assignment_outlined,
                 children: [
@@ -2956,7 +2746,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
               ),
               const SizedBox(height: 20),
               // İmzalar
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'İmzalar',
                 icon: Icons.edit_document,
                 children: [
@@ -3022,7 +2812,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Uzun Sureli Is Gunlugu',
                 icon: Icons.event_note_outlined,
                 children: [
@@ -3054,7 +2844,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   child: Center(child: CircularProgressIndicator()),
                 )
               else if (reports.isEmpty)
-                _buildModernContentCard(
+                TicketDetailModernContentCard(
                   title: 'Kayit Yok',
                   icon: Icons.inbox_outlined,
                   children: [
@@ -3068,7 +2858,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 ...reports.map(
                   (report) => Padding(
                     padding: const EdgeInsets.only(bottom: 14),
-                    child: _buildDailyReportCard(report),
+                    child: TicketDetailDailyReportCard(report),
                   ),
                 ),
             ],
@@ -3078,69 +2868,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     );
   }
 
-  Widget _buildDailyReportCard(TicketDailyReport report) {
-    return _buildModernContentCard(
-      title: report.title,
-      icon: Icons.assignment_turned_in_outlined,
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _buildDailyReportChip(
-              icon: Icons.schedule_outlined,
-              label: report.timeRange,
-              color: AppColors.corporateBlue,
-            ),
-            if (report.technicianName.trim().isNotEmpty)
-              _buildDailyReportChip(
-                icon: Icons.engineering_outlined,
-                label: report.technicianName.trim(),
-                color: AppColors.corporateNavy,
-              ),
-            if (report.customerApproval)
-              _buildDailyReportChip(
-                icon: Icons.verified_outlined,
-                label: 'Musteri onayli',
-                color: AppColors.statusDone,
-              ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        _buildInfoRow('Yapilan isler', report.workDone, isMultiLine: true),
-        _buildInfoRow(
-          'Sorun / bekleme',
-          report.issues.isEmpty ? '-' : report.issues,
-          isMultiLine: true,
-        ),
-        _buildInfoRow(
-          'Kullanilan malzeme',
-          report.usedMaterials.isEmpty ? '-' : report.usedMaterials,
-          isMultiLine: true,
-        ),
-        _buildInfoRow(
-          'Sonraki adim',
-          report.nextStep.isEmpty ? '-' : report.nextStep,
-          isMultiLine: true,
-        ),
-        if (report.createdByName != null || report.createdAt != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            [
-              if (report.createdByName != null) report.createdByName!,
-              if (report.createdAt != null)
-                _formatDailyReportDate(report.createdAt!),
-            ].join(' - '),
-            style: TextStyle(
-              color: _secondaryTextColor(context),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
+  // _buildDailyReportCard, TicketDetailDailyReportCard olarak
+  // widgets/ticket_detail/ altina tasindi.
 
   // ignore: unused_element
   Widget _buildDocumentsTab(Map<String, dynamic> ticket) {
@@ -3158,7 +2887,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Dosya Yükleme Butonu (Supabase)
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Dosya Yükle (Supabase)',
                 icon: Icons.cloud_upload_outlined,
                 children: [
@@ -3200,7 +2929,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
 
               // Yüklenen Dosyalar
               if (fileLinks.isNotEmpty) ...[
-                _buildModernContentCard(
+                TicketDetailModernContentCard(
                   title: 'Yüklenen Dosyalar',
                   icon: Icons.terminal_outlined,
                   children:
@@ -3236,7 +2965,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
 
               // Ekli PDF - Sadece gömülü PDF göster
               if (pdfUrl != null)
-                _buildModernContentCard(
+                TicketDetailModernContentCard(
                   title: 'Ekli PDF Dosyası',
                   icon: Icons.attach_file,
                   children: [
@@ -3262,7 +2991,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   ],
                 )
               else if (fileLinks.isEmpty)
-                _buildModernContentCard(
+                TicketDetailModernContentCard(
                   title: 'Dokümanlar',
                   icon: Icons.folder_outlined,
                   children: [
@@ -3300,7 +3029,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
               _buildPartsSection(),
               const SizedBox(height: 20),
 
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Teknik Bilgiler',
                 icon: Icons.settings_input_component,
                 children: [
@@ -3308,17 +3037,17 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     spacing: 20,
                     runSpacing: 10,
                     children: [
-                      _buildInfoRow(
+                      TicketDetailInfoRow(
                         'Cihaz Modeli',
                         ticket['device_model'] as String?,
                         isInline: true,
                       ),
-                      _buildInfoRow(
+                      TicketDetailInfoRow(
                         'Tandem',
                         ticket['tandem'] as String?,
                         isInline: true,
                       ),
-                      _buildInfoRow(
+                      TicketDetailInfoRow(
                         'Isıtıcı Kademe',
                         ticket['isitici_kademe'] as String?,
                         isInline: true,
@@ -3343,22 +3072,22 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     mainAxisSpacing: 12,
                     childAspectRatio: 1.5,
                     children: [
-                      _buildTechMetricBox(
+                      TicketDetailTechMetricBox(
                         'Aspiratör',
                         ticket['aspirator_kw'],
                         'kW',
                       ),
-                      _buildTechMetricBox(
+                      TicketDetailTechMetricBox(
                         'Vantilatör',
                         ticket['vant_kw'],
                         'kW',
                       ),
-                      _buildTechMetricBox(
+                      TicketDetailTechMetricBox(
                         'Kompresör 1',
                         ticket['kompresor_kw_1'],
                         'kW',
                       ),
-                      _buildTechMetricBox(
+                      TicketDetailTechMetricBox(
                         'Kompresör 2',
                         ticket['kompresor_kw_2'],
                         'kW',
@@ -3405,7 +3134,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
           constraints: const BoxConstraints(maxWidth: 1000),
           child: Column(
             children: [
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Proje Bilgileri',
                 icon: Icons.account_tree_outlined,
                 children: [
@@ -3413,24 +3142,24 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     spacing: 20,
                     runSpacing: 10,
                     children: [
-                      _buildInfoRow(
+                      TicketDetailInfoRow(
                         'Proje tipi',
                         ticket['project_type'] as String?,
                         isInline: true,
                       ),
-                      _buildInfoRow(
+                      TicketDetailInfoRow(
                         'Proje durumu',
                         _projectStatusLabel(
                           ticket['project_status'] as String?,
                         ),
                         isInline: true,
                       ),
-                      _buildInfoRow(
+                      TicketDetailInfoRow(
                         'Musteri',
                         customer['name'] as String?,
                         isInline: true,
                       ),
-                      _buildInfoRow(
+                      TicketDetailInfoRow(
                         'Lokasyon',
                         ticket['project_location'] as String?,
                         isInline: true,
@@ -3442,24 +3171,24 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     spacing: 20,
                     runSpacing: 10,
                     children: [
-                      _buildInfoRow(
+                      TicketDetailInfoRow(
                         'Baslangic',
                         Formatters.date(ticket['project_start_date']),
                         isInline: true,
                       ),
-                      _buildInfoRow(
+                      TicketDetailInfoRow(
                         'Planlanan bitis',
                         Formatters.date(ticket['project_due_date']),
                         isInline: true,
                       ),
-                      _buildInfoRow(
+                      TicketDetailInfoRow(
                         'Sorumlu',
                         ticket['responsible_user_id'] == null
                             ? 'Atanmadi'
                             : 'Sorumlu atanmis',
                         isInline: true,
                       ),
-                      _buildInfoRow(
+                      TicketDetailInfoRow(
                         'Ekip',
                         assignedUsers.isEmpty
                             ? 'Atanan ekip yok'
@@ -3471,7 +3200,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 ],
               ),
               const SizedBox(height: 20),
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Proje Aciklamasi',
                 icon: Icons.notes_outlined,
                 children: [
@@ -3488,7 +3217,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 ],
               ),
               const SizedBox(height: 20),
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Ic Notlar',
                 icon: Icons.lock_outline,
                 children: [
@@ -3518,7 +3247,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     }
 
     if (_parts.isEmpty) {
-      return _buildModernContentCard(
+      return TicketDetailModernContentCard(
         title: 'Kullanılan Malzemeler',
         icon: Icons.inventory_2_outlined,
         children: [
@@ -3530,7 +3259,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       );
     }
 
-    return _buildModernContentCard(
+    return TicketDetailModernContentCard(
       title: 'Kullanılan Malzemeler',
       icon: Icons.inventory_2_outlined,
       children: [
@@ -3670,7 +3399,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             : snapshot.latestBackup?.backupPath ?? '-';
     final latestBackup = snapshot.latestBackup;
 
-    return _buildModernContentCard(
+    return TicketDetailModernContentCard(
       title: 'Yedek Durumu',
       icon: Icons.backup_outlined,
       children: [
@@ -3703,7 +3432,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
         if (latestBackup?.savedAt != null ||
             latestBackup?.createdAt != null) ...[
           const SizedBox(height: 12),
-          _buildInfoRow(
+          TicketDetailInfoRow(
             'Son yedek',
             Formatters.date(
               (latestBackup?.savedAt ?? latestBackup?.createdAt)
@@ -3711,12 +3440,12 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             ),
           ),
         ],
-        _buildInfoRow('Talep eden', latestBackup?.requestedBy),
-        _buildInfoRow(
+        TicketDetailInfoRow('Talep eden', latestBackup?.requestedBy),
+        TicketDetailInfoRow(
           'Talep zamani',
           Formatters.date(latestBackup?.requestedAt?.toIso8601String()),
         ),
-        _buildInfoRow(
+        TicketDetailInfoRow(
           'Kayit yolu notu',
           latestBackup?.requestedSavePath,
           isMultiLine: true,
@@ -3775,19 +3504,19 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  _buildSummaryMetricCard(
+                  TicketDetailSummaryMetricCard(
                     icon: Icons.business_outlined,
                     label: 'Musteri',
                     value: (customer['name'] as String?) ?? 'Musteri yok',
                     color: AppColors.corporateNavy,
                   ),
-                  _buildSummaryMetricCard(
+                  TicketDetailSummaryMetricCard(
                     icon: Icons.engineering_outlined,
                     label: 'Sorumlu / son kayit',
                     value: technicianLabel,
                     color: AppColors.corporateYellow,
                   ),
-                  _buildSummaryMetricCard(
+                  TicketDetailSummaryMetricCard(
                     icon: Icons.event_available_outlined,
                     label: 'Plan',
                     value:
@@ -3796,7 +3525,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                             : Formatters.date(plannedDate),
                     color: Colors.teal,
                   ),
-                  _buildSummaryMetricCard(
+                  TicketDetailSummaryMetricCard(
                     icon: Icons.photo_library_outlined,
                     label: 'Surec yogunlugu',
                     value:
@@ -3806,7 +3535,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 ],
               ),
               const SizedBox(height: 20),
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Ariza Ozeti',
                 icon: Icons.assignment_outlined,
                 children: [
@@ -3823,7 +3552,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _buildStatusChip(
+                      TicketDetailStatusChip(
                         TicketStatus.labelOf(status),
                         _getStatusColor(status),
                       ),
@@ -3860,20 +3589,20 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 _buildBackupStatusSummaryCard(ticket),
               ],
               const SizedBox(height: 20),
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Surec Ozeti',
                 icon: Icons.route_outlined,
                 children: [
-                  _buildInfoRow(
+                  TicketDetailInfoRow(
                     'Son islem',
                     latestStructuredNote.hasAnyContent
                         ? latestStructuredNote.summary
                         : 'Henuz surec kaydi eklenmemis.',
                     isMultiLine: true,
                   ),
-                  _buildInfoRow('Son guncelleyen', latestAuthor),
-                  _buildInfoRow('Son guncelleme', Formatters.date(latestDate)),
-                  _buildInfoRow(
+                  TicketDetailInfoRow('Son guncelleyen', latestAuthor),
+                  TicketDetailInfoRow('Son guncelleme', Formatters.date(latestDate)),
+                  TicketDetailInfoRow(
                     'Bir sonraki adim',
                     nextStep,
                     isMultiLine: true,
@@ -3882,7 +3611,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 ],
               ),
               const SizedBox(height: 20),
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Eksik Parca ve Takip',
                 icon: Icons.warning_amber_rounded,
                 children: [
@@ -3924,30 +3653,30 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 ],
               ),
               const SizedBox(height: 20),
-              _buildDetailDisclosure(
+              TicketDetailDisclosure(
                 title: 'Detaylari goster',
                 icon: Icons.unfold_more_outlined,
                 children: [
-                  _buildInfoRow(
+                  TicketDetailInfoRow(
                     'Musteri adi',
                     customer['name'] as String?,
                     isBold: true,
                   ),
-                  _buildInfoRow('Telefon', customer['phone'] as String?),
-                  _buildInfoRow(
+                  TicketDetailInfoRow('Telefon', customer['phone'] as String?),
+                  TicketDetailInfoRow(
                     'Adres',
                     customer['address'] as String?,
                     isMultiLine: true,
                   ),
-                  _buildInfoRow(
+                  TicketDetailInfoRow(
                     'Cihaz modeli',
                     ticket['device_model'] as String?,
                   ),
-                  _buildInfoRow(
+                  TicketDetailInfoRow(
                     'Partner / Marka',
                     ticket['device_brand'] as String?,
                   ),
-                  _buildInfoRow(
+                  TicketDetailInfoRow(
                     'Olusturma tarihi',
                     Formatters.date(ticket['created_at']),
                   ),
@@ -3962,7 +3691,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
 
   Widget _buildFaultRecordsSummaryCard() {
     final ticketStatus = (_ticket?['status'] as String?) ?? '';
-    return _buildModernContentCard(
+    return TicketDetailModernContentCard(
       title: 'Bagli Ariza Kayitlari',
       icon: Icons.bug_report_outlined,
       children: [
@@ -4004,16 +3733,16 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                           runSpacing: 8,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            _buildStatusChip(
+                            TicketDetailStatusChip(
                               record.faultCode,
                               AppColors.corporateRed,
                             ),
-                            _buildStatusChip(
+                            TicketDetailStatusChip(
                               record.statusLabel,
                               AppColors.corporateBlue,
                             ),
                             if (isTerminalTicket)
-                              _buildStatusChip(
+                              TicketDetailStatusChip(
                                 'Bitmis is emrine bagli',
                                 Colors.deepOrange,
                               ),
@@ -4049,22 +3778,22 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _buildStatusChip(
+                      TicketDetailStatusChip(
                         record.deviceLabel,
                         AppColors.corporateBlue,
                       ),
                       if ((record.assigneeName ?? '').trim().isNotEmpty)
-                        _buildStatusChip(
+                        TicketDetailStatusChip(
                           'Atanan: ${record.assigneeName!.trim()}',
                           Colors.indigo,
                         ),
-                      _buildStatusChip(
+                      TicketDetailStatusChip(
                         (record.createdByName ?? '').trim().isNotEmpty
                             ? record.createdByName!.trim()
                             : 'Kayit sahibi yok',
                         AppColors.corporateYellow,
                       ),
-                      _buildStatusChip(
+                      TicketDetailStatusChip(
                         Formatters.date(record.createdAt?.toIso8601String()),
                         Colors.teal,
                       ),
@@ -4108,7 +3837,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     runSpacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      _buildStatusChip(
+                      TicketDetailStatusChip(
                         record.faultCode,
                         AppColors.corporateRed,
                       ),
@@ -4135,22 +3864,22 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _buildStatusChip(
+                      TicketDetailStatusChip(
                         record.deviceLabel,
                         AppColors.corporateBlue,
                       ),
                       if ((record.assigneeName ?? '').trim().isNotEmpty)
-                        _buildStatusChip(
+                        TicketDetailStatusChip(
                           'Atanan: ${record.assigneeName!.trim()}',
                           Colors.indigo,
                         ),
-                      _buildStatusChip(
+                      TicketDetailStatusChip(
                         record.createdByName?.trim().isNotEmpty == true
                             ? record.createdByName!
                             : 'Kayit sahibi yok',
                         AppColors.corporateYellow,
                       ),
-                      _buildStatusChip(
+                      TicketDetailStatusChip(
                         Formatters.date(record.createdAt?.toIso8601String()),
                         Colors.teal,
                       ),
@@ -4334,7 +4063,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     }
 
     if (notes.isEmpty) {
-      return _buildModernContentCard(
+      return TicketDetailModernContentCard(
         title: 'Surec kaydi yok',
         icon: Icons.timeline_outlined,
         children: [
@@ -4570,7 +4299,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
 
   Widget _buildLinkedFaultNotesCard() {
     if (_linkedFaultsLoading) {
-      return _buildModernContentCard(
+      return TicketDetailModernContentCard(
         title: 'Bagli ariza notlari',
         icon: Icons.bug_report_outlined,
         children: const [
@@ -4586,7 +4315,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
       return const SizedBox.shrink();
     }
 
-    return _buildModernContentCard(
+    return TicketDetailModernContentCard(
       title: 'Bagli ariza notlari',
       icon: Icons.bug_report_outlined,
       children: [
@@ -4627,7 +4356,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    _buildStatusChip(entry.faultCode, AppColors.corporateRed),
+                    TicketDetailStatusChip(entry.faultCode, AppColors.corporateRed),
                     Text(
                       entry.faultTitle,
                       style: TextStyle(
@@ -4651,18 +4380,18 @@ class _TicketDetailPageState extends State<TicketDetailPage>
             spacing: 8,
             runSpacing: 8,
             children: [
-              _buildStatusChip(
+              TicketDetailStatusChip(
                 Formatters.date(entry.createdAt?.toIso8601String()),
                 Colors.teal,
               ),
-              _buildStatusChip(
+              TicketDetailStatusChip(
                 (entry.userName ?? '').trim().isEmpty
                     ? 'Bilinmeyen kullanici'
                     : entry.userName!.trim(),
                 AppColors.corporateBlue,
               ),
               if (roleLabel != null)
-                _buildStatusChip(roleLabel, AppColors.corporateYellow),
+                TicketDetailStatusChip(roleLabel, AppColors.corporateYellow),
             ],
           ),
           const SizedBox(height: 10),
@@ -4709,26 +4438,26 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  _buildSummaryMetricCard(
+                  TicketDetailSummaryMetricCard(
                     icon: Icons.business_outlined,
                     label: 'Musteri',
                     value: (customer['name'] as String?) ?? 'Musteri yok',
                     color: AppColors.corporateNavy,
                   ),
-                  _buildSummaryMetricCard(
+                  TicketDetailSummaryMetricCard(
                     icon: Icons.account_tree_outlined,
                     label: 'Proje tipi',
                     value:
                         (ticket['project_type'] as String?) ?? 'Proje tipi yok',
                     color: Colors.indigo,
                   ),
-                  _buildSummaryMetricCard(
+                  TicketDetailSummaryMetricCard(
                     icon: Icons.flag_outlined,
                     label: 'Proje durumu',
                     value: projectStatus,
                     color: Colors.teal,
                   ),
-                  _buildSummaryMetricCard(
+                  TicketDetailSummaryMetricCard(
                     icon: Icons.groups_outlined,
                     label: 'Ekip',
                     value:
@@ -4740,7 +4469,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 ],
               ),
               const SizedBox(height: 20),
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Proje Ozeti',
                 icon: Icons.assignment_outlined,
                 children: [
@@ -4759,7 +4488,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _buildStatusChip(projectStatus, _getStatusColor('open')),
+                      TicketDetailStatusChip(projectStatus, _getStatusColor('open')),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -4783,44 +4512,44 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 ],
               ),
               const SizedBox(height: 20),
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Proje Takip Ozeti',
                 icon: Icons.route_outlined,
                 children: [
-                  _buildInfoRow(
+                  TicketDetailInfoRow(
                     'Son kayit',
                     latestStructuredNote.hasAnyContent
                         ? latestStructuredNote.summary
                         : 'Henuz proje gunlugu kaydi eklenmemis.',
                     isMultiLine: true,
                   ),
-                  _buildInfoRow('Son guncelleyen', latestAuthor),
-                  _buildInfoRow('Son guncelleme', Formatters.date(latestDate)),
-                  _buildInfoRow(
+                  TicketDetailInfoRow('Son guncelleyen', latestAuthor),
+                  TicketDetailInfoRow('Son guncelleme', Formatters.date(latestDate)),
+                  TicketDetailInfoRow(
                     'Baslangic',
                     Formatters.date(ticket['project_start_date']),
                   ),
-                  _buildInfoRow(
+                  TicketDetailInfoRow(
                     'Planlanan bitis',
                     Formatters.date(ticket['project_due_date']),
                   ),
                 ],
               ),
               const SizedBox(height: 20),
-              _buildDetailDisclosure(
+              TicketDetailDisclosure(
                 title: 'Proje detaylarini goster',
                 icon: Icons.unfold_more_outlined,
                 children: [
-                  _buildInfoRow(
+                  TicketDetailInfoRow(
                     'Lokasyon',
                     ticket['project_location'] as String?,
                   ),
-                  _buildInfoRow(
+                  TicketDetailInfoRow(
                     'Ic not',
                     ticket['internal_notes'] as String?,
                     isMultiLine: true,
                   ),
-                  _buildInfoRow(
+                  TicketDetailInfoRow(
                     'Olusturma tarihi',
                     Formatters.date(ticket['created_at']),
                   ),
@@ -4843,7 +4572,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Surec akisi',
                 icon: Icons.timeline_outlined,
                 children: [
@@ -4860,16 +4589,16 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _buildStatusChip(
+                      TicketDetailStatusChip(
                         '${_serviceTimelineNotes.length} kayit',
                         AppColors.corporateNavy,
                       ),
-                      _buildStatusChip(
+                      TicketDetailStatusChip(
                         '${_totalNoteImageCount()} fotograf',
                         Colors.deepPurple,
                       ),
                       if (_linkedFaultRecords.isNotEmpty)
-                        _buildStatusChip(
+                        TicketDetailStatusChip(
                           '${_linkedFaultRecords.length} bagli ariza',
                           Colors.deepOrange,
                         ),
@@ -4905,7 +4634,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Imzalar',
                 icon: Icons.edit_document,
                 children: [
@@ -4942,7 +4671,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
               // --- SERVİS ÖN KOŞUL FORMLARI ---
               _buildServiceFormsSection(context),
               const SizedBox(height: 20),
-              _buildModernContentCard(
+              TicketDetailModernContentCard(
                 title: 'Dosya Yukle (Supabase)',
                 icon: Icons.cloud_upload_outlined,
                 children: [
@@ -4985,7 +4714,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
               ),
               const SizedBox(height: 20),
               if (fileLinks.isNotEmpty) ...[
-                _buildModernContentCard(
+                TicketDetailModernContentCard(
                   title: 'Yuklenen dosyalar',
                   icon: Icons.folder_outlined,
                   children:
@@ -5020,7 +4749,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                 const SizedBox(height: 20),
               ],
               if (pdfUrl != null)
-                _buildModernContentCard(
+                TicketDetailModernContentCard(
                   title: 'Ekli PDF',
                   icon: Icons.picture_as_pdf_outlined,
                   children: [
@@ -5046,7 +4775,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                   ],
                 )
               else if (fileLinks.isEmpty)
-                _buildModernContentCard(
+                TicketDetailModernContentCard(
                   title: 'Evraklar',
                   icon: Icons.folder_open_outlined,
                   children: [
@@ -5213,7 +4942,7 @@ class _TicketDetailPageState extends State<TicketDetailPage>
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
-      child: _buildModernContentCard(
+      child: TicketDetailModernContentCard(
         title: 'Is Loglari',
         icon: Icons.history_rounded,
         children: [
@@ -5695,362 +5424,11 @@ class _TicketDetailPageState extends State<TicketDetailPage>
 
   // --- TASARIM YARDIMCILARI ---
 
-  Widget _buildDropdown({
-    required String label,
-    required String value,
-    required Map<String, String> items,
-    required Function(String?) onChanged,
-  }) {
-    final theme = Theme.of(context);
-    final safeValue = items.containsKey(value) ? value : null;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: TextStyle(
-            color: _secondaryTextColor(context),
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          decoration: BoxDecoration(
-            color: _surfaceColor(context),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: _borderColor(context)),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: safeValue,
-              isExpanded: true,
-              hint: Text(value, style: const TextStyle(fontSize: 12)),
-              icon: Icon(
-                Icons.keyboard_arrow_down,
-                color: theme.colorScheme.primary,
-              ),
-              dropdownColor: _surfaceColor(context),
-              style: TextStyle(
-                color: _primaryTextColor(context),
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-              items:
-                  items.entries.map((e) {
-                    return DropdownMenuItem(
-                      value: e.key,
-                      child: Text(
-                        e.value,
-                        style: TextStyle(
-                          color: _primaryTextColor(context),
-                          fontSize: 14,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-              onChanged: _isUpdating ? null : onChanged,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCompactDropdown({
-    required String label,
-    required String value,
-    required Map<String, String> items,
-    required Function(String?)? onChanged,
-    bool isDisabled = false,
-  }) {
-    final theme = Theme.of(context);
-    final safeValue = items.containsKey(value) ? value : null;
-
-    return Opacity(
-      opacity: isDisabled ? 0.5 : 1.0,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: _secondaryTextColor(context),
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-            decoration: BoxDecoration(
-              color: _surfaceColor(context),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _borderColor(context)),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: safeValue,
-                isExpanded: true,
-                hint: Text(value, style: const TextStyle(fontSize: 12)),
-                icon: Icon(
-                  isDisabled ? Icons.lock_outline : Icons.keyboard_arrow_down,
-                  color: theme.colorScheme.primary,
-                  size: 18,
-                ),
-                dropdownColor: _surfaceColor(context),
-                style: TextStyle(
-                  color: _primaryTextColor(context),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-                items:
-                    items.entries.map((e) {
-                      return DropdownMenuItem(
-                        value: e.key,
-                        child: Text(
-                          e.value,
-                          style: TextStyle(
-                            color: _primaryTextColor(context),
-                            fontSize: 13,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                onChanged: (_isUpdating || isDisabled) ? null : onChanged,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContentCard({
-    required String title,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceWhite,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
-            child: Row(
-              children: [
-                Icon(icon, color: AppColors.corporateNavy, size: 20),
-                const SizedBox(width: 10),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: AppColors.corporateNavy,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: children,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildModernContentCard({
-    required String title,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: _surfaceColor(context),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _borderColor(context)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0E1A2A).withOpacity(0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header (kurumsal sarı aksan)
-          Container(
-            decoration: BoxDecoration(
-              color: _corporatePanelColor(context),
-              border: Border(
-                left: BorderSide(color: theme.colorScheme.primary, width: 4),
-              ),
-            ),
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withOpacity(
-                      _isDark(context) ? 0.16 : 0.10,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: theme.colorScheme.primary.withOpacity(0.24),
-                    ),
-                  ),
-                  child: Icon(icon, color: theme.colorScheme.primary, size: 18),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: _primaryTextColor(context),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-                Text(
-                  'Bolum',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: _secondaryTextColor(context),
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Divider(height: 1, color: Colors.black.withOpacity(0.06)),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: children,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(
-    String label,
-    String? value, {
-    bool isBold = false,
-    bool isMultiLine = false,
-    bool isInline = false,
-  }) {
-    if (value == null || value.trim().isEmpty) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-
-    final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: theme.textTheme.labelMedium?.copyWith(
-            fontSize: 11,
-            color: _secondaryTextColor(context),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontSize: isBold ? 15 : 14,
-            color: _primaryTextColor(context),
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
-            height: isMultiLine ? 1.5 : 1.2,
-          ),
-        ),
-        if (!isInline) const SizedBox(height: 16),
-      ],
-    );
-
-    if (isInline) {
-      return Container(
-        constraints: const BoxConstraints(minWidth: 150),
-        child: content,
-      );
-    }
-    return content;
-  }
-
-  Widget _buildTechMetricBox(String label, dynamic value, String unit) {
-    final theme = Theme.of(context);
-    final valText = value == null ? '-' : value.toString();
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: _borderColor(context)),
-        borderRadius: BorderRadius.circular(8),
-        color: _surfaceMutedColor(context),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            label,
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontSize: 10,
-              color: _secondaryTextColor(context),
-            ),
-          ),
-          const Spacer(),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                valText,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color:
-                      valText == '-'
-                          ? _secondaryTextColor(context)
-                          : theme.colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: 4),
-              if (valText != '-')
-                Text(
-                  unit,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: _secondaryTextColor(context),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  // _buildDropdown, _buildCompactDropdown, _buildContentCard,
+  // _buildModernContentCard, _buildInfoRow ve _buildTechMetricBox,
+  // TicketDetailDropdown, TicketDetailCompactDropdown, TicketDetailContentCard,
+  // TicketDetailModernContentCard, TicketDetailInfoRow ve TicketDetailTechMetricBox
+  // olarak widgets/ticket_detail/ altina tasindi.
 
   List<Widget> _buildFeatureChips(Map<String, dynamic> ticket) {
     final features = {
@@ -6177,54 +5555,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     );
   }
 
-  Widget _buildStatusChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withOpacity(_isDark(context) ? 0.18 : 0.10),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withOpacity(0.5)),
-      ),
-      child: Text(
-        label.toUpperCase(),
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDailyReportChip({
-    required IconData icon,
-    required String label,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withOpacity(_isDark(context) ? 0.18 : 0.10),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withOpacity(0.35)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // _buildStatusChip ve _buildDailyReportChip, TicketDetailStatusChip ve
+  // TicketDetailDailyReportChip olarak widgets/ticket_detail/ altina tasindi.
 
   String _formatDailyReportDate(DateTime value) {
     final day = value.day.toString().padLeft(2, '0');
@@ -6232,43 +5564,8 @@ class _TicketDetailPageState extends State<TicketDetailPage>
     return '$day.$month.${value.year}';
   }
 
-  Widget _buildPriorityBadge(String label, String priorityKey) {
-    Color color;
-    switch (priorityKey) {
-      case 'high':
-        color = AppColors.corporateRed;
-        break;
-      case 'low':
-        color = Colors.green;
-        break;
-      default:
-        color = AppColors.corporateYellow;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withOpacity(_isDark(context) ? 0.16 : 0.08),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withOpacity(0.35)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.flag, size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // _buildPriorityBadge, TicketDetailPriorityBadge olarak
+  // widgets/ticket_detail/ altina tasindi.
 
   Color _getStatusColor(String status) {
     switch (status) {

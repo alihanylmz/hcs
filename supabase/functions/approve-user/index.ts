@@ -84,8 +84,8 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const userId = body.userId as string?;
-    const role = body.role as string?;
+    const userId = body.userId as string | undefined;
+    const role = body.role as string | undefined;
     const partnerId = (body.partnerId as number | null | undefined) ?? null;
 
     if (!userId || !role) {

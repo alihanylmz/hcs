@@ -9,6 +9,7 @@ import 'package:uzalteklif/screens/quotes_page.dart';
 import 'package:uzalteklif/services/cari_repository.dart';
 import 'package:uzalteklif/services/market_rate_service.dart';
 import 'package:uzalteklif/services/own_company_repository.dart';
+import 'package:uzalteklif/services/personal_note_repository.dart';
 import 'package:uzalteklif/services/price_adjustment_rule_repository.dart';
 import 'package:uzalteklif/services/product_repository.dart';
 import 'package:uzalteklif/services/quote_repository.dart';
@@ -34,6 +35,7 @@ void main() {
           priceAdjustmentRuleRepository: const PriceAdjustmentRuleRepository(),
           userProfileRepository: UserProfileRepository(),
           cariRepository: CariRepository(),
+          personalNoteRepository: PersonalNoteRepository(),
           isManager: true,
         ),
       ),
@@ -73,6 +75,7 @@ void main() {
           priceAdjustmentRuleRepository: const PriceAdjustmentRuleRepository(),
           userProfileRepository: UserProfileRepository(),
           cariRepository: CariRepository(),
+          personalNoteRepository: PersonalNoteRepository(),
         ),
       ),
     );

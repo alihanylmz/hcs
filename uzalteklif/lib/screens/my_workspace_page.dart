@@ -3,17 +3,20 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/market_rate.dart';
+import '../models/personal_note.dart';
 import '../models/product.dart';
 import '../models/quote.dart';
 import '../services/cari_repository.dart';
 import '../services/market_rate_service.dart';
 import '../services/own_company_repository.dart';
+import '../services/personal_note_repository.dart';
 import '../services/price_adjustment_rule_repository.dart';
 import '../services/product_repository.dart';
 import '../services/quote_repository.dart';
 import '../services/user_profile_repository.dart';
 import '../services/module_switcher.dart';
 import '../widgets/open_drafts_card.dart';
+import '../widgets/personal_notes_card.dart';
 import '../widgets/quote_calendar_card.dart';
 import '../widgets/workspace_background.dart';
 import 'quote_review_page.dart';
@@ -29,6 +32,7 @@ class MyWorkspacePage extends StatefulWidget {
     required this.cariRepository,
     required this.ownCompanyRepository,
     required this.priceAdjustmentRuleRepository,
+    required this.personalNoteRepository,
     required this.isManager,
     this.currentUserName = '',
   });
@@ -40,6 +44,7 @@ class MyWorkspacePage extends StatefulWidget {
   final CariRepository cariRepository;
   final OwnCompanyRepository ownCompanyRepository;
   final PriceAdjustmentRuleRepository priceAdjustmentRuleRepository;
+  final PersonalNoteRepository personalNoteRepository;
   final bool isManager;
   final String currentUserName;
 
@@ -51,6 +56,7 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
   List<Quote> _allQuotes = const [];
   List<Product> _products = const [];
   List<MarketRate> _rates = const [];
+  List<PersonalNote> _notes = const [];
   bool _loading = true;
 
   /// Secili personel (bos string = Tum Sirket)
@@ -70,6 +76,7 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
       final quotes = await widget.quoteRepository.fetchQuotes();
       final products = await widget.productRepository.fetchProducts();
       final rates = await widget.marketRateService.fetchRates();
+      final notes = await widget.personalNoteRepository.fetchMine();
 
       // Benzersiz personel isimlerini topla
       final persons = <String>{};
@@ -89,6 +96,7 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
         _allQuotes = quotes;
         _products = products;
         _rates = rates;
+        _notes = notes;
         _personList = sortedPersons;
 
         // Yonetici degilse sadece kendi adina sabitle
@@ -116,6 +124,66 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
       final prep = q.documentProfile.preparedByName.trim();
       return creator == _selectedPerson || prep == _selectedPerson;
     }).toList();
+  }
+
+  Future<void> _openNoteEditor({PersonalNote? existing, DateTime? forDay}) async {
+    final result = await showDialog<_NoteEditorResult>(
+      context: context,
+      builder: (ctx) => _NoteEditorDialog(existing: existing, initialDay: forDay),
+    );
+    if (result == null) return;
+
+    if (result.delete && existing != null) {
+      await widget.personalNoteRepository.delete(existing.id);
+      if (!mounted) return;
+      setState(() => _notes = _notes.where((n) => n.id != existing.id).toList());
+      return;
+    }
+
+    if (existing == null) {
+      final created = await widget.personalNoteRepository.create(
+        PersonalNote(
+          id: '',
+          title: result.title,
+          body: result.body,
+          noteDate: result.noteDate,
+          isReminder: result.isReminder,
+          createdAt: DateTime.now(),
+        ),
+      );
+      if (!mounted) return;
+      setState(() => _notes = [..._notes, created]);
+    } else {
+      final updated = existing.copyWith(
+        title: result.title,
+        body: result.body,
+        noteDate: result.noteDate,
+        clearNoteDate: result.noteDate == null,
+        isReminder: result.isReminder,
+      );
+      await widget.personalNoteRepository.update(updated);
+      if (!mounted) return;
+      setState(() {
+        _notes = _notes
+            .map((n) => n.id == updated.id ? updated : n)
+            .toList();
+      });
+    }
+  }
+
+  Future<void> _toggleNoteDone(PersonalNote note) async {
+    final updated = note.copyWith(isDone: !note.isDone);
+    await widget.personalNoteRepository.update(updated);
+    if (!mounted) return;
+    setState(() {
+      _notes = _notes.map((n) => n.id == updated.id ? updated : n).toList();
+    });
+  }
+
+  Future<void> _deleteNote(PersonalNote note) async {
+    await widget.personalNoteRepository.delete(note.id);
+    if (!mounted) return;
+    setState(() => _notes = _notes.where((n) => n.id != note.id).toList());
   }
 
   @override
@@ -263,6 +331,20 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                           final calendar = QuoteCalendarCard(
                             quotes: quotes,
                             onQuoteTap: _openQuoteReview,
+                            personalNotes: _notes,
+                            onAddNote: (day) =>
+                                _openNoteEditor(forDay: day),
+                            onEditNote: (note) =>
+                                _openNoteEditor(existing: note),
+                            onToggleNoteDone: _toggleNoteDone,
+                            onDeleteNote: _deleteNote,
+                          );
+                          final notesCard = PersonalNotesCard(
+                            notes: _notes,
+                            onAdd: () => _openNoteEditor(),
+                            onToggleDone: _toggleNoteDone,
+                            onDelete: _deleteNote,
+                            onEdit: (note) => _openNoteEditor(existing: note),
                           );
                           final drafts = OpenDraftsCard(
                             quotes: quotes,
@@ -298,6 +380,8 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                                     children: [
                                       calendar,
                                       const SizedBox(height: 16),
+                                      notesCard,
+                                      const SizedBox(height: 16),
                                       drafts,
                                     ],
                                   ),
@@ -315,7 +399,18 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    SizedBox(width: sideWidth, child: calendar),
+                                    SizedBox(
+                                      width: sideWidth,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          calendar,
+                                          const SizedBox(height: 16),
+                                          notesCard,
+                                        ],
+                                      ),
+                                    ),
                                     const SizedBox(width: 16),
                                     Expanded(child: drafts),
                                   ],
@@ -334,6 +429,8 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               calendar,
+                              const SizedBox(height: 16),
+                              notesCard,
                               const SizedBox(height: 16),
                               drafts,
                               const SizedBox(height: 16),
@@ -1136,6 +1233,167 @@ class _StatusChip extends StatelessWidget {
         status.displayLabel,
         style: TextStyle(color: fg, fontSize: 10, fontWeight: FontWeight.w900),
       ),
+    );
+  }
+}
+
+/// [_NoteEditorDialog]'un doner degeri. `delete` true ise diger alanlar
+/// gecersizdir - cagiran taraf notu siler.
+class _NoteEditorResult {
+  const _NoteEditorResult({
+    required this.title,
+    required this.body,
+    required this.noteDate,
+    required this.isReminder,
+    this.delete = false,
+  });
+
+  final String title;
+  final String body;
+  final DateTime? noteDate;
+  final bool isReminder;
+  final bool delete;
+}
+
+/// Not / ajanda / hatirlatici eklemek ya da duzenlemek icin kucuk form.
+///
+/// Tarih secilirse kayit takvime baglanir (ajanda); ayrica "hatirlatici"
+/// isaretlenirse takvimde ve not listesinde zil ikonuyla vurgulanir. Tarih
+/// secilmezse kayit serbest bir not-defteri girdisi olarak kalir.
+class _NoteEditorDialog extends StatefulWidget {
+  const _NoteEditorDialog({this.existing, this.initialDay});
+
+  final PersonalNote? existing;
+  final DateTime? initialDay;
+
+  @override
+  State<_NoteEditorDialog> createState() => _NoteEditorDialogState();
+}
+
+class _NoteEditorDialogState extends State<_NoteEditorDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _bodyController;
+  DateTime? _date;
+  bool _isReminder = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _titleController = TextEditingController(text: e?.title ?? '');
+    _bodyController = TextEditingController(text: e?.body ?? '');
+    _date = e?.noteDate ?? widget.initialDay;
+    _isReminder = e?.isReminder ?? false;
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _bodyController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date ?? now,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 3),
+    );
+    if (picked != null) setState(() => _date = picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEditing = widget.existing != null;
+    return AlertDialog(
+      title: Text(isEditing ? 'Notu duzenle' : 'Yeni not / hatirlatici'),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _titleController,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Baslik'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _bodyController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Detay (istege bagli)',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _date == null
+                        ? 'Tarihsiz (Not Defteri)'
+                        : 'Tarih: ${_date!.day}.${_date!.month}.${_date!.year}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                TextButton(onPressed: _pickDate, child: const Text('Tarih sec')),
+                if (_date != null)
+                  IconButton(
+                    tooltip: 'Tarihi kaldir',
+                    onPressed: () => setState(() => _date = null),
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                  ),
+              ],
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Hatirlatici olarak isaretle'),
+              value: _isReminder,
+              onChanged: (v) => setState(() => _isReminder = v),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        if (isEditing)
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(
+              const _NoteEditorResult(
+                title: '',
+                body: '',
+                noteDate: null,
+                isReminder: false,
+                delete: true,
+              ),
+            ),
+            child: const Text('Sil', style: TextStyle(color: Colors.red)),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Vazgec'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_titleController.text.trim().isEmpty &&
+                _bodyController.text.trim().isEmpty) {
+              Navigator.of(context).pop();
+              return;
+            }
+            Navigator.of(context).pop(
+              _NoteEditorResult(
+                title: _titleController.text.trim(),
+                body: _bodyController.text.trim(),
+                noteDate: _date,
+                isReminder: _isReminder,
+              ),
+            );
+          },
+          child: const Text('Kaydet'),
+        ),
+      ],
     );
   }
 }

@@ -189,6 +189,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           ownCompanyRepository: widget.bootstrap.ownCompanyRepository,
           priceAdjustmentRuleRepository:
               widget.bootstrap.priceAdjustmentRuleRepository,
+          personalNoteRepository: widget.bootstrap.personalNoteRepository,
           isManager: _isManager,
         );
       case 1:
@@ -201,6 +202,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
               widget.bootstrap.priceAdjustmentRuleRepository,
           userProfileRepository: widget.bootstrap.userProfileRepository,
           cariRepository: widget.bootstrap.cariRepository,
+          personalNoteRepository: widget.bootstrap.personalNoteRepository,
           isManager: _isManager,
         );
       case 2:

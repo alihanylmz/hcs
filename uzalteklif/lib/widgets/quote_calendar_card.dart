@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../models/personal_note.dart';
 import '../models/quote.dart';
 import '../utils/quote_calendar_events.dart';
 
@@ -16,6 +17,11 @@ class QuoteCalendarCard extends StatefulWidget {
     required this.quotes,
     required this.onQuoteTap,
     this.today,
+    this.personalNotes = const [],
+    this.onAddNote,
+    this.onToggleNoteDone,
+    this.onDeleteNote,
+    this.onEditNote,
   });
 
   final List<Quote> quotes;
@@ -23,6 +29,22 @@ class QuoteCalendarCard extends StatefulWidget {
 
   /// Testlerde sabitlemek icin; null ise bugun kullanilir.
   final DateTime? today;
+
+  /// Tarihe baglanmis ajanda/hatirlatici notlari (bkz. [PersonalNote]).
+  /// Bos birakilirsa takvim eskisi gibi yalnizca teklif olaylarini gosterir.
+  final List<PersonalNote> personalNotes;
+
+  /// Secili gune yeni bir not/hatirlatici eklemek icin cagrilir.
+  final ValueChanged<DateTime>? onAddNote;
+
+  /// Bir notun "tamamlandi" durumunu degistirmek icin cagrilir.
+  final ValueChanged<PersonalNote>? onToggleNoteDone;
+
+  /// Bir notu silmek icin cagrilir.
+  final ValueChanged<PersonalNote>? onDeleteNote;
+
+  /// Bir notu duzenlemek icin cagrilir.
+  final ValueChanged<PersonalNote>? onEditNote;
 
   @override
   State<QuoteCalendarCard> createState() => _QuoteCalendarCardState();
@@ -36,6 +58,7 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
   static const _slate = Color(0xFF5B6F7F);
   static const _expiryColor = Color(0xFFC2410C);
   static const _followColor = Color(0xFF2878B8);
+  static const _noteColor = Color(0xFF3F8F5C);
 
   DateTime get _today {
     final t = widget.today ?? DateTime.now();
@@ -58,6 +81,13 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
   @override
   Widget build(BuildContext context) {
     final byDay = groupEventsByDay(buildQuoteCalendarEvents(widget.quotes));
+    final notesByDay = <DateTime, List<PersonalNote>>{};
+    for (final note in widget.personalNotes) {
+      final d = note.noteDate;
+      if (d == null) continue;
+      final key = DateTime(d.year, d.month, d.day);
+      notesByDay.putIfAbsent(key, () => []).add(note);
+    }
     final monthLabel = DateFormat('MMMM yyyy', 'tr_TR').format(_visibleMonth);
 
     return Card(
@@ -104,10 +134,13 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
             const SizedBox(height: 10),
             _weekdayHeader(),
             const SizedBox(height: 4),
-            _grid(byDay),
+            _grid(byDay, notesByDay),
             if (_selectedDay != null) ...[
               const Divider(height: 24),
-              _dayDetail(byDay[_selectedDay!] ?? const []),
+              _dayDetail(
+                byDay[_selectedDay!] ?? const [],
+                notesByDay[_selectedDay!] ?? const [],
+              ),
             ],
           ],
         ),
@@ -128,11 +161,13 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
         Text(label, style: const TextStyle(fontSize: 11, color: _slate)),
       ],
     );
-    return Row(
+    return Wrap(
+      spacing: 14,
+      runSpacing: 4,
       children: [
         dot(_expiryColor, 'Gecerlilik bitisi'),
-        const SizedBox(width: 14),
         dot(_followColor, 'Takip gunu'),
+        dot(_noteColor, 'Not / hatirlatici'),
       ],
     );
   }
@@ -158,7 +193,10 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
     );
   }
 
-  Widget _grid(Map<DateTime, List<QuoteCalendarEvent>> byDay) {
+  Widget _grid(
+    Map<DateTime, List<QuoteCalendarEvent>> byDay,
+    Map<DateTime, List<PersonalNote>> notesByDay,
+  ) {
     final first = DateTime(_visibleMonth.year, _visibleMonth.month, 1);
     // DateTime.weekday: Pazartesi 1 ... Pazar 7. Izgara Pazartesi ile
     // basladigi icin bastaki bos hucre sayisi dogrudan weekday - 1.
@@ -172,7 +210,11 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
     final cells = <Widget>[
       for (var i = 0; i < leading; i++) const SizedBox.shrink(),
       for (var d = 1; d <= daysInMonth; d++)
-        _dayCell(DateTime(_visibleMonth.year, _visibleMonth.month, d), byDay),
+        _dayCell(
+          DateTime(_visibleMonth.year, _visibleMonth.month, d),
+          byDay,
+          notesByDay,
+        ),
     ];
 
     final rows = <Widget>[];
@@ -193,8 +235,13 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
     return Column(children: rows);
   }
 
-  Widget _dayCell(DateTime day, Map<DateTime, List<QuoteCalendarEvent>> byDay) {
+  Widget _dayCell(
+    DateTime day,
+    Map<DateTime, List<QuoteCalendarEvent>> byDay,
+    Map<DateTime, List<PersonalNote>> notesByDay,
+  ) {
     final events = byDay[day] ?? const <QuoteCalendarEvent>[];
+    final notes = notesByDay[day] ?? const <PersonalNote>[];
     final isToday = day == _today;
     final isSelected = day == _selectedDay;
     final hasExpiry = events.any(
@@ -203,10 +250,14 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
     final hasFollow = events.any(
       (e) => e.kind == QuoteCalendarEventKind.followUp,
     );
+    final hasNote = notes.isNotEmpty;
+    // Not eklenebiliyorsa gun her zaman tiklanabilir olsun; boylece kullanici
+    // bos bir gune de ajanda/hatirlatici ekleyebilir.
+    final canTap = events.isNotEmpty || notes.isNotEmpty || widget.onAddNote != null;
 
     return InkWell(
       key: ValueKey('calendar-day-${day.month}-${day.day}'),
-      onTap: events.isEmpty
+      onTap: !canTap
           ? null
           : () => setState(() => _selectedDay = isSelected ? null : day),
       borderRadius: BorderRadius.circular(8),
@@ -240,6 +291,9 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
                 if (hasExpiry) _dot(_expiryColor),
                 if (hasExpiry && hasFollow) const SizedBox(width: 3),
                 if (hasFollow) _dot(_followColor),
+                if ((hasExpiry || hasFollow) && hasNote)
+                  const SizedBox(width: 3),
+                if (hasNote) _dot(_noteColor),
               ],
             ),
           ],
@@ -254,21 +308,52 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
     decoration: BoxDecoration(color: c, shape: BoxShape.circle),
   );
 
-  Widget _dayDetail(List<QuoteCalendarEvent> events) {
-    if (events.isEmpty) return const SizedBox.shrink();
+  Widget _dayDetail(List<QuoteCalendarEvent> events, List<PersonalNote> notes) {
     final label = DateFormat('d MMMM', 'tr_TR').format(_selectedDay!);
+    final total = events.length + notes.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '$label - ${events.length} kayit',
-          style: const TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 12,
-            color: _ink,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                total == 0 ? label : '$label - $total kayit',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12,
+                  color: _ink,
+                ),
+              ),
+            ),
+            if (widget.onAddNote != null)
+              InkWell(
+                key: const ValueKey('calendar-add-note'),
+                onTap: () => widget.onAddNote!(_selectedDay!),
+                borderRadius: BorderRadius.circular(6),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add_circle_outline, size: 16, color: _noteColor),
+                      SizedBox(width: 4),
+                      Text(
+                        'Not ekle',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: _noteColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 6),
+        for (final note in notes) _noteRow(note),
         for (final e in events)
           InkWell(
             onTap: () => widget.onQuoteTap(e.quote),
@@ -309,6 +394,67 @@ class _QuoteCalendarCardState extends State<QuoteCalendarCard> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _noteRow(PersonalNote note) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          if (widget.onToggleNoteDone != null)
+            InkWell(
+              onTap: () => widget.onToggleNoteDone!(note),
+              child: Icon(
+                note.isDone
+                    ? Icons.check_circle_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                size: 16,
+                color: note.isDone ? _noteColor : _slate,
+              ),
+            )
+          else
+            _dot(_noteColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: InkWell(
+              onTap: widget.onEditNote == null
+                  ? null
+                  : () => widget.onEditNote!(note),
+              child: Text(
+                note.title.trim().isEmpty ? '(basliksiz not)' : note.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _ink,
+                  decoration: note.isDone ? TextDecoration.lineThrough : null,
+                ),
+              ),
+            ),
+          ),
+          Text(
+            note.isReminder ? 'Hatirlatici' : 'Not',
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: _noteColor,
+            ),
+          ),
+          if (widget.onDeleteNote != null)
+            InkWell(
+              onTap: () => widget.onDeleteNote!(note),
+              child: const Padding(
+                padding: EdgeInsets.only(left: 6),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 14,
+                  color: _slate,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

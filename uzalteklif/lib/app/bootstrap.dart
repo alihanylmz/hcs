@@ -8,6 +8,7 @@ import '../services/control_hardware_repository.dart';
 import '../services/discovery_repository.dart';
 import '../services/market_rate_service.dart';
 import '../services/own_company_repository.dart';
+import '../services/personal_note_repository.dart';
 import '../services/price_adjustment_rule_repository.dart';
 import '../services/product_repository.dart';
 import '../services/quote_repository.dart';
@@ -27,6 +28,7 @@ class AppBootstrap {
     required this.discoveryRepository,
     required this.controlHardwareRepository,
     required this.themePreferenceService,
+    required this.personalNoteRepository,
     required this.supabaseActive,
   });
 
@@ -41,6 +43,7 @@ class AppBootstrap {
   final DiscoveryRepository discoveryRepository;
   final ControlHardwareRepository controlHardwareRepository;
   final ThemePreferenceService themePreferenceService;
+  final PersonalNoteRepository personalNoteRepository;
   final bool supabaseActive;
 
   static Future<AppBootstrap> initialize() async {
@@ -74,6 +77,7 @@ class AppBootstrap {
       discoveryRepository: DiscoveryRepository(client: client),
       controlHardwareRepository: ControlHardwareRepository(client: client),
       themePreferenceService: themePreferenceService,
+      personalNoteRepository: PersonalNoteRepository(client: client),
       supabaseActive: client != null,
     );
   }

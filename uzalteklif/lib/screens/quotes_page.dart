@@ -12,6 +12,7 @@ import '../services/cari_repository.dart';
 import '../services/company_stamp_service.dart';
 import '../services/market_rate_service.dart';
 import '../services/own_company_repository.dart';
+import '../services/personal_note_repository.dart';
 import '../services/price_adjustment_rule_repository.dart';
 import '../services/product_repository.dart';
 import '../services/quote_repository.dart';
@@ -33,6 +34,7 @@ class QuotesPage extends StatefulWidget {
     required this.priceAdjustmentRuleRepository,
     required this.userProfileRepository,
     required this.cariRepository,
+    required this.personalNoteRepository,
     this.isManager = false,
   });
 
@@ -43,6 +45,7 @@ class QuotesPage extends StatefulWidget {
   final PriceAdjustmentRuleRepository priceAdjustmentRuleRepository;
   final UserProfileRepository userProfileRepository;
   final CariRepository cariRepository;
+  final PersonalNoteRepository personalNoteRepository;
   final bool isManager;
 
   @override
@@ -296,6 +299,7 @@ class _QuotesPageState extends State<QuotesPage> {
           cariRepository: widget.cariRepository,
           ownCompanyRepository: widget.ownCompanyRepository,
           priceAdjustmentRuleRepository: widget.priceAdjustmentRuleRepository,
+          personalNoteRepository: widget.personalNoteRepository,
           isManager: widget.isManager,
         ),
       ),

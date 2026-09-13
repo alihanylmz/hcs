@@ -206,7 +206,7 @@ class _ServiceFormTemplatesPageState extends State<ServiceFormTemplatesPage> {
                       style: const TextStyle(fontSize: 12)),
                 const SizedBox(height: 4),
                 Text(
-                  '${t.checkboxes.length} onay maddesi',
+                  '${t.checkboxes.length} soru',
                   style: TextStyle(
                       fontSize: 11, color: Colors.grey.shade500),
                 ),
@@ -409,10 +409,10 @@ class _TemplateEditorDialogState extends State<_TemplateEditorDialog> {
                         hint:
                             'Müşteriye gösterilecek bilgilendirme metnini buraya yazınız...'),
                     const SizedBox(height: 20),
-                    // Onay Maddeleri
+                    // Sorular (musteri her birine Evet/Hayir cevabi verir)
                     Row(
                       children: [
-                        const Text('Onay Maddeleri',
+                        const Text('Sorular',
                             style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 15)),
@@ -426,11 +426,19 @@ class _TemplateEditorDialogState extends State<_TemplateEditorDialog> {
                             });
                           },
                           icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Madde Ekle'),
+                          label: const Text('Soru Ekle'),
                           style: TextButton.styleFrom(
                               foregroundColor: AppColors.corporateBlue),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Musteri her soruyu Evet ya da Hayir olarak cevaplar. '
+                      '"Zorunlu" sadece cevaplanmasi gerektigi anlamina gelir, '
+                      'Evet secilmesi gerekmez.',
+                      style: TextStyle(
+                          fontSize: 11.5, color: Colors.grey.shade600),
                     ),
                     const SizedBox(height: 8),
                     ..._entries.asMap().entries.map((entry) {
@@ -483,7 +491,8 @@ class _TemplateEditorDialogState extends State<_TemplateEditorDialog> {
                               TextFormField(
                                 controller: e.labelCtrl,
                                 decoration: InputDecoration(
-                                  hintText: 'Onay maddesi metnini giriniz...',
+                                  hintText:
+                                      'Soru metnini giriniz... (Örn: Kalıcı elektrik var mı?)',
                                   border: OutlineInputBorder(
                                       borderRadius:
                                           BorderRadius.circular(8)),

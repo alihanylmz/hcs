@@ -412,7 +412,7 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
           _summaryItem(Icons.verified_user_outlined, 'Online onay'),
           _summaryItem(
             Icons.fact_check_outlined,
-            '$requiredCount zorunlu madde',
+            '$requiredCount zorunlu soru',
           ),
           _summaryItem(Icons.draw_outlined, 'Dijital imza'),
         ],
@@ -501,7 +501,7 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
               Icon(Icons.checklist, color: AppColors.corporateBlue),
               SizedBox(width: 8),
               Text(
-                'Onay Maddeleri',
+                'Sorular',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,

@@ -293,7 +293,8 @@ class _TemplateEditorDialogState extends State<_TemplateEditorDialog> {
     _entries = e?.checkboxes
             .map((c) => _CheckboxEntry(
                 labelCtrl: TextEditingController(text: c.label),
-                required: c.required))
+                required: c.required,
+                allowOther: c.allowOther))
             .toList() ??
         [_CheckboxEntry(labelCtrl: TextEditingController(), required: true)];
   }
@@ -315,8 +316,11 @@ class _TemplateEditorDialogState extends State<_TemplateEditorDialog> {
 
     final checkboxes = _entries
         .where((e) => e.labelCtrl.text.trim().isNotEmpty)
-        .map((e) =>
-            ServiceFormCheckbox(label: e.labelCtrl.text.trim(), required: e.required))
+        .map((e) => ServiceFormCheckbox(
+              label: e.labelCtrl.text.trim(),
+              required: e.required,
+              allowOther: e.allowOther,
+            ))
         .toList();
 
     try {
@@ -502,6 +506,24 @@ class _TemplateEditorDialogState extends State<_TemplateEditorDialog> {
                                 ),
                                 maxLines: 2,
                               ),
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: e.allowOther,
+                                    onChanged: (v) => setState(
+                                        () => e.allowOther = v ?? false),
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  const Expanded(
+                                    child: Text(
+                                      '"Diğer" seçeneği ekle (müşteri Evet/Hayır '
+                                      'yerine serbest metin yazabilsin)',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),
@@ -601,5 +623,10 @@ class _TemplateEditorDialogState extends State<_TemplateEditorDialog> {
 class _CheckboxEntry {
   TextEditingController labelCtrl;
   bool required;
-  _CheckboxEntry({required this.labelCtrl, required this.required});
+  bool allowOther;
+  _CheckboxEntry({
+    required this.labelCtrl,
+    required this.required,
+    this.allowOther = false,
+  });
 }

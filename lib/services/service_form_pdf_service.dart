@@ -145,6 +145,7 @@ class ServiceFormPdfService {
     final answer = form.answers[index];
     if (answer == true) return 'Evet';
     if (answer == false) return 'Hayir';
+    if (answer is String && answer.trim().isNotEmpty) return answer.trim();
     // Eski kayitlarda `answers` sutunu bos olabilir; checkedItems'a bak.
     return form.checkedItems.contains(index) ? 'Evet' : 'Cevaplanmadi';
   }
@@ -153,6 +154,7 @@ class ServiceFormPdfService {
     final answer = form.answers[index];
     if (answer == true) return PdfColors.green800;
     if (answer == false) return PdfColors.red800;
+    if (answer is String && answer.trim().isNotEmpty) return PdfColors.deepPurple800;
     return form.checkedItems.contains(index)
         ? PdfColors.green800
         : PdfColors.grey600;

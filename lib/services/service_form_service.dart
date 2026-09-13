@@ -163,15 +163,16 @@ class ServiceFormService {
   /// Formu imzala (anonim - müşteri tarafı)
   /// İmzayı Supabase Storage'a yükler, formu günceller.
   ///
-  /// [answers], her maddenin (index -> Evet/Hayır) gerçek cevabını taşır.
-  /// Zorunlu bir madde "Hayır" olarak cevaplanabilir; önemli olan cevaplanmış
-  /// olmasıdır. `checked_items`, geriye dönük uyumluluk için `answers`
-  /// içinde true olan indekslerden türetilip ayrıca saklanır.
+  /// [answers], her maddenin gerçek cevabını taşır: `true`/`false` (Evet/
+  /// Hayır) ya da "Diğer" seçilince yazılan bir `String`. Zorunlu bir madde
+  /// "Hayır" olarak cevaplanabilir; önemli olan cevaplanmış olmasıdır.
+  /// `checked_items`, geriye dönük uyumluluk için `answers` içinde `true`
+  /// olan indekslerden türetilip ayrıca saklanır.
   Future<void> signForm({
     required String formId,
     required String customerName,
     required Uint8List signatureBytes,
-    required Map<int, bool> answers,
+    required Map<int, dynamic> answers,
     String? customerIp,
   }) async {
     // 1. İmzayı storage'a yükle
@@ -185,7 +186,7 @@ class ServiceFormService {
     final signatureBase64 = base64Encode(signatureBytes);
 
     final checkedItems = answers.entries
-        .where((e) => e.value)
+        .where((e) => e.value == true)
         .map((e) => e.key)
         .toList();
 

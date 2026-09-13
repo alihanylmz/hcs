@@ -1,23 +1,34 @@
 // lib/models/service_form.dart
 // Servis Öncesi Onay Formu - Model Sınıfları
 
-/// Form şablonundaki tek bir onay maddesi
+/// Form şablonundaki tek bir soru.
+///
+/// Müşteri her soruyu Evet/Hayır olarak cevaplar. [allowOther] true ise
+/// ayrıca bir "Diğer" seçeneği de gösterilir; müşteri bunu seçtiğinde
+/// serbest bir metin yazar (ör. "Kısmi - sadece B blokta var").
 class ServiceFormCheckbox {
   final String label;
   final bool required;
+  final bool allowOther;
 
-  const ServiceFormCheckbox({required this.label, this.required = true});
+  const ServiceFormCheckbox({
+    required this.label,
+    this.required = true,
+    this.allowOther = false,
+  });
 
   factory ServiceFormCheckbox.fromJson(Map<String, dynamic> json) {
     return ServiceFormCheckbox(
       label: json['label'] as String? ?? '',
       required: json['required'] as bool? ?? true,
+      allowOther: json['allow_other'] as bool? ?? false,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'label': label,
         'required': required,
+        'allow_other': allowOther,
       };
 }
 
@@ -84,10 +95,11 @@ class TicketServiceForm {
   final String? customerName;
   final String? signatureData; // Base64 PNG
   final List<int> checkedItems; // Geriye donuk uyumluluk: Evet cevaplananlar
-  /// Her maddenin gercek cevabi: index -> true (Evet) / false (Hayir).
+  /// Her maddenin gercek cevabi: index -> `true` (Evet), `false` (Hayir)
+  /// veya bir `String` ("Diger" secilince yazilan serbest metin).
   /// Haritada olmayan bir index, o maddenin henuz cevaplanmadigi (eski
   /// kayitlarda `answers` sutunu bos oldugu) anlamina gelir.
-  final Map<int, bool> answers;
+  final Map<int, dynamic> answers;
   final String? customerIp;
   final DateTime? signedAt;
   final String? createdBy;
@@ -128,11 +140,11 @@ class TicketServiceForm {
     }
 
     final rawAnswers = json['answers'];
-    final answers = <int, bool>{};
+    final answers = <int, dynamic>{};
     if (rawAnswers is Map) {
       rawAnswers.forEach((key, value) {
         final index = int.tryParse(key.toString());
-        if (index != null && value is bool) {
+        if (index != null && (value is bool || value is String)) {
           answers[index] = value;
         }
       });

@@ -34,10 +34,27 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
   bool _submitted = false;
   String? _error;
 
-  // Her maddenin cevabi: null = henuz cevaplanmadi, true = Evet, false = Hayir.
-  // "Hayir" da gecerli ve gonderilebilir bir cevaptir; zorunluluk sadece
-  // cevapsiz birakilmamasi anlamina gelir.
-  List<bool?> _answers = [];
+  // Her maddenin secili modu: null = henuz cevaplanmadi, 'yes' = Evet,
+  // 'no' = Hayir, 'other' = "Diger" (serbest metin, _otherControllers'ta
+  // tutulur). "Hayir" da gecerli ve gonderilebilir bir cevaptir; zorunluluk
+  // sadece cevapsiz birakilmamasi anlamina gelir.
+  List<String?> _answerMode = [];
+  // "Diger" secilen maddeler icin serbest metin kontrolcusu (lazy, sadece
+  // ihtiyac oldukca olusturulur).
+  final Map<int, TextEditingController> _otherControllers = {};
+
+  TextEditingController _otherControllerFor(int index) {
+    return _otherControllers.putIfAbsent(index, () => TextEditingController());
+  }
+
+  bool _isAnswered(int index) {
+    final mode = _answerMode[index];
+    if (mode == 'yes' || mode == 'no') return true;
+    if (mode == 'other') {
+      return (_otherControllers[index]?.text.trim().isNotEmpty) ?? false;
+    }
+    return false;
+  }
 
   @override
   void initState() {
@@ -49,6 +66,9 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
   void dispose() {
     _nameController.dispose();
     _signatureController.dispose();
+    for (final c in _otherControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -86,7 +106,7 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
 
       setState(() {
         _form = form;
-        _answers = List<bool?>.filled(
+        _answerMode = List<String?>.filled(
           form.template?.checkboxes.length ?? 0,
           null,
         );
@@ -104,7 +124,7 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
     final template = _form?.template;
     if (template == null) return false;
     for (int i = 0; i < template.checkboxes.length; i++) {
-      if (template.checkboxes[i].required && _answers[i] == null) {
+      if (template.checkboxes[i].required && !_isAnswered(i)) {
         return false;
       }
     }
@@ -126,10 +146,17 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
       final Uint8List? signatureBytes = await _signatureController.toPngBytes();
       if (signatureBytes == null) throw Exception('İmza alınamadı.');
 
-      final answersMap = <int, bool>{};
-      for (int i = 0; i < _answers.length; i++) {
-        final answer = _answers[i];
-        if (answer != null) answersMap[i] = answer;
+      final answersMap = <int, dynamic>{};
+      for (int i = 0; i < _answerMode.length; i++) {
+        if (!_isAnswered(i)) continue;
+        final mode = _answerMode[i];
+        if (mode == 'yes') {
+          answersMap[i] = true;
+        } else if (mode == 'no') {
+          answersMap[i] = false;
+        } else if (mode == 'other') {
+          answersMap[i] = _otherControllers[i]!.text.trim();
+        }
       }
 
       await _service.signForm(
@@ -518,8 +545,8 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
           const SizedBox(height: 14),
           ...List.generate(template.checkboxes.length, (i) {
             final item = template.checkboxes[i];
-            final answer = _answers[i];
-            final unansweredAndRequired = item.required && answer == null;
+            final mode = _answerMode[i];
+            final unansweredAndRequired = item.required && !_isAnswered(i);
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -564,9 +591,9 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
                         child: _answerChoiceButton(
                           label: 'Evet',
                           icon: Icons.check_circle_outline,
-                          selected: answer == true,
+                          selected: mode == 'yes',
                           activeColor: const Color(0xFF29956F),
-                          onTap: () => setState(() => _answers[i] = true),
+                          onTap: () => setState(() => _answerMode[i] = 'yes'),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -574,13 +601,45 @@ class _PublicServiceFormPageState extends State<PublicServiceFormPage> {
                         child: _answerChoiceButton(
                           label: 'Hayır',
                           icon: Icons.cancel_outlined,
-                          selected: answer == false,
+                          selected: mode == 'no',
                           activeColor: const Color(0xFFB42318),
-                          onTap: () => setState(() => _answers[i] = false),
+                          onTap: () => setState(() => _answerMode[i] = 'no'),
                         ),
                       ),
+                      if (item.allowOther) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _answerChoiceButton(
+                            label: 'Diğer',
+                            icon: Icons.edit_note_outlined,
+                            selected: mode == 'other',
+                            activeColor: const Color(0xFF6B5FD1),
+                            onTap: () =>
+                                setState(() => _answerMode[i] = 'other'),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
+                  if (item.allowOther && mode == 'other') ...[
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _otherControllerFor(i),
+                      onChanged: (_) => setState(() {}),
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: 'Cevabınızı yazın...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             );

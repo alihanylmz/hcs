@@ -761,6 +761,9 @@ class _TicketDetailPageState extends State<TicketDetailPage>
                           } else if (answer == false) {
                             answerLabel = 'Hayır';
                             answerColor = Colors.red;
+                          } else if (answer is String && answer.trim().isNotEmpty) {
+                            answerLabel = answer.trim();
+                            answerColor = const Color(0xFF6B5FD1);
                           } else {
                             // Eski kayitlarda `answers` sutunu bos olabilir;
                             // checkedItems'a bakarak en iyi tahmini yap.

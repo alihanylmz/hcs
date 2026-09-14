@@ -482,53 +482,85 @@ class _AdminPanelPageState extends State<AdminPanelPage>
     return product.copyWith(salePrice: price).formattedSalePrice;
   }
 
+  // Not: navigasyon kabugu icinde gomulu gosteriliyor - ust cubuk zaten
+  // "YÖNETIM" basligini gosteriyor. Eskiden buradaki kendi AppBar'i (salt
+  // baslik + yenile + TabBar) kabugun ust cubugunun hemen altina ayni acik
+  // renkte oturunca "iki ust bar" gibi goruntuluyordu; AppBar kaldirildi,
+  // TabBar dogrudan icerige tasindi.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Kurumsal Yönetim'),
-        actions: [
-          IconButton(
-            tooltip: 'Yenile',
-            onPressed: _loading ? null : _reload,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: const [
-            Tab(icon: Icon(Icons.people_alt_rounded), text: 'Kullanıcılar'),
-            Tab(icon: Icon(Icons.history_rounded), text: 'Audit Log'),
-            Tab(
-              icon: Icon(Icons.price_change_rounded),
-              text: 'Fiyat Hareketleri',
-            ),
-            Tab(icon: Icon(Icons.restore_page_rounded), text: 'Revizyonlar'),
-            Tab(icon: Icon(Icons.apartment_rounded), text: 'Firmalar'),
-            Tab(icon: Icon(Icons.percent_rounded), text: 'Fiyat Politikaları'),
-            Tab(
-              icon: Icon(Icons.settings_applications_rounded),
-              text: 'Sistem',
-            ),
-          ],
-        ),
-      ),
       body: WorkspaceBackground(
         child: SafeArea(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
-              : TabBarView(
-                  controller: _tabController,
+              : Column(
                   children: [
-                    _buildUsers(),
-                    _buildReadableAuditLogs(),
-                    _buildPriceMovements(),
-                    _buildReadableRevisions(),
-                    _buildCompanies(),
-                    _buildPriceRules(),
-                    _buildSystemSettings(),
+                    Material(
+                      color: Colors.transparent,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TabBar(
+                              controller: _tabController,
+                              isScrollable: true,
+                              tabAlignment: TabAlignment.start,
+                              tabs: const [
+                                Tab(
+                                  icon: Icon(Icons.people_alt_rounded),
+                                  text: 'Kullanıcılar',
+                                ),
+                                Tab(
+                                  icon: Icon(Icons.history_rounded),
+                                  text: 'Audit Log',
+                                ),
+                                Tab(
+                                  icon: Icon(Icons.price_change_rounded),
+                                  text: 'Fiyat Hareketleri',
+                                ),
+                                Tab(
+                                  icon: Icon(Icons.restore_page_rounded),
+                                  text: 'Revizyonlar',
+                                ),
+                                Tab(
+                                  icon: Icon(Icons.apartment_rounded),
+                                  text: 'Firmalar',
+                                ),
+                                Tab(
+                                  icon: Icon(Icons.percent_rounded),
+                                  text: 'Fiyat Politikaları',
+                                ),
+                                Tab(
+                                  icon: Icon(
+                                    Icons.settings_applications_rounded,
+                                  ),
+                                  text: 'Sistem',
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Yenile',
+                            onPressed: _loading ? null : _reload,
+                            icon: const Icon(Icons.refresh_rounded),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildUsers(),
+                          _buildReadableAuditLogs(),
+                          _buildPriceMovements(),
+                          _buildReadableRevisions(),
+                          _buildCompanies(),
+                          _buildPriceRules(),
+                          _buildSystemSettings(),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
         ),

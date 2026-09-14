@@ -13,6 +13,7 @@ import '../services/user_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/ticket_backup_request_dialog.dart';
 import '../widgets/sidebar/app_layout.dart';
+import '../widgets/sidebar/nav_shell_state.dart';
 import '../widgets/ui/ui.dart';
 import 'edit_ticket_page.dart';
 import 'pdf_viewer_page.dart';
@@ -35,8 +36,11 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
 
   String _searchText = '';
   String _priorityFilter = 'all';
-  String? _userRole;
-  String? _userName;
+  // Profil yuklenene kadar gecen kisa surede sidebar'in yanlis (rolsuz)
+  // menuyle acilip hemen ardindan degismesini onlemek icin en son
+  // bilinen ad/rolle baslatiyoruz (bkz. NavShellState).
+  String? _userRole = NavShellState.cachedUserRole;
+  String? _userName = NavShellState.cachedUserName;
 
   @override
   void initState() {
@@ -53,6 +57,8 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
 
   Future<void> _loadUserProfile() async {
     final profile = await _userService.getCurrentUserProfile();
+    NavShellState.cachedUserRole = profile?.role;
+    NavShellState.cachedUserName = profile?.displayName;
     if (!mounted) return;
 
     setState(() {
@@ -343,30 +349,6 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
     return DateFormat('dd.MM.yyyy').format(parsed.toLocal());
   }
 
-  int _recentArchiveCount(List<Map<String, dynamic>> tickets) {
-    final threshold = DateTime.now().subtract(const Duration(days: 30));
-
-    return tickets.where((ticket) {
-      final archivedAt = ticket['archived_at'] as String?;
-      final parsed = archivedAt == null ? null : DateTime.tryParse(archivedAt);
-      return parsed != null && parsed.isAfter(threshold);
-    }).length;
-  }
-
-  int _backedUpCount(List<Map<String, dynamic>> tickets) {
-    return tickets.where((ticket) {
-      final snapshot = ticket['_backup_status'] as TicketBackupSnapshot?;
-      return snapshot?.state != TicketBackupIndicatorState.none;
-    }).length;
-  }
-
-  int _staleBackupCount(List<Map<String, dynamic>> tickets) {
-    return tickets.where((ticket) {
-      final snapshot = ticket['_backup_status'] as TicketBackupSnapshot?;
-      return snapshot?.state == TicketBackupIndicatorState.staleAfterFault;
-    }).length;
-  }
-
   String _buildBackupFileName(Map<String, dynamic> ticket) {
     final jobCode = (ticket['job_code'] as String? ?? 'is').trim();
     final title = (ticket['title'] as String? ?? 'yedek').trim();
@@ -408,61 +390,6 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
     );
   }
 
-  Widget _buildSummaryCard({
-    required String label,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return UiCard(
-      tone: UiCardTone.muted,
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: isDark ? AppColors.textOnDark : AppColors.textDark,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color:
-                        isDark
-                            ? AppColors.textOnDarkMuted
-                            : AppColors.textLight,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildInfoChip({
     required IconData icon,
     required String label,
@@ -497,101 +424,14 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
     List<Map<String, dynamic>> tickets,
     List<Map<String, dynamic>> filteredTickets,
   ) {
-    final highPriorityCount =
-        tickets.where((ticket) => ticket['priority'] == 'high').length;
-    final recentCount = _recentArchiveCount(tickets);
-    final backedUpCount = _backedUpCount(tickets);
-    final staleCount = _staleBackupCount(tickets);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
+    // Not: eskiden burada ayrica bir "Arsiv gorunumu" istatistik bandi
+    // (toplam kayit, son 30 gun, yuksek oncelik vb. 6 kutu) ve bir arama
+    // kutusu vardi. Ust cubuktaki arama kutusuyla cakistigi ve gereksiz
+    // "kutu kutu" bir gorunum yarattigi icin kaldirildi - sadece oncelik
+    // filtresi kaldi.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        UiCard(
-          tone: UiCardTone.accent,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Arsiv gorunumu',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Biten isleri daha hizli tarayabilmeniz icin arama, oncelik ve tarih bilgisini ozetli gosteriyoruz.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color:
-                      isDark ? AppColors.textOnDarkMuted : AppColors.textLight,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 18),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  SizedBox(
-                    width: 220,
-                    child: _buildSummaryCard(
-                      label: 'Toplam arsiv kaydi',
-                      value: tickets.length.toString(),
-                      icon: Icons.archive_outlined,
-                      color: AppColors.statusArchived,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 220,
-                    child: _buildSummaryCard(
-                      label: 'Son 30 gun',
-                      value: recentCount.toString(),
-                      icon: Icons.history_rounded,
-                      color: AppColors.corporateBlue,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 220,
-                    child: _buildSummaryCard(
-                      label: 'Yuksek oncelik',
-                      value: highPriorityCount.toString(),
-                      icon: Icons.flag_outlined,
-                      color: AppColors.corporateRed,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 220,
-                    child: _buildSummaryCard(
-                      label: 'Gorunen sonuc',
-                      value: filteredTickets.length.toString(),
-                      icon: Icons.filter_alt_outlined,
-                      color: AppColors.statusDone,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 220,
-                    child: _buildSummaryCard(
-                      label: 'Yedegi alinan',
-                      value: backedUpCount.toString(),
-                      icon: Icons.check_circle_outline,
-                      color: AppColors.statusDone,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 220,
-                    child: _buildSummaryCard(
-                      label: 'Ariza sonrasi',
-                      value: staleCount.toString(),
-                      icon: Icons.bug_report_outlined,
-                      color: AppColors.corporateBlue,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
         UiCard(
           tone: UiCardTone.base,
           child: Column(
@@ -604,20 +444,6 @@ class _ArchivedTicketsPageState extends State<ArchivedTicketsPage> {
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 14),
-              TextField(
-                controller: _searchController,
-                textInputAction: TextInputAction.search,
-                decoration: const InputDecoration(
-                  hintText: 'Baslik, musteri veya is kodu ara',
-                  prefixIcon: Icon(Icons.search_rounded),
-                ),
-                onChanged: (value) {
-                  setState(() {
-                    _searchText = value;
-                  });
-                },
-              ),
-              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(

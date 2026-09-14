@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -13,9 +12,15 @@ import '../../pages/ticket_list_page.dart';
 import '../../pages/workshop_page.dart';
 import '../../services/app_module_service.dart';
 import '../../services/permission_service.dart';
-import '../../theme/app_colors.dart';
+import 'nav_shell_colors.dart';
+import 'nav_shell_state.dart';
 import 'sidebar_item.dart';
 
+/// Onaylanan ortak navigasyon tasariminin sol rayi: acik/beyaz yuzey,
+/// "Hos geldin" karsilama satiri, aktif ogede sol cizgi vurgusu, ve en
+/// altta daralt/genislet oku. Menu mantigi (rol bazli gorunurluk, sayfa
+/// gecisleri, cikis, Uzal Teklif'e gecis) oncekiyle birebir ayni - sadece
+/// gorsel katman degisti.
 class Sidebar extends StatelessWidget {
   const Sidebar({
     super.key,
@@ -30,169 +35,259 @@ class Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final baseBg =
-        isDark
-            ? AppColors.sidebarBackgroundDark
-            : AppColors.sidebarBackgroundLight;
-    final activeColor =
-        isDark ? AppColors.sidebarActiveDark : AppColors.sidebarActiveLight;
-    final textColor = AppColors.sidebarText;
-    final mutedTextColor = AppColors.sidebarTextMuted;
-    final iconColor = AppColors.sidebarTextMuted;
+    final palette = NavShellColors.of(context);
 
-    return Container(
-      width: 280,
+    return ValueListenableBuilder<bool>(
+      valueListenable: NavShellState.railExpanded,
+      builder: (context, expanded, _) {
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          width: expanded ? 240 : 76,
+          decoration: BoxDecoration(
+            color: palette.surface,
+            // Sag kenar kare birakiliyor: sidebar ust cubukla tam bitisik,
+            // aralarinda bosluk/golge olmadan tek bir yuzey gibi duruyor.
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(12),
+              bottomLeft: Radius.circular(12),
+            ),
+            border: Border(
+              top: BorderSide(color: palette.border),
+              left: BorderSide(color: palette.border),
+              bottom: BorderSide(color: palette.border),
+              right: BorderSide(color: palette.border),
+            ),
+          ),
+          child: SafeArea(
+            minimum: const EdgeInsets.fromLTRB(10, 12, 10, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildLogoRow(context, palette, expanded),
+                if (userName != null) ...[
+                  const SizedBox(height: 12),
+                  _buildWelcomeRow(palette, expanded),
+                ],
+                const SizedBox(height: 14),
+                if (expanded)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Text(
+                      'MODULLER',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.0,
+                        color: palette.textSecondary,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      SidebarItem(
+                        icon: Icons.assignment_outlined,
+                        label: 'Saha İş Emirleri & Servisler',
+                        isActive: activeMenuItem == 'ticket_list',
+                        expanded: expanded,
+                        onTap: () => _navigate(context, const TicketListPage()),
+                      ),
+                      SidebarItem(
+                        icon: Icons.precision_manufacturing_outlined,
+                        label: 'Atölye İmalat & Pano Reçeteleri',
+                        isActive: activeMenuItem == 'workshop',
+                        expanded: expanded,
+                        onTap: () => _navigate(context, const WorkshopPage()),
+                      ),
+                      if (PermissionService.roleHasPermission(
+                        userRole,
+                        AppPermission.viewStock,
+                      ))
+                        SidebarItem(
+                          icon: Icons.inventory_2_outlined,
+                          label: 'Stok ve Ekipman Kataloğu',
+                          isActive: activeMenuItem == 'stock',
+                          expanded: expanded,
+                          onTap:
+                              () =>
+                                  _navigate(context, const StockOverviewPage()),
+                        ),
+                      SidebarItem(
+                        icon: Icons.task_alt_rounded,
+                        label: 'Biten İşler ve Tamamlananlar',
+                        isActive: activeMenuItem == 'archived',
+                        expanded: expanded,
+                        onTap:
+                            () =>
+                                _navigate(context, const ArchivedTicketsPage()),
+                      ),
+                      if (PermissionService.roleHasPermission(
+                        userRole,
+                        AppPermission.viewDashboard,
+                      ))
+                        SidebarItem(
+                          icon: Icons.dashboard_rounded,
+                          label: 'Yönetici Performans Panosu',
+                          isActive: activeMenuItem == 'dashboard',
+                          expanded: expanded,
+                          onTap:
+                              () => _navigate(context, const DashboardPage()),
+                        ),
+                      SidebarItem(
+                        icon: Icons.support_agent_rounded,
+                        label: 'Arıza & Teknik Kılavuz',
+                        isActive: activeMenuItem == 'fault_codes',
+                        expanded: expanded,
+                        onTap: () => _navigate(context, const FaultCodesPage()),
+                      ),
+                      const SizedBox(height: 8),
+                      const SidebarDivider(),
+                      const SizedBox(height: 8),
+                      SidebarItem(
+                        icon: Icons.person_outline_rounded,
+                        label: 'Profilim & Ayarlar',
+                        isActive: activeMenuItem == 'profile',
+                        expanded: expanded,
+                        onTap: () => _navigate(context, const ProfilePage()),
+                      ),
+                    ],
+                  ),
+                ),
+                const SidebarDivider(),
+                const SizedBox(height: 8),
+                _buildQuoteSwitchCard(context, palette, expanded),
+                const SizedBox(height: 8),
+                _buildLogoutRow(context, palette, expanded),
+                const SizedBox(height: 4),
+                _buildCollapseToggle(palette, expanded),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLogoRow(
+    BuildContext context,
+    NavShellPalette palette,
+    bool expanded,
+  ) {
+    final logo = Container(
+      width: 36,
+      height: 36,
+      padding: const EdgeInsets.all(7),
       decoration: BoxDecoration(
-        color: baseBg,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: isDark ? 0.08 : 0.10),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.12),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+        color: palette.accentSoft,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: SvgPicture.asset(
+        'assets/images/log.svg',
+        colorFilter: ColorFilter.mode(palette.accent, BlendMode.srcIn),
+      ),
+    );
+    if (!expanded) {
+      return Center(child: logo);
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Row(
+        children: [
+          logo,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'İş Takip',
+              style: TextStyle(
+                fontSize: 15.5,
+                fontWeight: FontWeight.w800,
+                color: palette.textPrimary,
+              ),
+            ),
           ),
         ],
       ),
-      child: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildBrandCard(textColor, mutedTextColor, isDark),
-            if (userName != null) ...[
-              const SizedBox(height: 10),
-              _buildUserCard(textColor, mutedTextColor, isDark),
-            ],
-            const SizedBox(height: 14),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                'MODULLER',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.2,
-                  color: mutedTextColor,
+    );
+  }
+
+  Widget _buildWelcomeRow(NavShellPalette palette, bool expanded) {
+    final avatar = Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: palette.avatarBackground,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(Icons.person_rounded, size: 18, color: palette.accent),
+    );
+    if (!expanded) {
+      return Center(child: avatar);
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Row(
+        children: [
+          avatar,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hoş geldin,',
+                  style: TextStyle(fontSize: 11, color: palette.textSecondary),
                 ),
-              ),
+                Text(
+                  userName!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: palette.textPrimary,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  SidebarItem(
-                    icon: Icons.assignment_outlined,
-                    label: 'Saha İş Emirleri & Servisler',
-                    isActive: activeMenuItem == 'ticket_list',
-                    activeColor: activeColor,
-                    iconColor: iconColor,
-                    textColor: textColor,
-                    onTap: () => _navigate(context, const TicketListPage()),
-                  ),
-                  SidebarItem(
-                    icon: Icons.precision_manufacturing_outlined,
-                    label: 'Atölye İmalat & Pano Reçeteleri',
-                    isActive: activeMenuItem == 'workshop',
-                    activeColor: activeColor,
-                    iconColor: iconColor,
-                    textColor: textColor,
-                    onTap: () => _navigate(context, const WorkshopPage()),
-                  ),
-                  if (PermissionService.roleHasPermission(
-                    userRole,
-                    AppPermission.viewStock,
-                  ))
-                    SidebarItem(
-                      icon: Icons.inventory_2_outlined,
-                      label: 'Stok ve Ekipman Kataloğu',
-                      isActive: activeMenuItem == 'stock',
-                      activeColor: activeColor,
-                      iconColor: iconColor,
-                      textColor: textColor,
-                      onTap:
-                          () => _navigate(context, const StockOverviewPage()),
-                    ),
-                  SidebarItem(
-                    icon: Icons.task_alt_rounded,
-                    label: 'Biten İşler ve Tamamlananlar',
-                    isActive: activeMenuItem == 'archived',
-                    activeColor: activeColor,
-                    iconColor: iconColor,
-                    textColor: textColor,
-                    onTap:
-                        () => _navigate(context, const ArchivedTicketsPage()),
-                  ),
-                  if (PermissionService.roleHasPermission(
-                    userRole,
-                    AppPermission.viewDashboard,
-                  ))
-                    SidebarItem(
-                      icon: Icons.dashboard_rounded,
-                      label: 'Yönetici Performans Panosu',
-                      isActive: activeMenuItem == 'dashboard',
-                      activeColor: activeColor,
-                      iconColor: iconColor,
-                      textColor: textColor,
-                      onTap: () => _navigate(context, const DashboardPage()),
-                    ),
-                  SidebarItem(
-                    icon: Icons.support_agent_rounded,
-                    label: 'Arıza & Teknik Kılavuz',
-                    isActive: activeMenuItem == 'fault_codes',
-                    activeColor: activeColor,
-                    iconColor: iconColor,
-                    textColor: textColor,
-                    onTap: () => _navigate(context, const FaultCodesPage()),
-                  ),
-                  const SizedBox(height: 10),
-                  const SidebarDivider(),
-                  const SizedBox(height: 10),
-                  SidebarItem(
-                    icon: Icons.person_outline_rounded,
-                    label: 'Profilim & Ayarlar',
-                    isActive: activeMenuItem == 'profile',
-                    activeColor: activeColor,
-                    iconColor: iconColor,
-                    textColor: textColor,
-                    onTap: () => _navigate(context, const ProfilePage()),
-                  ),
-                  SidebarItem(
-                    icon: Icons.logout_rounded,
-                    label: 'Oturumu Kapat',
-                    isActive: false,
-                    activeColor: AppColors.corporateRed,
-                    iconColor: const Color(0xFFFECACA),
-                    textColor: const Color(0xFFFECACA),
-                    onTap: () => _handleLogout(context),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            const SidebarDivider(),
-            const SizedBox(height: 10),
-            // UZAL TEKLİF SİSTEMİNE GEÇİŞ DÜĞMESİ
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => _switchToQuoteSystem(context),
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2B82C9).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF2B82C9).withValues(alpha: 0.4)),
-                  ),
-                  child: const Row(
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuoteSwitchCard(
+    BuildContext context,
+    NavShellPalette palette,
+    bool expanded,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => AppModuleService.switchToQuote(context),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: expanded ? 12 : 0,
+            vertical: 10,
+          ),
+          decoration: BoxDecoration(
+            color: palette.accentSoft,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: palette.accent.withValues(alpha: 0.3)),
+          ),
+          child:
+              expanded
+                  ? Row(
                     children: [
-                      Icon(Icons.description_outlined, size: 20, color: Color(0xFF2B82C9)),
-                      SizedBox(width: 10),
+                      Icon(
+                        Icons.description_outlined,
+                        size: 18,
+                        color: palette.accent,
+                      ),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -200,219 +295,114 @@ class Sidebar extends StatelessWidget {
                             Text(
                               'Uzal Teklif & Keşif',
                               style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                color: palette.textPrimary,
                               ),
                             ),
                             Text(
                               'Teklif Sistemine Geç ➔',
                               style: TextStyle(
-                                fontSize: 10.5,
+                                fontSize: 10,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF2B82C9),
+                                color: palette.accent,
                               ),
                             ),
                           ],
                         ),
                       ),
                     ],
-                  ),
-                ),
-              ),
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Is Takip Workspace',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: textColor,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Web dashboard temasi',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: mutedTextColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.10),
+                  )
+                  : Center(
+                    child: Icon(
+                      Icons.description_outlined,
+                      size: 18,
+                      color: palette.accent,
                     ),
                   ),
-                  child: Text(
-                    'v1.2.0',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: mutedTextColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
         ),
       ),
     );
   }
 
-  Widget _buildBrandCard(Color textColor, Color mutedTextColor, bool isDark) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: isDark ? 0.035 : 0.045),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Widget _buildLogoutRow(
+    BuildContext context,
+    NavShellPalette palette,
+    bool expanded,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _handleLogout(context),
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: expanded ? 12 : 0,
+            vertical: 9,
+          ),
+          child: Row(
+            mainAxisAlignment:
+                expanded ? MainAxisAlignment.start : MainAxisAlignment.center,
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: SvgPicture.asset('assets/images/log.svg'),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'OPERATIONS',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.0,
-                    color: mutedTextColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Is Takip',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: textColor,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Servis ve atolye operasyonlari.',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              height: 1.45,
-              color: mutedTextColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildUserCard(Color textColor, Color mutedTextColor, bool isDark) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: isDark ? 0.04 : 0.05),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.person_outline_rounded,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+              Icon(Icons.logout_rounded, size: 18, color: palette.danger),
+              if (expanded) ...[
+                const SizedBox(width: 10),
                 Text(
-                  userName!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  'Oturumu Kapat',
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: textColor,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  userRole == null
-                      ? 'Aktif kullanici'
-                      : _getRoleLabel(userRole!),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: mutedTextColor,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: palette.danger,
                   ),
                 ),
               ],
-            ),
+            ],
           ),
-          Container(
-            width: 10,
-            height: 10,
-            decoration: const BoxDecoration(
-              color: AppColors.statusDone,
-              shape: BoxShape.circle,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  void _switchToQuoteSystem(BuildContext context) {
-    AppModuleService.switchToQuote(context);
+  Widget _buildCollapseToggle(NavShellPalette palette, bool expanded) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: NavShellState.toggleRail,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: expanded ? 12 : 0,
+            vertical: 8,
+          ),
+          child: Row(
+            mainAxisAlignment:
+                expanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+            children: [
+              AnimatedRotation(
+                turns: expanded ? 0.5 : 0,
+                duration: const Duration(milliseconds: 180),
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: palette.textSecondary,
+                ),
+              ),
+              if (expanded) ...[
+                const SizedBox(width: 8),
+                Text(
+                  'Daralt',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: palette.textSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _navigate(BuildContext context, Widget page) {
@@ -429,9 +419,5 @@ class Sidebar extends StatelessWidget {
         (route) => false,
       );
     }
-  }
-
-  String _getRoleLabel(String role) {
-    return PermissionService.roleLabel(role);
   }
 }

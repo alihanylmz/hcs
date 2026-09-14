@@ -10,6 +10,7 @@ import '../services/inverter_reference_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sidebar/app_layout.dart';
+import '../widgets/sidebar/nav_shell_state.dart';
 import '../widgets/ui/ui.dart';
 
 class FaultCodesPage extends StatefulWidget {
@@ -357,6 +358,8 @@ class _FaultCodesPageState extends State<FaultCodesPage>
 
   Future<void> _loadUserProfile() async {
     final profile = await _userService.getCurrentUserProfile();
+    NavShellState.cachedUserName = profile?.displayName;
+    NavShellState.cachedUserRole = profile?.role;
     if (!mounted) return;
     setState(() => _currentUser = profile);
   }
@@ -2967,8 +2970,8 @@ class _FaultCodesPageState extends State<FaultCodesPage>
     return AppLayout(
       currentPage: AppPage.faultCodes,
       title: 'Ariza Rehberi',
-      userName: _currentUser?.displayName,
-      userRole: _currentUser?.role,
+      userName: _currentUser?.displayName ?? NavShellState.cachedUserName,
+      userRole: _currentUser?.role ?? NavShellState.cachedUserRole,
       actions: _buildPageActions(),
       child: LayoutBuilder(
         builder: (context, constraints) {

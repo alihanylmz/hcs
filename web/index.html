@@ -31,6 +31,17 @@
 
   <title>istakip_app</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    /* Flutter ilk karesini boyamadan once tarayici bu sayfayi kendi
+       varsayilaniyla (veya manifest.json'daki eski Flutter-mavisi
+       "background_color" ile) ciziyordu - acilista kisa bir renkli/mavi
+       yanip sonme (flash) olusturuyordu. Uygulamanin gercek zemin
+       rengiyle (NavShellColors.pageBackground, #F5F6FA) baslatarak bu
+       yanip sonmeyi ortadan kaldiriyoruz. */
+    html, body {
+      background: #F5F6FA;
+    }
+  </style>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

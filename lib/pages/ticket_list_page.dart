@@ -31,6 +31,8 @@ import '../services/team_service.dart';
 import '../services/service_form_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sidebar/app_layout.dart';
+import '../widgets/sidebar/nav_shell_colors.dart';
+import '../widgets/sidebar/nav_shell_state.dart';
 import '../widgets/ui/ui.dart';
 import '../widgets/notifications_dropdown.dart';
 import 'pdf_viewer_page.dart';
@@ -125,8 +127,12 @@ class _TicketListPageState extends State<TicketListPage> {
   // Sayfalama: ilk etapta 50 iş, "Daha Fazla Yükle" ile artırılacak
   int _pageLimit = 50;
 
-  String? _userName;
-  String? _userRole; // Rol bilgisini tutacak değişken
+  // Profil yuklenene kadar gecen kisa surede sidebar'in yanlis
+  // (rolsuz) menuyle acilip hemen ardindan degismesini onlemek icin en
+  // son bilinen ad/rolle baslatiyoruz (bkz. NavShellState).
+  String? _userName = NavShellState.cachedUserName;
+  String? _userRole =
+      NavShellState.cachedUserRole; // Rol bilgisini tutacak değişken
   int _unreadNotifications = 0; // Okunmamış bildirim sayısı
   final GlobalKey _notifIconKey = GlobalKey();
   OverlayEntry? _notifOverlay;
@@ -265,6 +271,10 @@ class _TicketListPageState extends State<TicketListPage> {
             _userRole = profile != null ? profile['role'] as String? : null;
           });
         }
+        NavShellState.cachedUserName =
+            profile != null ? profile['full_name'] as String? : null;
+        NavShellState.cachedUserRole =
+            profile != null ? profile['role'] as String? : null;
       } catch (_) {
         // Hata olursa varsayılan değer kalır
       }
@@ -434,16 +444,18 @@ class _TicketListPageState extends State<TicketListPage> {
     final title = (ticket['title'] as String? ?? 'Is emri').trim();
     final customerName = (customer['name'] as String? ?? '').trim();
     final plannedDate = ticket['planned_date'] as String?;
-    final DateTime? dueDate = (plannedDate == null || plannedDate.isEmpty)
-        ? null
-        : DateTime.tryParse(plannedDate);
+    final DateTime? dueDate =
+        (plannedDate == null || plannedDate.isEmpty)
+            ? null
+            : DateTime.tryParse(plannedDate);
 
     final dispatchResult = await showDialog<_WorkshopDispatchData>(
       context: context,
-      builder: (ctx) => _WorkshopDispatchDialog(
-        initialTitle: jobCode.isEmpty ? title : '$jobCode / $title',
-        customerName: customerName,
-      ),
+      builder:
+          (ctx) => _WorkshopDispatchDialog(
+            initialTitle: jobCode.isEmpty ? title : '$jobCode / $title',
+            customerName: customerName,
+          ),
     );
 
     if (dispatchResult == null) return;
@@ -451,17 +463,24 @@ class _TicketListPageState extends State<TicketListPage> {
     final cardTitle = 'Atölye - ${dispatchResult.title}';
     final descriptionBuffer = StringBuffer();
     descriptionBuffer.writeln('[ATOLYE] Uretim recetesi');
-    if (customerName.isNotEmpty) descriptionBuffer.writeln('Müşteri: $customerName');
+    if (customerName.isNotEmpty)
+      descriptionBuffer.writeln('Müşteri: $customerName');
     if (jobCode.isNotEmpty) descriptionBuffer.writeln('İş Kodu: $jobCode');
     descriptionBuffer.writeln('İşlem Türü: ${dispatchResult.jobType}');
     if (dispatchResult.assignedMaster.isNotEmpty) {
-      descriptionBuffer.writeln('Atölye Sorumlusu: ${dispatchResult.assignedMaster}');
+      descriptionBuffer.writeln(
+        'Atölye Sorumlusu: ${dispatchResult.assignedMaster}',
+      );
     }
     if (dispatchResult.technicalSpecs.isNotEmpty) {
-      descriptionBuffer.writeln('\nTeknik Özellikler:\n${dispatchResult.technicalSpecs}');
+      descriptionBuffer.writeln(
+        '\nTeknik Özellikler:\n${dispatchResult.technicalSpecs}',
+      );
     }
     if (dispatchResult.masterNotes.isNotEmpty) {
-      descriptionBuffer.writeln('\nUsta İmalat Notları:\n${dispatchResult.masterNotes}');
+      descriptionBuffer.writeln(
+        '\nUsta İmalat Notları:\n${dispatchResult.masterNotes}',
+      );
     }
 
     descriptionBuffer.writeln('\nKontrol Listesi (Yapılacaklar):');
@@ -482,7 +501,9 @@ class _TicketListPageState extends State<TicketListPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('İş emri detaylı Atölye İmalat Kartı olarak atölyeye gönderildi.'),
+          content: Text(
+            'İş emri detaylı Atölye İmalat Kartı olarak atölyeye gönderildi.',
+          ),
           backgroundColor: Color(0xFF29956F),
         ),
       );
@@ -613,58 +634,91 @@ class _TicketListPageState extends State<TicketListPage> {
       if (!mounted) return;
       if (templates.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Aktif form şablonu bulunamadı. Lütfen yönetici panelinden şablon ekleyin.')));
+          const SnackBar(
+            content: Text(
+              'Aktif form şablonu bulunamadı. Lütfen yönetici panelinden şablon ekleyin.',
+            ),
+          ),
+        );
         return;
       }
       showModalBottomSheet(
         context: context,
         shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-        builder: (ctx) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ListTile(
-                title: Text('Gönderilecek Formu Seçin',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
-              const Divider(height: 1),
-              ...templates.map((tpl) => ListTile(
-                    leading: const Icon(Icons.assignment_outlined),
-                    title: Text(tpl.name),
-                    subtitle: Text(tpl.description ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
-                    trailing: const Icon(Icons.send, size: 16),
-                    onTap: () async {
-                      Navigator.pop(ctx);
-                      _createAndSendForm(ticket, tpl.id);
-                    },
-                  )),
-            ],
-          ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
+        builder:
+            (ctx) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const ListTile(
+                    title: Text(
+                      'Gönderilecek Formu Seçin',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ...templates.map(
+                    (tpl) => ListTile(
+                      leading: const Icon(Icons.assignment_outlined),
+                      title: Text(tpl.name),
+                      subtitle: Text(
+                        tpl.description ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(Icons.send, size: 16),
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        _createAndSendForm(ticket, tpl.id);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hata: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Hata: $e')));
     }
   }
 
-  void _createAndSendForm(Map<String, dynamic> ticket, String templateId) async {
+  void _createAndSendForm(
+    Map<String, dynamic> ticket,
+    String templateId,
+  ) async {
     try {
       final customerName = ticket['customer_name']?.toString().trim();
       final createdForm = await ServiceFormService().createForm(
-          ticketId: ticket['id'].toString(), templateId: templateId, customerName: customerName);
-      final url = 'https://uzalteknikservis.com/is-takip/#/service-form?id=${createdForm.id}';
-      final message = 'Merhaba,\nServis talebiniz için lütfen aşağıdaki servis öncesi hazırlık formunu onaylayınız:\n$url';
-      
-      final whatsappUrl = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(message)}');
+        ticketId: ticket['id'].toString(),
+        templateId: templateId,
+        customerName: customerName,
+      );
+      final url =
+          'https://uzalteknikservis.com/is-takip/#/service-form?id=${createdForm.id}';
+      final message =
+          'Merhaba,\nServis talebiniz için lütfen aşağıdaki servis öncesi hazırlık formunu onaylayınız:\n$url';
+
+      final whatsappUrl = Uri.parse(
+        'https://wa.me/?text=${Uri.encodeComponent(message)}',
+      );
       if (await canLaunchUrl(whatsappUrl)) {
         await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('WhatsApp açılamadı.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('WhatsApp açılamadı.')));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Form oluşturulamadı: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Form oluşturulamadı: $e')));
     }
   }
 
@@ -1516,70 +1570,6 @@ class _TicketListPageState extends State<TicketListPage> {
     );
   }
 
-  Widget _buildStatCardModern({
-    required String title,
-    required String value,
-    required Color color,
-    required IconData icon,
-    VoidCallback? onTap,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surfaceColor =
-        isDark ? const Color(0xFF162533) : AppColors.surfaceWhite;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 160,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: surfaceColor,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: color.withOpacity(0.22)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.08 : 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: color, size: 20),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                color: isDark ? Colors.white : AppColors.textDark,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: TextStyle(
-                color: isDark ? const Color(0xFFB1C0CF) : AppColors.textLight,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildTicketActionWrap(
     Map<String, dynamic> ticket, {
     required bool isWide,
@@ -1765,10 +1755,12 @@ class _TicketListPageState extends State<TicketListPage> {
 
     final statusColor = _statusColorModern(status, isDark);
     final priorityColor = _priorityColorModern(priority);
-    final surfaceColor =
-        isDark ? const Color(0xFF162533) : AppColors.surfaceWhite;
-    final borderColor =
-        isDark ? const Color(0xFF2B3A47) : AppColors.borderSubtle;
+    // Kart yuzeyi artik navigasyon kabugunun paletinden geliyor (kum
+    // rengi AppColors.surfaceWhite yerine) - is listesindeki kartlar da
+    // sidebar/ust cubuk/icerik kabugu ile ayni beyaz/gri dile uysun diye.
+    final navPalette = NavShellColors.of(context);
+    final surfaceColor = navPalette.surface;
+    final borderColor = navPalette.border;
     final primaryText = isDark ? Colors.white : AppColors.textDark;
     final secondaryText =
         isDark ? const Color(0xFFB1C0CF) : AppColors.textLight;
@@ -2502,10 +2494,9 @@ class _TicketListPageState extends State<TicketListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final supabase = Supabase.instance.client;
-    final user = supabase.auth.currentUser;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final navShellPalette = NavShellColors.of(context);
 
     return AppLayout(
       currentPage: AppPage.ticketList,
@@ -2513,7 +2504,19 @@ class _TicketListPageState extends State<TicketListPage> {
       userRole: _userRole,
       title: 'İŞ TAKİP KONTROL',
       onProfileReload: _loadUserProfile,
+      searchController: _searchController,
+      searchHint: 'İş veya Müşteri Ara...',
+      onSearchChanged: (val) => setState(() => _searchText = val),
       actions: [
+        // Filtre acma/kapama - eskiden buyuk "Hosgeldin" kartinin icinde
+        // gomulu duruyordu, artik dogrudan ust cubukta.
+        IconButton(
+          icon: Icon(
+            _filtersExpanded ? Icons.filter_list_off : Icons.filter_list,
+          ),
+          tooltip: _filtersExpanded ? 'Filtreleri gizle' : 'Filtrele',
+          onPressed: () => setState(() => _filtersExpanded = !_filtersExpanded),
+        ),
         // Bildirim Butonu
         Stack(
           key: _notifIconKey,
@@ -2622,259 +2625,31 @@ class _TicketListPageState extends State<TicketListPage> {
             final tickets = snapshot.data ?? [];
             final filtered = _getFilteredTickets(tickets);
 
-            final openCount =
-                tickets.where((e) => e['status'] == 'open').length;
-            final doneCount =
-                tickets.where((e) => e['status'] == 'done').length;
-
             return RefreshIndicator(
               onRefresh: _refresh,
               child: CustomScrollView(
                 cacheExtent: 320,
                 slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color:
-                              isDark
-                                  ? const Color(0xFF162533)
-                                  : AppColors.surfaceWhite,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color:
-                                isDark
-                                    ? const Color(0xFF2B3A47)
-                                    : AppColors.borderSubtle,
+                  // Not: eskiden burada buyuk bir "Hosgeldin, {isim}" karti
+                  // vardi (kullanici ismi zaten sidebar'da gosteriliyor,
+                  // burada tekrari gereksiz yer kaplıyordu). Filtre ac/kapa
+                  // dugmesi de ust cubuga tasindi (bkz. AppLayout actions).
+                  // Sadece filtreler acildiginda kucuk, ince bir panel
+                  // gosteriliyor.
+                  if (_filtersExpanded)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: navShellPalette.surface,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: navShellPalette.border),
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(
-                                isDark ? 0.08 : 0.03,
-                              ),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Hoşgeldin,',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color:
-                                    isDark
-                                        ? const Color(0xFFB1C0CF)
-                                        : AppColors.textLight,
-                              ),
-                            ),
-                            Text(
-                              _userName ?? user?.email ?? 'Teknisyen',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color:
-                                    isDark ? Colors.white : AppColors.textDark,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-
-                            // İstatistik Kartları
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                children: [
-                                  _buildStatCardModern(
-                                    title: 'Açık İşler',
-                                    value: openCount.toString(),
-                                    color: Colors.blue,
-                                    icon: Icons.assignment_outlined,
-                                    onTap: () {
-                                      setState(() {
-                                        _statusFilter = 'open';
-                                      });
-                                    },
-                                  ),
-                                  const SizedBox(width: 12),
-                                  _buildStatCardModern(
-                                    title: 'Biten İşler',
-                                    value: doneCount.toString(),
-                                    color: Colors.green,
-                                    icon: Icons.check_circle_outline,
-                                    onTap: () {
-                                      setState(() {
-                                        _statusFilter = 'done';
-                                      });
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            if (false)
-                              Wrap(
-                                spacing: 12,
-                                runSpacing: 12,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 12,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          isDark
-                                              ? const Color(0xFF0F2233)
-                                              : AppColors.surfaceSoft,
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color:
-                                            isDark
-                                                ? const Color(0xFF2B3A47)
-                                                : AppColors.borderSubtle,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.format_list_bulleted_rounded,
-                                          size: 18,
-                                          color:
-                                              isDark
-                                                  ? Colors.white
-                                                  : AppColors.textDark,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          '${filtered.length} iÅŸ gÃ¶rÃ¼ntÃ¼leniyor',
-                                          style: TextStyle(
-                                            color:
-                                                isDark
-                                                    ? Colors.white
-                                                    : AppColors.textDark,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  FilledButton.icon(
-                                    onPressed:
-                                        filtered.isEmpty
-                                            ? null
-                                            : () async {
-                                              await _createPdfReport(
-                                                filtered,
-                                                isFiltered: true,
-                                              );
-                                            },
-                                    icon: const Icon(
-                                      Icons.picture_as_pdf_outlined,
-                                    ),
-                                    label: const Text(
-                                      'GÃ¶rÃ¼nen Listeyi PDF Al',
-                                    ),
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: AppColors.corporateBlue,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 18,
-                                        vertical: 14,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                    ),
-                                  ),
-                                  if (_canExportAllTicketsPdf)
-                                    OutlinedButton.icon(
-                                      onPressed:
-                                          tickets.isEmpty
-                                              ? null
-                                              : () async {
-                                                final allTickets =
-                                                    await _fetchAllTicketsForReport();
-                                                await _createPdfReport(
-                                                  allTickets,
-                                                  isFiltered: false,
-                                                );
-                                              },
-                                      icon: const Icon(
-                                        Icons.inventory_2_outlined,
-                                      ),
-                                      label: const Text('TÃ¼m Listeyi PDF Al'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor:
-                                            isDark
-                                                ? Colors.white
-                                                : AppColors.textDark,
-                                        side: BorderSide(
-                                          color:
-                                              isDark
-                                                  ? const Color(0xFF2B3A47)
-                                                  : AppColors.borderStrong,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 18,
-                                          vertical: 14,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            const SizedBox(height: 24),
-
-                            // Arama ve Filtreler
-                            TextField(
-                              controller: _searchController,
-                              keyboardType: TextInputType.text,
-                              textInputAction: TextInputAction.search,
-                              enableSuggestions: true,
-                              autocorrect: true,
-                              style: const TextStyle(
-                                color: AppColors.textDark,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: AppColors.surfaceWhite,
-                                hintText: 'İş veya Müşteri Ara...',
-                                prefixIcon: const Icon(
-                                  Icons.search,
-                                  color: AppColors.textLight,
-                                ),
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _filtersExpanded
-                                        ? Icons.filter_list_off
-                                        : Icons.filter_list,
-                                    color: AppColors.textLight,
-                                  ),
-                                  onPressed:
-                                      () => setState(
-                                        () =>
-                                            _filtersExpanded =
-                                                !_filtersExpanded,
-                                      ),
-                                ),
-                              ),
-                              onChanged:
-                                  (val) => setState(() => _searchText = val),
-                            ),
-
-                            if (_filtersExpanded) ...[
-                              const SizedBox(height: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Row(
                                 children: [
                                   Expanded(
@@ -3059,11 +2834,10 @@ class _TicketListPageState extends State<TicketListPage> {
                                 ),
                               ),
                             ],
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
 
                   // Liste
                   if (filtered.isEmpty)
@@ -3162,7 +2936,8 @@ class _WorkshopDispatchDialog extends StatefulWidget {
   final String customerName;
 
   @override
-  State<_WorkshopDispatchDialog> createState() => _WorkshopDispatchDialogState();
+  State<_WorkshopDispatchDialog> createState() =>
+      _WorkshopDispatchDialogState();
 }
 
 class _WorkshopDispatchDialogState extends State<_WorkshopDispatchDialog> {
@@ -3188,8 +2963,13 @@ class _WorkshopDispatchDialogState extends State<_WorkshopDispatchDialog> {
     super.initState();
     _titleCtrl = TextEditingController(text: widget.initialTitle);
     _masterCtrl = TextEditingController();
-    _specsCtrl = TextEditingController(text: '• Güç: 37 kW / 400V\n• Kabin: IP65 Pano\n• Sürücü: Inverter Modüllü');
-    _notesCtrl = TextEditingController(text: 'Klemenslerde sarı kodlama etiketi kullanılacaktır.');
+    _specsCtrl = TextEditingController(
+      text:
+          '• Güç: 37 kW / 400V\n• Kabin: IP65 Pano\n• Sürücü: Inverter Modüllü',
+    );
+    _notesCtrl = TextEditingController(
+      text: 'Klemenslerde sarı kodlama etiketi kullanılacaktır.',
+    );
   }
 
   @override
@@ -3231,12 +3011,26 @@ class _WorkshopDispatchDialogState extends State<_WorkshopDispatchDialog> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: _jobType,
-                      decoration: const InputDecoration(labelText: 'İşlem Türü'),
+                      decoration: const InputDecoration(
+                        labelText: 'İşlem Türü',
+                      ),
                       items: const [
-                        DropdownMenuItem(value: '🏭 Pano İmalatı', child: Text('🏭 Pano İmalatı')),
-                        DropdownMenuItem(value: '🔧 Revizyon & Tamir', child: Text('🔧 Revizyon & Tamir')),
-                        DropdownMenuItem(value: '🧪 Test & Kalibrasyon', child: Text('🧪 Test & Kalibrasyon')),
-                        DropdownMenuItem(value: '📦 Saha Hazırlığı', child: Text('📦 Saha Hazırlığı')),
+                        DropdownMenuItem(
+                          value: '🏭 Pano İmalatı',
+                          child: Text('🏭 Pano İmalatı'),
+                        ),
+                        DropdownMenuItem(
+                          value: '🔧 Revizyon & Tamir',
+                          child: Text('🔧 Revizyon & Tamir'),
+                        ),
+                        DropdownMenuItem(
+                          value: '🧪 Test & Kalibrasyon',
+                          child: Text('🧪 Test & Kalibrasyon'),
+                        ),
+                        DropdownMenuItem(
+                          value: '📦 Saha Hazırlığı',
+                          child: Text('📦 Saha Hazırlığı'),
+                        ),
                       ],
                       onChanged: (v) {
                         if (v != null) setState(() => _jobType = v);
@@ -3276,20 +3070,41 @@ class _WorkshopDispatchDialogState extends State<_WorkshopDispatchDialog> {
               const SizedBox(height: 16),
               const Text(
                 'ATÖLYE KONTROL LİSTESİ (ÇEKAL):',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF2B82C9)),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF2B82C9),
+                ),
               ),
               const SizedBox(height: 6),
               Column(
-                children: _checklistItems.map((item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.check_box_outlined, size: 16, color: Color(0xFF29956F)),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(item, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
-                    ],
-                  ),
-                )).toList(),
+                children:
+                    _checklistItems
+                        .map(
+                          (item) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_box_outlined,
+                                  size: 16,
+                                  color: Color(0xFF29956F),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    item,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                        .toList(),
               ),
             ],
           ),
@@ -3318,7 +3133,9 @@ class _WorkshopDispatchDialogState extends State<_WorkshopDispatchDialog> {
           },
           icon: const Icon(Icons.send_rounded, size: 18),
           label: const Text('Atölyeye İş Emrini Gönder'),
-          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF2B82C9)),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF2B82C9),
+          ),
         ),
       ],
     );

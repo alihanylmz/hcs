@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../main.dart';
+import '../../services/app_module_service.dart';
 import '../../theme/app_colors.dart';
 import '../app_drawer.dart';
+import 'nav_shell_colors.dart';
 import 'sidebar.dart';
 
 enum AppPage {
@@ -30,6 +32,9 @@ class AppLayout extends StatelessWidget {
     this.floatingActionButton,
     this.onProfileReload,
     this.showAppBar = true,
+    this.searchController,
+    this.searchHint,
+    this.onSearchChanged,
   });
 
   final Widget child;
@@ -41,6 +46,13 @@ class AppLayout extends StatelessWidget {
   final Widget? floatingActionButton;
   final VoidCallback? onProfileReload;
   final bool showAppBar;
+  // Ust cubuktaki arama pilini gercek, calisan bir alana donusturmek icin
+  // sayfa kendi arama state'ini buraya baglar. Verilmezse pil sadece
+  // sabit "Ara..." metniyle dekoratif kalir (baglanmamis sayfalarda
+  // yaniltici olmasin diye).
+  final TextEditingController? searchController;
+  final String? searchHint;
+  final ValueChanged<String>? onSearchChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +75,6 @@ class AppLayout extends StatelessWidget {
                     userRole: userRole,
                   ),
                 ),
-                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     children: [
@@ -176,82 +187,179 @@ class AppLayout extends StatelessWidget {
 
   Widget _buildDesktopAppBar(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final palette = NavShellColors.of(context);
 
     return Container(
-      height: 72,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 18),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDarkRaised : AppColors.surfaceWhite,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
+        color: palette.surface,
+        // Sol ust kose kare: sidebar'in ust ucuyla tam bitisik, tek parca
+        // gibi duruyor.
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(12),
+          bottomLeft: Radius.circular(12),
+          bottomRight: Radius.circular(12),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        border: Border(
+          top: BorderSide(color: palette.border),
+          right: BorderSide(color: palette.border),
+          bottom: BorderSide(color: palette.border),
+        ),
       ),
       child: Row(
         children: [
           Container(
-            width: 48,
-            height: 48,
-            padding: const EdgeInsets.all(10),
+            width: 34,
+            height: 34,
+            padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
-              color:
-                  isDark ? AppColors.surfaceDarkMuted : AppColors.surfaceAccent,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
-              ),
+              color: palette.accentSoft,
+              borderRadius: BorderRadius.circular(9),
             ),
-            child: SvgPicture.asset('assets/images/log.svg'),
+            child: SvgPicture.asset(
+              'assets/images/log.svg',
+              colorFilter: ColorFilter.mode(palette.accent, BlendMode.srcIn),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: palette.textPrimary,
+            ),
           ),
           const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _pageLabel(currentPage),
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    letterSpacing: 1.2,
-                    color:
-                        isDark
-                            ? AppColors.textOnDarkMuted
-                            : AppColors.textLight,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _buildAppSwitcherChip(context, palette),
+          const SizedBox(width: 16),
+          Expanded(child: _buildSearchPill(palette)),
           if (actions != null && actions!.isNotEmpty) ...[
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             Flexible(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(children: actions!),
               ),
             ),
-            const SizedBox(width: 12),
           ],
+          const SizedBox(width: 12),
           _buildThemeToggle(context),
+          const SizedBox(width: 12),
+          Container(width: 1, height: 26, color: palette.border),
+          const SizedBox(width: 12),
+          _buildAvatar(palette),
         ],
       ),
+    );
+  }
+
+  Widget _buildAppSwitcherChip(BuildContext context, NavShellPalette palette) {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: palette.pageBackground,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: palette.accent,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Text(
+              'İş Takip',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: palette.accentOn,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: () => AppModuleService.switchToQuote(context),
+            borderRadius: BorderRadius.circular(7),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text(
+                'Teklif',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: palette.textSecondary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchPill(NavShellPalette palette) {
+    final hasSearch = searchController != null;
+
+    return Container(
+      height: 38,
+      constraints: const BoxConstraints(maxWidth: 340),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: palette.pageBackground,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.search_rounded, size: 17, color: palette.textSecondary),
+          const SizedBox(width: 8),
+          Expanded(
+            child:
+                hasSearch
+                    ? TextField(
+                      controller: searchController,
+                      onChanged: onSearchChanged,
+                      textInputAction: TextInputAction.search,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: palette.textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        isCollapsed: true,
+                        border: InputBorder.none,
+                        hintText: searchHint ?? 'Ara...',
+                        hintStyle: TextStyle(
+                          fontSize: 12.5,
+                          color: palette.textSecondary,
+                        ),
+                      ),
+                    )
+                    : Text(
+                      'Ara...',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: palette.textSecondary,
+                      ),
+                    ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvatar(NavShellPalette palette) {
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: palette.avatarBackground,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(Icons.person_rounded, size: 17, color: palette.accent),
     );
   }
 
@@ -410,24 +518,15 @@ class _DesktopContentShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = NavShellColors.of(context);
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : AppColors.surfaceWhite,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isDark ? AppColors.borderDark : AppColors.borderSubtle,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.14 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: palette.border),
       ),
-      child: ClipRRect(borderRadius: BorderRadius.circular(8), child: child),
+      child: ClipRRect(borderRadius: BorderRadius.circular(12), child: child),
     );
   }
 }
@@ -437,53 +536,12 @@ class _DashboardBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.backgroundDark : AppColors.backgroundGrey,
-          ),
-        ),
-        Positioned.fill(
-          child: CustomPaint(
-            painter: _IndustrialGridPainter(
-              color:
-                  isDark
-                      ? AppColors.borderDark.withValues(alpha: 0.18)
-                      : AppColors.borderSubtle.withValues(alpha: 0.42),
-            ),
-          ),
-        ),
-      ],
+    // Duz, acik lavanta-gri zemin (nav kabugunun referans paleti). Eski
+    // izgara dokusu ve kum rengi zemin yeni tasarimla uyumsuzdu, kaldirildi.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: NavShellColors.of(context).pageBackground,
+      ),
     );
-  }
-}
-
-class _IndustrialGridPainter extends CustomPainter {
-  const _IndustrialGridPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint =
-        Paint()
-          ..color = color
-          ..strokeWidth = 1;
-    const step = 32.0;
-    for (double x = 0; x <= size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (double y = 0; y <= size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _IndustrialGridPainter oldDelegate) {
-    return oldDelegate.color != color;
   }
 }

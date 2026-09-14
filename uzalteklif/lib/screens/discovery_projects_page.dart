@@ -186,35 +186,42 @@ class _DiscoveryProjectsPageState extends State<DiscoveryProjectsPage> {
     );
   }
 
+  // Not: navigasyon kabugu icinde gomulu gosteriliyor - ust cubuk zaten
+  // "KEŞİF" basligini gosteriyor. Eskiden buradaki kendi AppBar'i, kabugun
+  // ust cubugunun hemen altina ayni acik renkte oturunca "iki ust bar"
+  // gibi goruntuluyordu; kaldirildi, eylemler icerik alanina tasindi.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Keşif ve Nokta Analizi'),
-        actions: [
-          TextButton.icon(
-            onPressed: _openCategoryManagement,
-            icon: const Icon(Icons.category_outlined),
-            label: const Text('Kategori Yönetimi'),
-          ),
-          TextButton.icon(
-            onPressed: _openHardwareLibrary,
-            icon: const Icon(Icons.memory_rounded),
-            label: const Text('DDC/I/O Kütüphanesi'),
-          ),
-          IconButton(
-            tooltip: 'Yenile',
-            onPressed: _loading ? null : _reload,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
       body: WorkspaceBackground(
         child: SafeArea(
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: _openCategoryManagement,
+                      icon: const Icon(Icons.category_outlined),
+                      label: const Text('Kategori Yönetimi'),
+                    ),
+                    TextButton.icon(
+                      onPressed: _openHardwareLibrary,
+                      icon: const Icon(Icons.memory_rounded),
+                      label: const Text('DDC/I/O Kütüphanesi'),
+                    ),
+                    IconButton(
+                      tooltip: 'Yenile',
+                      onPressed: _loading ? null : _reload,
+                      icon: const Icon(Icons.refresh_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                 child: Row(
                   children: [
                     Expanded(
@@ -3753,17 +3760,23 @@ class _PointProductButton extends StatelessWidget {
           side: BorderSide(
             color: isExplicitlySelected
                 ? const Color(0xFF29956F)
-                : (isAutoMatched ? const Color(0xFF2B82C9) : const Color(0xFFD7DEE6)),
+                : (isAutoMatched
+                      ? const Color(0xFF2B82C9)
+                      : const Color(0xFFD7DEE6)),
             width: isAutoMatched || isExplicitlySelected ? 1.5 : 1,
           ),
           backgroundColor: isAutoMatched
               ? const Color(0xFF2B82C9).withValues(alpha: 0.06)
-              : (isExplicitlySelected ? const Color(0xFF29956F).withValues(alpha: 0.06) : null),
+              : (isExplicitlySelected
+                    ? const Color(0xFF29956F).withValues(alpha: 0.06)
+                    : null),
         ),
         icon: Icon(
           isExplicitlySelected
               ? Icons.check_circle_rounded
-              : (isAutoMatched ? Icons.auto_awesome_rounded : Icons.add_shopping_cart_rounded),
+              : (isAutoMatched
+                    ? Icons.auto_awesome_rounded
+                    : Icons.add_shopping_cart_rounded),
           size: 18,
           color: isExplicitlySelected
               ? const Color(0xFF29956F)
@@ -3779,7 +3792,9 @@ class _PointProductButton extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 12,
-              fontWeight: isAutoMatched || isExplicitlySelected ? FontWeight.w800 : FontWeight.w600,
+              fontWeight: isAutoMatched || isExplicitlySelected
+                  ? FontWeight.w800
+                  : FontWeight.w600,
               color: isAutoMatched
                   ? const Color(0xFF2B82C9)
                   : (isExplicitlySelected ? const Color(0xFF29956F) : null),
@@ -4004,10 +4019,14 @@ class _DiscoveryProductPickerDialogState
                             leading: Icon(
                               selected
                                   ? Icons.check_circle_rounded
-                                  : (isFavorite ? Icons.star_rounded : Icons.inventory_2_outlined),
+                                  : (isFavorite
+                                        ? Icons.star_rounded
+                                        : Icons.inventory_2_outlined),
                               color: selected
                                   ? const Color(0xFF29956F)
-                                  : (isFavorite ? const Color(0xFFE5A93C) : null),
+                                  : (isFavorite
+                                        ? const Color(0xFFE5A93C)
+                                        : null),
                             ),
                             title: Row(
                               children: [
@@ -4017,25 +4036,45 @@ class _DiscoveryProductPickerDialogState
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      fontWeight: isFavorite || selected ? FontWeight.w800 : FontWeight.w600,
+                                      fontWeight: isFavorite || selected
+                                          ? FontWeight.w800
+                                          : FontWeight.w600,
                                     ),
                                   ),
                                 ),
                                 if (isFavorite)
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
                                     margin: const EdgeInsets.only(left: 6),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFE5A93C).withValues(alpha: 0.15),
+                                      color: const Color(
+                                        0xFFE5A93C,
+                                      ).withValues(alpha: 0.15),
                                       borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: const Color(0xFFE5A93C)),
+                                      border: Border.all(
+                                        color: const Color(0xFFE5A93C),
+                                      ),
                                     ),
                                     child: const Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.star_rounded, size: 13, color: Color(0xFFE5A93C)),
+                                        Icon(
+                                          Icons.star_rounded,
+                                          size: 13,
+                                          color: Color(0xFFE5A93C),
+                                        ),
                                         SizedBox(width: 4),
-                                        Text('⭐ VARSAYILAN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF9D5C1D))),
+                                        Text(
+                                          '⭐ VARSAYILAN',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w900,
+                                            color: Color(0xFF9D5C1D),
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -4053,17 +4092,26 @@ class _DiscoveryProductPickerDialogState
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  tooltip: isFavorite ? 'Varsayılanlıktan Çıkar' : 'Bu Ürünü Tüm Noktalara VARSAYILAN Yap ⭐',
+                                  tooltip: isFavorite
+                                      ? 'Varsayılanlıktan Çıkar'
+                                      : 'Bu Ürünü Tüm Noktalara VARSAYILAN Yap ⭐',
                                   icon: Icon(
-                                    isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                                    color: isFavorite ? const Color(0xFFE5A93C) : const Color(0xFF5B6F7F),
+                                    isFavorite
+                                        ? Icons.star_rounded
+                                        : Icons.star_outline_rounded,
+                                    color: isFavorite
+                                        ? const Color(0xFFE5A93C)
+                                        : const Color(0xFF5B6F7F),
                                   ),
                                   onPressed: () {
                                     setState(() {
                                       if (isFavorite) {
                                         setUserFavoriteProduct(catKey, '');
                                       } else {
-                                        setUserFavoriteProduct(catKey, product.id);
+                                        setUserFavoriteProduct(
+                                          catKey,
+                                          product.id,
+                                        );
                                       }
                                     });
                                     ScaffoldMessenger.of(context).showSnackBar(
@@ -4073,7 +4121,9 @@ class _DiscoveryProductPickerDialogState
                                               ? 'Varsayılan ürün sıfırlandı.'
                                               : '⭐ "${product.name}" tüm benzer noktalar için VARSAYILAN ÜRÜN yapıldı!',
                                         ),
-                                        backgroundColor: isFavorite ? const Color(0xFF5B6F7F) : const Color(0xFF29956F),
+                                        backgroundColor: isFavorite
+                                            ? const Color(0xFF5B6F7F)
+                                            : const Color(0xFF29956F),
                                         duration: const Duration(seconds: 2),
                                       ),
                                     );
@@ -4082,7 +4132,10 @@ class _DiscoveryProductPickerDialogState
                                 const SizedBox(width: 4),
                                 recommended
                                     ? const Chip(
-                                        avatar: Icon(Icons.check_rounded, size: 16),
+                                        avatar: Icon(
+                                          Icons.check_rounded,
+                                          size: 16,
+                                        ),
                                         label: Text('Filtreye uygun'),
                                       )
                                     : const Chip(label: Text('Manuel seçim')),
@@ -4700,7 +4753,11 @@ class _PointDialogState extends State<_PointDialog> {
           children: [
             const Text(
               'EN ÇOK SEÇİLEN HAZIR ŞABLONLAR (TEK TIKLA DOLDUR)',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF2B82C9)),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF2B82C9),
+              ),
             ),
             const SizedBox(height: 6),
             Wrap(
@@ -4708,8 +4765,15 @@ class _PointDialogState extends State<_PointDialog> {
               runSpacing: 6,
               children: [
                 ActionChip(
-                  avatar: const Icon(Icons.thermostat_rounded, size: 16, color: Color(0xFF2B82C9)),
-                  label: const Text('Sıcaklık Sensörü (AI)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  avatar: const Icon(
+                    Icons.thermostat_rounded,
+                    size: 16,
+                    color: Color(0xFF2B82C9),
+                  ),
+                  label: const Text(
+                    'Sıcaklık Sensörü (AI)',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
                   onPressed: () {
                     setState(() {
                       _nameController.text = 'Sıcaklık Sensörü';
@@ -4719,8 +4783,15 @@ class _PointDialogState extends State<_PointDialog> {
                   },
                 ),
                 ActionChip(
-                  avatar: const Icon(Icons.power_rounded, size: 16, color: Color(0xFF29956F)),
-                  label: const Text('Fan / Pompa Çalıştı Durum (DI)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  avatar: const Icon(
+                    Icons.power_rounded,
+                    size: 16,
+                    color: Color(0xFF29956F),
+                  ),
+                  label: const Text(
+                    'Fan / Pompa Çalıştı Durum (DI)',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
                   onPressed: () {
                     setState(() {
                       _nameController.text = 'Çalıştı Durum Bilgisi';
@@ -4730,8 +4801,15 @@ class _PointDialogState extends State<_PointDialog> {
                   },
                 ),
                 ActionChip(
-                  avatar: const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFC95A2B)),
-                  label: const Text('Arıza / Alarm Bilgisi (DI)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  avatar: const Icon(
+                    Icons.warning_amber_rounded,
+                    size: 16,
+                    color: Color(0xFFC95A2B),
+                  ),
+                  label: const Text(
+                    'Arıza / Alarm Bilgisi (DI)',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
                   onPressed: () {
                     setState(() {
                       _nameController.text = 'Arıza Alarm Bilgisi';
@@ -4741,8 +4819,15 @@ class _PointDialogState extends State<_PointDialog> {
                   },
                 ),
                 ActionChip(
-                  avatar: const Icon(Icons.speed_rounded, size: 16, color: Color(0xFF8B5CC7)),
-                  label: const Text('Hız Kontrolü / Inverter (AO)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  avatar: const Icon(
+                    Icons.speed_rounded,
+                    size: 16,
+                    color: Color(0xFF8B5CC7),
+                  ),
+                  label: const Text(
+                    'Hız Kontrolü / Inverter (AO)',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
                   onPressed: () {
                     setState(() {
                       _nameController.text = 'Frekans Sürücü Hız Kontrolü';
@@ -4752,8 +4837,15 @@ class _PointDialogState extends State<_PointDialog> {
                   },
                 ),
                 ActionChip(
-                  avatar: const Icon(Icons.settings_input_component_rounded, size: 16, color: Color(0xFF17304C)),
-                  label: const Text('Damper / Vana Kumanda (DO)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  avatar: const Icon(
+                    Icons.settings_input_component_rounded,
+                    size: 16,
+                    color: Color(0xFF17304C),
+                  ),
+                  label: const Text(
+                    'Damper / Vana Kumanda (DO)',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
                   onPressed: () {
                     setState(() {
                       _nameController.text = 'Damper Motoru Otomatik Kumanda';

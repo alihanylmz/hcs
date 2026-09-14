@@ -17,12 +17,20 @@ class ProfileSettingsPage extends StatefulWidget {
     required this.themePreferenceService,
     required this.ownCompanyRepository,
     this.onSignOut,
+    this.showOwnAppBar = true,
   });
 
   final UserProfileRepository repository;
   final ThemePreferenceService themePreferenceService;
   final OwnCompanyRepository ownCompanyRepository;
   final Future<void> Function()? onSignOut;
+  // Genis ekranda navigasyon kabugunun kendi ust cubugu zaten var - bu
+  // sayfanin kendi AppBar'i onun hemen altina ayni acik renkte oturunca
+  // "iki ust bar" gibi goruntuluyordu. Dar ekranda (alt gezinme cubuklu
+  // kompakt mod) kabugun ust cubugu yok, o yuzden orada bu sayfanin
+  // kendi AppBar'i tek baslik/aksiyon kaynagi olarak kalmali - shell bunu
+  // `false` (genis) / `true` (dar, varsayilan) olarak veriyor.
+  final bool showOwnAppBar;
 
   @override
   State<ProfileSettingsPage> createState() => _ProfileSettingsPageState();
@@ -165,56 +173,68 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     );
   }
 
+  List<Widget> _headerActions(bool compact) {
+    return [
+      if (widget.onSignOut != null && compact)
+        IconButton(
+          tooltip: 'Çıkış',
+          onPressed: widget.onSignOut,
+          icon: const Icon(Icons.logout_rounded),
+        ),
+      if (!_loading)
+        compact
+            ? IconButton(
+                tooltip: 'PDF Firma Bilgileri',
+                onPressed: _openCompanySettings,
+                icon: const Icon(Icons.apartment_rounded),
+              )
+            : TextButton.icon(
+                onPressed: _openCompanySettings,
+                icon: const Icon(Icons.apartment_rounded),
+                label: const Text('PDF Firma Bilgileri'),
+              ),
+      if (!_loading)
+        compact
+            ? IconButton(
+                tooltip: 'Kaydet',
+                onPressed: _saving ? null : _save,
+                icon: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_rounded),
+              )
+            : TextButton(
+                onPressed: _saving ? null : _save,
+                child: _saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Kaydet'),
+              ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 700;
+    // Not: genis ekranda navigasyon kabugunun kendi ust cubugu zaten
+    // "PROFIL" basligini gosteriyor - bu sayfanin kendi AppBar'i onun
+    // hemen altina oturunca "iki ust bar" gibi goruntuluyordu. Dar
+    // ekranda (kabugun kendi ust cubugu olmadigi alt-gezinme modu) bu
+    // AppBar tek baslik/aksiyon kaynagi oldugu icin korunuyor.
+    final showAppBar = widget.showOwnAppBar || compact;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profil'),
-        actions: [
-          if (widget.onSignOut != null && compact)
-            IconButton(
-              tooltip: 'Çıkış',
-              onPressed: widget.onSignOut,
-              icon: const Icon(Icons.logout_rounded),
-            ),
-          if (!_loading)
-            compact
-                ? IconButton(
-                    tooltip: 'PDF Firma Bilgileri',
-                    onPressed: _openCompanySettings,
-                    icon: const Icon(Icons.apartment_rounded),
-                  )
-                : TextButton.icon(
-                    onPressed: _openCompanySettings,
-                    icon: const Icon(Icons.apartment_rounded),
-                    label: const Text('PDF Firma Bilgileri'),
-                  ),
-          if (!_loading)
-            compact
-                ? IconButton(
-                    tooltip: 'Kaydet',
-                    onPressed: _saving ? null : _save,
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.save_rounded),
-                  )
-                : TextButton(
-                    onPressed: _saving ? null : _save,
-                    child: _saving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Kaydet'),
-                  ),
-        ],
-      ),
+      appBar: showAppBar
+          ? AppBar(
+              title: const Text('Profil'),
+              actions: _headerActions(compact),
+            )
+          : null,
       body: WorkspaceBackground(
         child: SafeArea(
           child: _loading
@@ -226,6 +246,14 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        if (!showAppBar)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: _headerActions(compact),
+                            ),
+                          ),
                         if (!widget.repository.isRemoteReady)
                           Card(
                             child: Padding(

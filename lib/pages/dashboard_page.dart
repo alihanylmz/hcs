@@ -10,6 +10,7 @@ import '../features/admin/application/admin_access_controller.dart';
 import '../models/ticket_status.dart';
 import '../widgets/access_denied_view.dart';
 import '../widgets/sidebar/app_layout.dart';
+import '../widgets/sidebar/nav_shell_state.dart';
 import '../services/permission_service.dart';
 import '../services/partner_service.dart';
 import '../models/user_profile.dart';
@@ -1000,6 +1001,8 @@ class _DashboardPageState extends State<DashboardPage> {
         return;
       }
 
+      NavShellState.cachedUserName = profile?.displayName;
+      NavShellState.cachedUserRole = profile?.role;
       setState(() {
         _currentUser = profile;
       });
@@ -1306,8 +1309,8 @@ class _DashboardPageState extends State<DashboardPage> {
     if (!_isLoading && !PermissionService.canAccessAdminArea(_currentUser)) {
       return AppLayout(
         currentPage: AppPage.dashboard,
-        userName: _currentUser?.displayName,
-        userRole: _currentUser?.role,
+        userName: _currentUser?.displayName ?? NavShellState.cachedUserName,
+        userRole: _currentUser?.role ?? NavShellState.cachedUserRole,
         title: 'Yetkisiz Erişim',
         child: const AccessDeniedView(
           message:
@@ -1318,8 +1321,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return AppLayout(
       currentPage: AppPage.dashboard,
-      userName: _currentUser?.displayName,
-      userRole: _currentUser?.role,
+      userName: _currentUser?.displayName ?? NavShellState.cachedUserName,
+      userRole: _currentUser?.role ?? NavShellState.cachedUserRole,
       title: _getAppBarTitle(),
       actions: [
         // Management menu (only for admin/manager)

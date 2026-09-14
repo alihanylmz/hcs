@@ -23,6 +23,7 @@ class CarilerPage extends StatefulWidget {
     this.priceAdjustmentRuleRepository,
     this.userProfileRepository,
     this.isManager = false,
+    this.embedded = false,
   });
 
   final CariRepository repository;
@@ -33,6 +34,13 @@ class CarilerPage extends StatefulWidget {
   final PriceAdjustmentRuleRepository? priceAdjustmentRuleRepository;
   final UserProfileRepository? userProfileRepository;
   final bool isManager;
+  // Navigasyon kabugu (Sidebar + ust cubuk) icinde gomulu gosterilirken
+  // true verilir: kendi AppBar'ini cizmez (kabugun ust cubugu zaten
+  // basligi gosteriyor - ikisi ust uste "cift header" gibi duruyordu).
+  // Teklif editorunden "Carileri yonet" olarak bagimsiz bir sayfa gibi
+  // acildiginda (Navigator.push) false kalir, boylece geri donus icin
+  // kendi AppBar'ini korur.
+  final bool embedded;
 
   @override
   State<CarilerPage> createState() => _CarilerPageState();
@@ -194,25 +202,70 @@ class _CarilerPageState extends State<CarilerPage> {
     }
   }
 
+  Widget _buildArchiveToggle() {
+    return IconButton(
+      tooltip: _showArchived
+          ? 'Aktif carileri göster'
+          : 'Arşivlenmiş carileri göster',
+      onPressed: _loading
+          ? null
+          : () => setState(() => _showArchived = !_showArchived),
+      icon: Icon(
+        _showArchived ? Icons.inventory_2_rounded : Icons.archive_outlined,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final content = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : !widget.repository.isRemoteReady
+        ? const Center(child: Text('Cariler icin oturum ve Supabase gerekli.'))
+        : Column(
+            children: [
+              if (widget.embedded)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      _buildArchiveToggle(),
+                      IconButton(
+                        tooltip: 'Yenile',
+                        onPressed: _loading ? null : _reload,
+                        icon: const Icon(Icons.refresh_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+              _buildControlBar(),
+              Expanded(child: _buildCariWorkspace()),
+            ],
+          );
+
+    // Not: navigasyon kabugu icinde gomulu gosterilirken (embedded: true)
+    // kendi AppBar'ini cizmiyor - kabugun ust cubugu zaten basligi
+    // gosteriyor, ikisi ust uste "cift header" gibi duruyordu. Teklif
+    // editorunden bagimsiz bir sayfa olarak acildiginda AppBar korunuyor.
+    if (widget.embedded) {
+      return Scaffold(
+        body: WorkspaceBackground(child: SafeArea(child: content)),
+        floatingActionButton: widget.repository.isRemoteReady
+            ? FloatingActionButton.extended(
+                onPressed: () => _edit(null),
+                icon: const Icon(Icons.add_business_rounded),
+                label: const Text('Cari ekle'),
+              )
+            : null,
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Cari 360'),
         actions: [
-          IconButton(
-            tooltip: _showArchived
-                ? 'Aktif carileri göster'
-                : 'Arşivlenmiş carileri göster',
-            onPressed: _loading
-                ? null
-                : () => setState(() => _showArchived = !_showArchived),
-            icon: Icon(
-              _showArchived
-                  ? Icons.inventory_2_rounded
-                  : Icons.archive_outlined,
-            ),
-          ),
+          _buildArchiveToggle(),
           IconButton(
             tooltip: 'Yenile',
             onPressed: _loading ? null : _reload,
@@ -220,22 +273,7 @@ class _CarilerPageState extends State<CarilerPage> {
           ),
         ],
       ),
-      body: WorkspaceBackground(
-        child: SafeArea(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : !widget.repository.isRemoteReady
-              ? const Center(
-                  child: Text('Cariler icin oturum ve Supabase gerekli.'),
-                )
-              : Column(
-                  children: [
-                    _buildControlBar(),
-                    Expanded(child: _buildCariWorkspace()),
-                  ],
-                ),
-        ),
-      ),
+      body: WorkspaceBackground(child: SafeArea(child: content)),
       floatingActionButton: widget.repository.isRemoteReady
           ? FloatingActionButton.extended(
               onPressed: () => _edit(null),

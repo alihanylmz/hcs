@@ -35,6 +35,7 @@ class MyWorkspacePage extends StatefulWidget {
     required this.personalNoteRepository,
     required this.isManager,
     this.currentUserName = '',
+    this.embedded = false,
   });
 
   final QuoteRepository quoteRepository;
@@ -47,6 +48,14 @@ class MyWorkspacePage extends StatefulWidget {
   final PersonalNoteRepository personalNoteRepository;
   final bool isManager;
   final String currentUserName;
+  // Navigasyon kabugu (Sidebar + ust cubuk) icinde "Masam" sekmesi olarak
+  // gomulu gosterilirken true verilir: kendi baslik cubugunu (geri oku +
+  // "Personel Çalışma Masası" basligi) cizmez - kabugun ust cubugu zaten
+  // "MASAM" basligini gosteriyor, ikisi ust uste "iki ust bar" gibi
+  // duruyordu. Teklifler sayfasindaki "Çalışma Masam" butonundan
+  // Navigator.push ile bagimsiz sayfa olarak acildiginda false kalir,
+  // boylece geri donus icin kendi basligini korur.
+  final bool embedded;
 
   @override
   State<MyWorkspacePage> createState() => _MyWorkspacePageState();
@@ -126,17 +135,23 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
     }).toList();
   }
 
-  Future<void> _openNoteEditor({PersonalNote? existing, DateTime? forDay}) async {
+  Future<void> _openNoteEditor({
+    PersonalNote? existing,
+    DateTime? forDay,
+  }) async {
     final result = await showDialog<_NoteEditorResult>(
       context: context,
-      builder: (ctx) => _NoteEditorDialog(existing: existing, initialDay: forDay),
+      builder: (ctx) =>
+          _NoteEditorDialog(existing: existing, initialDay: forDay),
     );
     if (result == null) return;
 
     if (result.delete && existing != null) {
       await widget.personalNoteRepository.delete(existing.id);
       if (!mounted) return;
-      setState(() => _notes = _notes.where((n) => n.id != existing.id).toList());
+      setState(
+        () => _notes = _notes.where((n) => n.id != existing.id).toList(),
+      );
       return;
     }
 
@@ -164,9 +179,7 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
       await widget.personalNoteRepository.update(updated);
       if (!mounted) return;
       setState(() {
-        _notes = _notes
-            .map((n) => n.id == updated.id ? updated : n)
-            .toList();
+        _notes = _notes.map((n) => n.id == updated.id ? updated : n).toList();
       });
     }
   }
@@ -246,13 +259,22 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
         child: SafeArea(
           child: Column(
             children: [
-              _buildTopHeader(context),
+              if (!widget.embedded) _buildTopHeader(context),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (widget.embedded)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: IconButton(
+                            tooltip: 'Verileri Yenile',
+                            onPressed: _loadData,
+                            icon: const Icon(Icons.refresh_rounded),
+                          ),
+                        ),
                       // Personel Secici & Hosgeldin Karti
                       _buildWelcomeCard(context, quotes.length),
                       const SizedBox(height: 16),
@@ -332,8 +354,7 @@ class _MyWorkspacePageState extends State<MyWorkspacePage> {
                             quotes: quotes,
                             onQuoteTap: _openQuoteReview,
                             personalNotes: _notes,
-                            onAddNote: (day) =>
-                                _openNoteEditor(forDay: day),
+                            onAddNote: (day) => _openNoteEditor(forDay: day),
                             onEditNote: (note) =>
                                 _openNoteEditor(existing: note),
                             onToggleNoteDone: _toggleNoteDone,
@@ -1339,7 +1360,10 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
                     style: const TextStyle(fontSize: 13),
                   ),
                 ),
-                TextButton(onPressed: _pickDate, child: const Text('Tarih sec')),
+                TextButton(
+                  onPressed: _pickDate,
+                  child: const Text('Tarih sec'),
+                ),
                 if (_date != null)
                   IconButton(
                     tooltip: 'Tarihi kaldir',

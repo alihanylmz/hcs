@@ -18,6 +18,7 @@ import '../services/quote_repository.dart';
 import '../services/user_profile_repository.dart';
 import '../widgets/workspace_background.dart';
 import 'quote_editor_page.dart';
+import 'quote_revision_history_sheet.dart';
 
 /// Teklifin yonetici tarafindan onaylandigi/reddedildigi/revizyona
 /// yollandigi read-only inceleme ekrani.
@@ -1673,21 +1674,40 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
               ),
             ),
             if (_quote.revisionCount > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
+              InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () => showQuoteRevisionHistorySheet(
+                  context,
+                  quoteRepository: widget.quoteRepository,
+                  currentQuote: _quote,
                 ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF4E0),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: const Color(0xFFE3B86C)),
-                ),
-                child: Text(
-                  'Rev ${_quote.revisionCount}',
-                  style: const TextStyle(
-                    color: Color(0xFF9D5C1D),
-                    fontWeight: FontWeight.w900,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF4E0),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0xFFE3B86C)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Rev ${_quote.revisionCount}',
+                        style: const TextStyle(
+                          color: Color(0xFF9D5C1D),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.history_rounded,
+                        size: 14,
+                        color: Color(0xFF9D5C1D),
+                      ),
+                    ],
                   ),
                 ),
               ),

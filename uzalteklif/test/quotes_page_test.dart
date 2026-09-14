@@ -81,7 +81,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Teklif Takip'), findsOneWidget);
+    // Not: "Teklif Takip" basligi, sayfa artik navigasyon kabugu (Sidebar +
+    // ust cubuk) icinde gomulu gosterildigi icin kaldirildi - ust cubuk
+    // zaten "TEKLIFLER" basligini gosteriyor, sayfanin kendi AppBar'i ile
+    // ust uste "cift header" gibi duruyordu. Bu testte artik tasma
+    // (overflow) olmadigini dogrulamak yeterli.
+    expect(find.text('Liste (0)'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

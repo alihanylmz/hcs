@@ -4,8 +4,10 @@ import 'package:intl/intl.dart';
 import '../models/card.dart';
 import '../models/ticket_linked_team_card.dart';
 import '../services/card_service.dart';
+import '../services/user_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sidebar/app_layout.dart';
+import '../widgets/sidebar/nav_shell_state.dart';
 import 'ticket_detail_page.dart';
 import 'workshop_recipe_page.dart';
 
@@ -18,13 +20,35 @@ class WorkshopPage extends StatefulWidget {
 
 class _WorkshopPageState extends State<WorkshopPage> {
   final CardService _cardService = CardService();
+  final UserService _userService = UserService();
   late Future<List<TicketLinkedTeamCard>> _cardsFuture;
   String _statusFilter = 'active';
+  // Profil yuklenene kadar gecen kisa surede sidebar'in yanlis (rolsuz)
+  // menuyle acilip hemen ardindan degismesini onlemek icin en son
+  // bilinen ad/rolle baslatiyoruz (bkz. NavShellState).
+  String? _userName = NavShellState.cachedUserName;
+  String? _userRole = NavShellState.cachedUserRole;
 
   @override
   void initState() {
     super.initState();
     _cardsFuture = _cardService.getWorkshopCards();
+    _loadUserProfile();
+  }
+
+  // Not: bu sayfa daha once userName/userRole'u AppLayout'a hic
+  // vermiyordu. Sonucta rol bazli menu ogeleri (Stok, Yonetici Panosu)
+  // sadece bu sayfada gizli kaliyordu - "sidebar sayfadan sayfaya
+  // degisiyor" sikayetinin gercek nedeni buydu.
+  Future<void> _loadUserProfile() async {
+    final profile = await _userService.getCurrentUserProfile();
+    NavShellState.cachedUserName = profile?.displayName;
+    NavShellState.cachedUserRole = profile?.role;
+    if (!mounted) return;
+    setState(() {
+      _userName = profile?.displayName;
+      _userRole = profile?.role;
+    });
   }
 
   Future<void> _refresh() async {
@@ -68,6 +92,9 @@ class _WorkshopPageState extends State<WorkshopPage> {
     return AppLayout(
       currentPage: AppPage.workshop,
       title: 'Atolye Imalat',
+      userName: _userName,
+      userRole: _userRole,
+      onProfileReload: _loadUserProfile,
       child: FutureBuilder<List<TicketLinkedTeamCard>>(
         future: _cardsFuture,
         builder: (context, snapshot) {

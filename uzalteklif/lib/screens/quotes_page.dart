@@ -349,54 +349,14 @@ class _QuotesPageState extends State<QuotesPage> {
   @override
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 700;
+    // Not: bu sayfa artik navigasyon kabugu (Sidebar + ust cubuk) icinde
+    // gomulu goruntuleniyor - ust cubuk zaten "TEKLIFLER" basligini
+    // gosteriyor. Eskiden burada kendi `AppBar`'i vardi; kabugun ust
+    // cubugunun HEMEN altina, ayni acik renkte, kesintisiz bicimde
+    // oturunca "iki ust bar" gibi gorunuyordu. Baslik/altyazi kaldirildi,
+    // ama "Çalışma Masam" ve "Yenile" eylemleri icerik alaninin en
+    // ustune tasindi.
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Teklif Takip',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.2,
-              ),
-            ),
-            if (!compact)
-              Text(
-                'Aktif süreçler, kapanan teklifler ve resmi PDF çıktıları',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.88),
-                  fontWeight: FontWeight.w600,
-                  height: 1.25,
-                ),
-              ),
-          ],
-        ),
-        actions: [
-          FilledButton.icon(
-            onPressed: _isLoading ? null : _openMyWorkspace,
-            icon: const Icon(Icons.badge_rounded, size: 18),
-            label: Text(compact ? 'Masam' : 'Çalışma Masam'),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF254B75),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              textStyle: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          IconButton(
-            tooltip: 'Yenile',
-            onPressed: _isLoading ? null : _reload,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isLoading ? null : _openNewQuote,
         icon: const Icon(Icons.add_chart_rounded),
@@ -415,7 +375,45 @@ class _QuotesPageState extends State<QuotesPage> {
                         compact ? 8 : 16,
                         0,
                       ),
-                      child: _buildQuoteControlBar(),
+                      child: Row(
+                        children: [Expanded(child: _buildQuoteControlBar())],
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        compact ? 8 : 16,
+                        8,
+                        compact ? 8 : 16,
+                        0,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: _isLoading ? null : _openMyWorkspace,
+                            icon: const Icon(Icons.badge_rounded, size: 18),
+                            label: Text(compact ? 'Masam' : 'Çalışma Masam'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF254B75),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              textStyle: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          IconButton(
+                            tooltip: 'Yenile',
+                            onPressed: _isLoading ? null : _reload,
+                            icon: const Icon(Icons.refresh_rounded),
+                          ),
+                        ],
+                      ),
                     ),
                     Expanded(
                       child: _workspaceView == _QuoteWorkspaceView.list

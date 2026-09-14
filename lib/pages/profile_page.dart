@@ -3,8 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/user_service.dart';
 import '../services/permission_service.dart';
 import '../models/user_profile.dart';
-import '../widgets/app_drawer.dart';
 import '../theme/app_colors.dart';
+import '../widgets/sidebar/app_layout.dart';
+import '../widgets/sidebar/nav_shell_state.dart';
 import 'user_management_page.dart';
 import 'signature_page.dart'; // <--- Eklendi
 import 'dart:convert'; // base64 için
@@ -21,7 +22,6 @@ class _ProfilePageState extends State<ProfilePage> {
   UserProfile? _userProfile;
   bool _isLoading = true;
   final _nameController = TextEditingController();
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -38,6 +38,8 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _loadProfile() async {
     setState(() => _isLoading = true);
     final profile = await _userService.getCurrentUserProfile();
+    NavShellState.cachedUserName = profile?.fullName;
+    NavShellState.cachedUserRole = profile?.role;
     if (mounted) {
       setState(() {
         _userProfile = profile;
@@ -92,420 +94,409 @@ class _ProfilePageState extends State<ProfilePage> {
     final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
     final textColor = isDark ? Colors.white : AppColors.corporateNavy;
 
-    if (_isLoading) {
-      return Scaffold(
-        key: _scaffoldKey,
-        backgroundColor: bgColor,
-        drawer: AppDrawer(
-          currentPage: AppDrawerPage.profile,
-          userName: _userProfile?.fullName,
-          userRole: _userProfile?.role,
-        ),
-        body: const Center(
-          child: CircularProgressIndicator(color: AppColors.corporateNavy),
-        ),
-      );
-    }
+    final content =
+        _isLoading
+            ? const Center(
+              child: CircularProgressIndicator(color: AppColors.corporateNavy),
+            )
+            : _buildBody(
+              context,
+              isDark: isDark,
+              bgColor: bgColor,
+              textColor: textColor,
+              cardColor: cardColor,
+            );
 
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: bgColor,
-      drawer: AppDrawer(
-        currentPage: AppDrawerPage.profile,
-        userName: _userProfile?.fullName,
-        userRole: _userProfile?.role,
-      ),
-      extendBodyBehindAppBar: true, // Header'ın en tepeye kadar çıkması için
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.menu, color: Colors.white),
-          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+    return AppLayout(
+      title: 'Profilim',
+      currentPage: AppPage.profile,
+      userName: _userProfile?.fullName ?? NavShellState.cachedUserName,
+      userRole: _userProfile?.role ?? NavShellState.cachedUserRole,
+      onProfileReload: _loadProfile,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.logout),
+          tooltip: 'Çıkış Yap',
+          onPressed: _signOut,
         ),
-        title: const Text(
-          'Profilim',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            tooltip: 'Çıkış Yap',
-            onPressed: _signOut,
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // --- 1. HEADER & AVATAR ALANI ---
-            Stack(
-              alignment: Alignment.bottomCenter,
-              clipBehavior: Clip.none,
-              children: [
-                // Lacivert Arka Plan
-                Container(
-                  height: 240,
-                  decoration: const BoxDecoration(
-                    color: AppColors.corporateNavy,
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(32),
-                      bottomRight: Radius.circular(32),
-                    ),
-                  ),
-                ),
-                // Dekoratif Daireler (Arka plan süsü)
-                Positioned(
-                  top: -50,
-                  right: -50,
-                  child: Container(
-                    width: 200,
-                    height: 200,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-                // Profil Resmi (Taşan Kısım)
-                Positioned(
-                  bottom: -60,
-                  child: Container(
-                    padding: const EdgeInsets.all(
-                      4,
-                    ), // Beyaz çerçeve için boşluk
-                    decoration: BoxDecoration(
-                      color:
-                          bgColor, // Arka plan rengiyle aynı olsun ki kesik gibi dursun
-                      shape: BoxShape.circle,
-                    ),
-                    child: CircleAvatar(
-                      radius: 60,
-                      backgroundColor:
-                          isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                      child: Text(
-                        (_userProfile?.displayName ?? 'A')
-                            .substring(0, 1)
-                            .toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 48,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+      ],
+      child: content,
+    );
+  }
 
-            const SizedBox(height: 70), // Avatar boşluğu
-            // --- 2. İSİM VE ROL BİLGİSİ ---
-            Text(
-              _userProfile?.displayName ?? 'İsimsiz Kullanıcı',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: textColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.corporateNavy.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: AppColors.corporateNavy.withOpacity(0.2),
-                ),
-              ),
-              child: Text(
-                _getRoleLabel(_userProfile?.role),
-                style: const TextStyle(
+  Widget _buildBody(
+    BuildContext context, {
+    required bool isDark,
+    required Color bgColor,
+    required Color textColor,
+    required Color cardColor,
+  }) {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // --- 1. HEADER & AVATAR ALANI ---
+          Stack(
+            alignment: Alignment.bottomCenter,
+            clipBehavior: Clip.none,
+            children: [
+              // Lacivert Arka Plan (artik icerik kabugunun ust kenarina
+              // gomulu, tam ekran degil - AppLayout'un beyaz/kenarlikli
+              // kutusu icinde duruyor)
+              Container(
+                height: 200,
+                decoration: const BoxDecoration(
                   color: AppColors.corporateNavy,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12),
+                    bottomLeft: Radius.circular(32),
+                    bottomRight: Radius.circular(32),
+                  ),
                 ),
               ),
+              // Dekoratif Daireler (Arka plan süsü)
+              Positioned(
+                top: -20,
+                right: -50,
+                child: Container(
+                  width: 200,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+              // Profil Resmi (Taşan Kısım)
+              Positioned(
+                bottom: -60,
+                child: Container(
+                  padding: const EdgeInsets.all(4), // Beyaz çerçeve için boşluk
+                  decoration: BoxDecoration(
+                    color:
+                        bgColor, // Arka plan rengiyle aynı olsun ki kesik gibi dursun
+                    shape: BoxShape.circle,
+                  ),
+                  child: CircleAvatar(
+                    radius: 60,
+                    backgroundColor:
+                        isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                    child: Text(
+                      (_userProfile?.displayName ?? 'A')
+                          .substring(0, 1)
+                          .toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 48,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 70), // Avatar boşluğu
+          // --- 2. İSİM VE ROL BİLGİSİ ---
+          Text(
+            _userProfile?.displayName ?? 'İsimsiz Kullanıcı',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: textColor,
             ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.corporateNavy.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: AppColors.corporateNavy.withOpacity(0.2),
+              ),
+            ),
+            child: Text(
+              _getRoleLabel(_userProfile?.role),
+              style: const TextStyle(
+                color: AppColors.corporateNavy,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ),
 
-            const SizedBox(height: 32),
+          const SizedBox(height: 32),
 
-            // --- 3. DÜZENLEME FORMU ---
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  _buildProfileCard(
-                    context,
-                    title: 'Kişisel Bilgiler',
-                    icon: Icons.person_outline,
-                    cardColor: cardColor,
-                    children: [
-                      _buildTextField(
-                        label: 'Ad Soyad',
-                        controller: _nameController,
-                        icon: Icons.badge_outlined,
-                        isEditable: true,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildTextField(
-                        label: 'E-posta Adresi',
-                        initialValue: _userProfile?.email,
-                        icon: Icons.email_outlined,
-                        isEditable: false, // E-posta değişmez
-                        isDark: isDark,
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // --- İMZA AYARLARI ---
-                  _buildProfileCard(
-                    context,
-                    title: 'İmza Ayarları',
-                    icon: Icons.draw_outlined,
-                    cardColor: cardColor,
-                    children: [
-                      if (_userProfile?.signatureData != null) ...[
-                        Container(
-                          height: 120,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color:
-                                isDark ? Colors.black26 : Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: AppColors.corporateNavy.withOpacity(0.2),
-                            ),
-                          ),
-                          child: Stack(
-                            children: [
-                              Center(
-                                child: Image.memory(
-                                  base64Decode(_userProfile!.signatureData!),
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
-                              Positioned(
-                                top: 4,
-                                right: 4,
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.delete_outline,
-                                    color: Colors.red,
-                                  ),
-                                  onPressed: () async {
-                                    final confirm = await showDialog<bool>(
-                                      context: context,
-                                      builder:
-                                          (ctx) => AlertDialog(
-                                            title: const Text('İmzayı Sil'),
-                                            content: const Text(
-                                              'Kayıtlı imzanızı silmek istediğinize emin misiniz?',
-                                            ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed:
-                                                    () => Navigator.pop(
-                                                      ctx,
-                                                      false,
-                                                    ),
-                                                child: const Text('İptal'),
-                                              ),
-                                              TextButton(
-                                                onPressed:
-                                                    () => Navigator.pop(
-                                                      ctx,
-                                                      true,
-                                                    ),
-                                                child: const Text(
-                                                  'Sil',
-                                                  style: TextStyle(
-                                                    color: Colors.red,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                    );
-                                    if (confirm == true) {
-                                      setState(() => _isLoading = true);
-                                      try {
-                                        await _userService.clearSignature(
-                                          _userProfile!.id,
-                                        );
-                                        await _loadProfile();
-                                        if (mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'İmza başarıyla silindi',
-                                              ),
-                                              backgroundColor: Colors.green,
-                                            ),
-                                          );
-                                        }
-                                      } catch (e) {
-                                        if (mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text('Hata: $e'),
-                                              backgroundColor: Colors.red,
-                                            ),
-                                          );
-                                        }
-                                      } finally {
-                                        if (mounted)
-                                          setState(() => _isLoading = false);
-                                      }
-                                    }
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: () async {
-                              final result = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (_) => SignaturePage(
-                                        ticketId: 'PROFILE_SETUP',
-                                        type: SignatureType.technician,
-                                      ),
-                                ),
-                              );
-                              if (result == true) {
-                                _loadProfile();
-                              }
-                            },
-                            icon: const Icon(Icons.edit_outlined),
-                            label: const Text('İMZAYI GÜNCELLE'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.corporateNavy,
-                              side: const BorderSide(
-                                color: AppColors.corporateNavy,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ] else ...[
-                        const Text(
-                          'Kayıtlı imzanız bulunmamaktadır. PDF raporlarında kullanılmak üzere imza ekleyin.',
-                          style: TextStyle(fontSize: 13, color: Colors.grey),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () async {
-                              final result = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (_) => SignaturePage(
-                                        ticketId: 'PROFILE_SETUP',
-                                        type: SignatureType.technician,
-                                      ),
-                                ),
-                              );
-                              if (result == true) {
-                                _loadProfile();
-                              }
-                            },
-                            icon: const Icon(Icons.add),
-                            label: const Text('İMZA EKLE'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.corporateNavy,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-
-                  // Sadece Yönetici Görür
-                  if (PermissionService.hasPermission(
-                    _userProfile,
-                    AppPermission.viewProfileAdminTools,
-                  )) ...[
-                    const SizedBox(height: 20),
-                    _buildActionCard(
-                      context,
-                      title: 'Kullanıcı Yönetimi',
-                      subtitle: 'Personel yetkilerini ve hesaplarını düzenle',
-                      icon: Icons.admin_panel_settings_outlined,
-                      color: Colors.orange.shade700,
-                      cardColor: cardColor,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const UserManagementPage(),
-                          ),
-                        );
-                      },
+          // --- 3. DÜZENLEME FORMU ---
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              children: [
+                _buildProfileCard(
+                  context,
+                  title: 'Kişisel Bilgiler',
+                  icon: Icons.person_outline,
+                  cardColor: cardColor,
+                  children: [
+                    _buildTextField(
+                      label: 'Ad Soyad',
+                      controller: _nameController,
+                      icon: Icons.badge_outlined,
+                      isEditable: true,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      label: 'E-posta Adresi',
+                      initialValue: _userProfile?.email,
+                      icon: Icons.email_outlined,
+                      isEditable: false, // E-posta değişmez
+                      isDark: isDark,
                     ),
                   ],
+                ),
 
-                  const SizedBox(height: 32),
+                const SizedBox(height: 20),
 
-                  // Kaydet Butonu
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _updateProfile,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.corporateNavy,
-                        foregroundColor: Colors.white,
-                        elevation: 4,
-                        shadowColor: AppColors.corporateNavy.withOpacity(0.4),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                // --- İMZA AYARLARI ---
+                _buildProfileCard(
+                  context,
+                  title: 'İmza Ayarları',
+                  icon: Icons.draw_outlined,
+                  cardColor: cardColor,
+                  children: [
+                    if (_userProfile?.signatureData != null) ...[
+                      Container(
+                        height: 120,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.black26 : Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: AppColors.corporateNavy.withOpacity(0.2),
+                          ),
+                        ),
+                        child: Stack(
+                          children: [
+                            Center(
+                              child: Image.memory(
+                                base64Decode(_userProfile!.signatureData!),
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.red,
+                                ),
+                                onPressed: () async {
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder:
+                                        (ctx) => AlertDialog(
+                                          title: const Text('İmzayı Sil'),
+                                          content: const Text(
+                                            'Kayıtlı imzanızı silmek istediğinize emin misiniz?',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed:
+                                                  () =>
+                                                      Navigator.pop(ctx, false),
+                                              child: const Text('İptal'),
+                                            ),
+                                            TextButton(
+                                              onPressed:
+                                                  () =>
+                                                      Navigator.pop(ctx, true),
+                                              child: const Text(
+                                                'Sil',
+                                                style: TextStyle(
+                                                  color: Colors.red,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                  );
+                                  if (confirm == true) {
+                                    setState(() => _isLoading = true);
+                                    try {
+                                      await _userService.clearSignature(
+                                        _userProfile!.id,
+                                      );
+                                      await _loadProfile();
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'İmza başarıyla silindi',
+                                            ),
+                                            backgroundColor: Colors.green,
+                                          ),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Hata: $e'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
+                                    } finally {
+                                      if (mounted)
+                                        setState(() => _isLoading = false);
+                                    }
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child:
-                          _isLoading
-                              ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                              : const Text(
-                                'DEĞİŞİKLİKLERİ KAYDET',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1,
-                                ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (_) => SignaturePage(
+                                      ticketId: 'PROFILE_SETUP',
+                                      type: SignatureType.technician,
+                                    ),
                               ),
-                    ),
-                  ),
+                            );
+                            if (result == true) {
+                              _loadProfile();
+                            }
+                          },
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('İMZAYI GÜNCELLE'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.corporateNavy,
+                            side: const BorderSide(
+                              color: AppColors.corporateNavy,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ] else ...[
+                      const Text(
+                        'Kayıtlı imzanız bulunmamaktadır. PDF raporlarında kullanılmak üzere imza ekleyin.',
+                        style: TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (_) => SignaturePage(
+                                      ticketId: 'PROFILE_SETUP',
+                                      type: SignatureType.technician,
+                                    ),
+                              ),
+                            );
+                            if (result == true) {
+                              _loadProfile();
+                            }
+                          },
+                          icon: const Icon(Icons.add),
+                          label: const Text('İMZA EKLE'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.corporateNavy,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
 
-                  const SizedBox(height: 40),
+                // Sadece Yönetici Görür
+                if (PermissionService.hasPermission(
+                  _userProfile,
+                  AppPermission.viewProfileAdminTools,
+                )) ...[
+                  const SizedBox(height: 20),
+                  _buildActionCard(
+                    context,
+                    title: 'Kullanıcı Yönetimi',
+                    subtitle: 'Personel yetkilerini ve hesaplarını düzenle',
+                    icon: Icons.admin_panel_settings_outlined,
+                    color: Colors.orange.shade700,
+                    cardColor: cardColor,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const UserManagementPage(),
+                        ),
+                      );
+                    },
+                  ),
                 ],
-              ),
+
+                const SizedBox(height: 32),
+
+                // Kaydet Butonu
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _updateProfile,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.corporateNavy,
+                      foregroundColor: Colors.white,
+                      elevation: 4,
+                      shadowColor: AppColors.corporateNavy.withOpacity(0.4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child:
+                        _isLoading
+                            ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                            : const Text(
+                              'DEĞİŞİKLİKLERİ KAYDET',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                  ),
+                ),
+
+                const SizedBox(height: 40),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

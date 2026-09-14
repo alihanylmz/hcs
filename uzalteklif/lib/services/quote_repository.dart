@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/market_rate.dart';
 import '../models/quote.dart';
+import '../models/quote_revision.dart';
 import 'quote_code_generator.dart';
 
 class QuoteRepository {
@@ -89,6 +90,31 @@ class QuoteRepository {
         .cast<Map<String, dynamic>>()
         .map(Quote.fromJson)
         .toList(growable: false);
+  }
+
+  /// Bir teklifin gecmis (uzerine yazilmadan once otomatik olarak
+  /// kaydedilmis) hallerini getirir. `quote_revisions` tablosu ve onu
+  /// dolduran `quotes_capture_revision` veritabani tetikleyicisi zaten
+  /// vardi - burada sadece okunuyor. Yalnizca yonetici rolundeki
+  /// kullanicilar okuyabilir (RLS: "Managers read quote revisions");
+  /// yetkisiz kullanicida bos liste doner, hata firlatmaz.
+  Future<List<QuoteRevision>> fetchRevisions(String quoteId) async {
+    if (_client == null) return const [];
+    try {
+      final rows = await _client
+          .from('quote_revisions')
+          .select()
+          .eq('quote_id', quoteId)
+          .order('created_at', ascending: false);
+      return rows
+          .cast<Map<String, dynamic>>()
+          .map(QuoteRevision.fromJson)
+          .toList(growable: false);
+    } on PostgrestException {
+      // Yetkisiz kullanici (RLS) veya tablo henuz yoksa sessizce bos don -
+      // bu ozellik olmadan da teklif ekrani normal calismali.
+      return const [];
+    }
   }
 
   Future<Quote> saveQuote(Quote quote) async {

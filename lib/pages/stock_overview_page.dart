@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../models/user_profile.dart';
@@ -9,7 +8,8 @@ import '../services/stock_pdf_service.dart';
 import '../services/stock_service.dart';
 import '../services/user_service.dart';
 import '../theme/app_colors.dart';
-import '../widgets/app_drawer.dart';
+import '../widgets/sidebar/app_layout.dart';
+import '../widgets/sidebar/nav_shell_state.dart';
 import 'pdf_viewer_page.dart';
 import 'personnel_detail_page.dart';
 import 'ticket_detail_page.dart';
@@ -25,8 +25,6 @@ class _StockOverviewPageState extends State<StockOverviewPage>
     with SingleTickerProviderStateMixin {
   final StockService _stockService = StockService();
   final UserService _userService = UserService();
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
   List<Map<String, dynamic>> _allStocks = [];
   List<Map<String, dynamic>> _missingTickets = [];
   List<Map<String, dynamic>> _stockMovements = [];
@@ -91,6 +89,8 @@ class _StockOverviewPageState extends State<StockOverviewPage>
 
   Future<void> _loadUserProfile() async {
     final profile = await _userService.getCurrentUserProfile();
+    NavShellState.cachedUserName = profile?.displayName;
+    NavShellState.cachedUserRole = profile?.role;
     if (mounted) {
       setState(() => _userProfile = profile);
     }
@@ -2081,9 +2081,12 @@ class _StockOverviewPageState extends State<StockOverviewPage>
   @override
   Widget build(BuildContext context) {
     if (_userProfile != null && !_canViewStock) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Stok Durumu')),
-        body: const Center(
+      return AppLayout(
+        title: 'Stok Durumu',
+        currentPage: AppPage.stock,
+        userName: _userProfile?.displayName ?? NavShellState.cachedUserName,
+        userRole: _userProfile?.role ?? NavShellState.cachedUserRole,
+        child: const Center(
           child: Text(
             'Bu sayfaya erişim yetkiniz yok.',
             style: TextStyle(fontSize: 16),
@@ -2099,143 +2102,105 @@ class _StockOverviewPageState extends State<StockOverviewPage>
       (sum, item) => sum + _asInt(item['quantity']),
     );
 
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor:
-          AppColors.sand, // UzalTeklif Warm Sand Background (#F4EFE7)
-      drawer: AppDrawer(
-        currentPage: AppDrawerPage.stock,
-        userName: _userProfile?.displayName,
-        userRole: _userProfile?.role,
-      ),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor:
-            AppColors.paper, // UzalTeklif Paper Surface (#FFFFFCF7)
-        foregroundColor: AppColors.ink, // UzalTeklif Primary Ink (#15304A)
-        leadingWidth: 100,
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.menu, color: AppColors.ink),
-              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+    return AppLayout(
+      title: 'Stok Yönetimi ERP',
+      currentPage: AppPage.stock,
+      userName: _userProfile?.displayName ?? NavShellState.cachedUserName,
+      userRole: _userProfile?.role ?? NavShellState.cachedUserRole,
+      onProfileReload: _loadUserProfile,
+      actions: [
+        if (_canUseScanner)
+          IconButton(
+            icon: const Icon(
+              Icons.qr_code_scanner_rounded,
+              color: AppColors.ink,
             ),
-            SvgPicture.asset('assets/images/log.svg', width: 32, height: 32),
-          ],
-        ),
-        title: const Text(
-          'Stok Yönetimi ERP',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-            color: AppColors.ink,
+            tooltip: 'Barkod Okut',
+            onPressed: _showBarcodeScannerModal,
           ),
-        ),
-        actions: [
-          if (_canUseScanner)
-            IconButton(
-              icon: const Icon(
-                Icons.qr_code_scanner_rounded,
-                color: AppColors.ink,
-              ),
-              tooltip: 'Barkod Okut',
-              onPressed: _showBarcodeScannerModal,
+        if (_isSelectionMode) ...[
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brass,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             ),
-          if (_isSelectionMode) ...[
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brass,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-              ),
-              icon: const Icon(Icons.picture_as_pdf, size: 16),
-              label: Text(
-                'Sipariş PDF (${_selectedProductIds.length})',
-                style: const TextStyle(fontSize: 12),
-              ),
-              onPressed:
-                  _selectedProductIds.isEmpty
-                      ? null
-                      : _generateOrderPdfFromSelected,
+            icon: const Icon(Icons.picture_as_pdf, size: 16),
+            label: Text(
+              'Sipariş PDF (${_selectedProductIds.length})',
+              style: const TextStyle(fontSize: 12),
             ),
-            const SizedBox(width: 8),
-          ],
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor:
-                    _isSelectionMode ? AppColors.brass : AppColors.ink,
-                side: BorderSide(
-                  color: _isSelectionMode ? AppColors.brass : AppColors.mist,
-                  width: 1.5,
-                ),
-                backgroundColor:
-                    _isSelectionMode ? AppColors.sand : Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-              ),
-              icon: Icon(
-                _isSelectionMode
-                    ? Icons.check_box
-                    : Icons.check_box_outline_blank,
-                size: 18,
-              ),
-              label: Text(
-                _isSelectionMode ? 'Çoklu Seçim (AÇIK)' : 'Çoklu Seçim',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              onPressed: () {
-                setState(() {
-                  _isSelectionMode = !_isSelectionMode;
-                  if (!_isSelectionMode) _selectedProductIds.clear();
-                });
-              },
-            ),
+            onPressed:
+                _selectedProductIds.isEmpty
+                    ? null
+                    : _generateOrderPdfFromSelected,
           ),
           const SizedBox(width: 8),
-          if (_canManageStock)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: AppColors.ink),
-              tooltip: 'Seçenekler',
-              onSelected: (val) {
-                if (val == 'reset_catalog')
-                  _showResetCatalogTrackingConfirmDialog();
-              },
-              itemBuilder:
-                  (ctx) => [
-                    const PopupMenuItem(
-                      value: 'reset_catalog',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.cleaning_services,
-                            color: AppColors.brass,
-                            size: 20,
-                          ),
-                          SizedBox(width: 8),
-                          Text('Sanal Katalog Stoklarını Temizle'),
-                        ],
-                      ),
-                    ),
-                  ],
-            ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: AppColors.ink),
-            tooltip: 'Yenile',
-            onPressed: _loadAllData,
-          ),
         ],
-      ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor:
+                  _isSelectionMode ? AppColors.brass : AppColors.ink,
+              side: BorderSide(
+                color: _isSelectionMode ? AppColors.brass : AppColors.mist,
+                width: 1.5,
+              ),
+              backgroundColor: _isSelectionMode ? AppColors.sand : Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            ),
+            icon: Icon(
+              _isSelectionMode
+                  ? Icons.check_box
+                  : Icons.check_box_outline_blank,
+              size: 18,
+            ),
+            label: Text(
+              _isSelectionMode ? 'Çoklu Seçim (AÇIK)' : 'Çoklu Seçim',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            onPressed: () {
+              setState(() {
+                _isSelectionMode = !_isSelectionMode;
+                if (!_isSelectionMode) _selectedProductIds.clear();
+              });
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        if (_canManageStock)
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: AppColors.ink),
+            tooltip: 'Seçenekler',
+            onSelected: (val) {
+              if (val == 'reset_catalog')
+                _showResetCatalogTrackingConfirmDialog();
+            },
+            itemBuilder:
+                (ctx) => [
+                  const PopupMenuItem(
+                    value: 'reset_catalog',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.cleaning_services,
+                          color: AppColors.brass,
+                          size: 20,
+                        ),
+                        SizedBox(width: 8),
+                        Text('Sanal Katalog Stoklarını Temizle'),
+                      ],
+                    ),
+                  ),
+                ],
+          ),
+        IconButton(
+          icon: const Icon(Icons.refresh_rounded, color: AppColors.ink),
+          tooltip: 'Yenile',
+          onPressed: _loadAllData,
+        ),
+      ],
       floatingActionButton:
           _canManageStock
               ? FloatingActionButton.extended(
@@ -2246,7 +2211,7 @@ class _StockOverviewPageState extends State<StockOverviewPage>
                 label: const Text('Stoğa Al / Ürün Ekle'),
               )
               : null,
-      body: RefreshIndicator(
+      child: RefreshIndicator(
         onRefresh: _loadAllData,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),

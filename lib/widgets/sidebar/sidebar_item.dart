@@ -1,107 +1,91 @@
 import 'package:flutter/material.dart';
 
+import 'nav_shell_colors.dart';
+
+/// Onaylanan tasarima gore menu ogesi: aktifken dolu bir pil degil, sol
+/// tarafta ince renkli bir cizgi + aksanin hafif tonunda arka plan.
+/// [expanded] false iken (ray daraltilmisken) sadece ikon gosterilir.
 class SidebarItem extends StatelessWidget {
   const SidebarItem({
     super.key,
     required this.icon,
     required this.label,
     required this.onTap,
-    required this.activeColor,
-    required this.iconColor,
-    required this.textColor,
     this.isActive = false,
+    this.expanded = true,
   });
 
   final IconData icon;
   final String label;
   final bool isActive;
   final VoidCallback onTap;
-  final Color activeColor;
-  final Color iconColor;
-  final Color textColor;
+  final bool expanded;
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = NavShellColors.of(context);
+    final color = isActive ? palette.accent : palette.textSecondary;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Material(
-        color: Colors.transparent,
-        child: Ink(
-          decoration: BoxDecoration(
-            color:
-                isActive
-                    ? activeColor
-                    : Colors.white.withValues(alpha: isDark ? 0.02 : 0.04),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color:
-                  isActive
-                      ? Colors.white.withValues(alpha: 0.12)
-                      : Colors.white.withValues(alpha: isDark ? 0.06 : 0.08),
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Stack(
+        children: [
+          if (isActive)
+            Positioned(
+              left: 0,
+              top: 6,
+              bottom: 6,
+              child: Container(
+                width: 3,
+                decoration: BoxDecoration(
+                  color: palette.accent,
+                  borderRadius: const BorderRadius.horizontal(
+                    right: Radius.circular(3),
+                  ),
+                ),
+              ),
             ),
-            boxShadow:
-                isActive
-                    ? [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.18),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
+          Material(
+            color: isActive ? palette.accentSoft : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: expanded ? 13 : 0,
+                  vertical: 10,
+                ),
+                child: Row(
+                  mainAxisAlignment:
+                      expanded
+                          ? MainAxisAlignment.start
+                          : MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 20, color: color),
+                    if (expanded) ...[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight:
+                                isActive ? FontWeight.w800 : FontWeight.w600,
+                            color:
+                                isActive ? palette.accent : palette.textPrimary,
+                          ),
+                        ),
                       ),
-                    ]
-                    : null,
-          ),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-              child: Row(
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color:
-                          isActive
-                              ? Colors.white.withValues(alpha: 0.14)
-                              : Colors.white.withValues(
-                                alpha: isDark ? 0.06 : 0.08,
-                              ),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Icon(
-                      icon,
-                      size: 20,
-                      color: isActive ? Colors.white : iconColor,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight:
-                            isActive ? FontWeight.w800 : FontWeight.w700,
-                        color: isActive ? Colors.white : textColor,
-                      ),
-                    ),
-                  ),
-                  AnimatedOpacity(
-                    opacity: isActive ? 1 : 0,
-                    duration: const Duration(milliseconds: 180),
-                    child: const Icon(
-                      Icons.chevron_right_rounded,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -112,12 +96,7 @@ class SidebarDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Divider(
-      color: Colors.white.withValues(alpha: isDark ? 0.08 : 0.12),
-      thickness: 1,
-      height: 1,
-    );
+    final palette = NavShellColors.of(context);
+    return Divider(color: palette.border, thickness: 1, height: 1);
   }
 }

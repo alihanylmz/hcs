@@ -8,6 +8,7 @@ import '../services/user_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/access_denied_view.dart';
 import '../widgets/sidebar/app_layout.dart';
+import '../widgets/sidebar/nav_shell_state.dart';
 
 enum _ActivityFilter { all, auto, manual, work, signature }
 
@@ -62,6 +63,8 @@ class _ActivityLogsPageState extends State<ActivityLogsPage> {
     setState(() => _loading = true);
     try {
       final access = await _accessController.load();
+      NavShellState.cachedUserName = access.profile?.displayName;
+      NavShellState.cachedUserRole = access.profile?.role;
       if (!access.hasAccess) {
         if (!mounted) return;
         setState(() {
@@ -111,8 +114,8 @@ class _ActivityLogsPageState extends State<ActivityLogsPage> {
   Widget build(BuildContext context) {
     return AppLayout(
       currentPage: AppPage.dashboard,
-      userName: _currentUser?.displayName,
-      userRole: _currentUser?.role,
+      userName: _currentUser?.displayName ?? NavShellState.cachedUserName,
+      userRole: _currentUser?.role ?? NavShellState.cachedUserRole,
       title: 'Hareket Merkezi',
       actions: [
         IconButton(

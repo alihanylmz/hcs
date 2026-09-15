@@ -80,7 +80,13 @@ Deno.serve(async (req) => {
           .filter((addr) => addr.length > 0)
       : undefined;
     const subject = (payload.subject as string | undefined)?.trim() ?? "";
-    const body = (payload.body as string | undefined) ?? "";
+    // denomailer, "\n" satirlarini oldugu gibi (CR eklemeden) SMTP DATA
+    // govdesine yaziyor. Cogu mail sunucusu artik "naked LF" (CR'siz LF)
+    // iceren govdeleri SMTP smuggling savunmasi olarak 501 ile reddediyor
+    // (bkz. Surgemail "Failure Naked LF"). Flutter tarafi metni duz "\n" ile
+    // gonderdigi icin, gondermeden once tum satir sonlarini CRLF'ye ceviriyoruz.
+    const rawBody = (payload.body as string | undefined) ?? "";
+    const body = rawBody.replace(/\r\n/g, "\n").replace(/\n/g, "\r\n");
     const attachmentBase64 = payload.attachmentBase64 as string | undefined;
     const attachmentFilename =
       (payload.attachmentFilename as string | undefined) ?? "teklif.pdf";

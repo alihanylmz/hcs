@@ -105,6 +105,15 @@ function buildQuoteEmailHtml(params: {
     ? `Sayın ${escapeHtml(customerName.trim())},`
     : "Sayın Yetkili,";
 
+  // Kullanicinin (veya varsayilan sablonun) yazdigi giris metni de kendi
+  // "Sayın ..." selamlamasiyla baslayabiliyor - bu, yukaridaki `greeting`
+  // ile ust uste binip selamlamanin iki kez gorunmesine yol aciyordu.
+  // Metnin basindaki ayni selamlama satirini varsa temizliyoruz.
+  const cleanedIntroText = introText
+    .trim()
+    .replace(/^Say[ıi]n[^\n,]*,\s*\n*/i, "")
+    .trim();
+
   const signatureRows: string[] = [];
   if (senderName) {
     signatureRows.push(
@@ -151,9 +160,18 @@ function buildQuoteEmailHtml(params: {
         <td align="center">
           <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
             <tr>
-              <td style="background-color:#1f2937;padding:28px 32px;">
-                <div style="font-size:20px;font-weight:800;letter-spacing:0.5px;color:#ffffff;">UZAL TEKNİK</div>
-                <div style="font-size:12px;color:#9ca3af;margin-top:4px;">Otomasyon &amp; Mühendislik Çözümleri</div>
+              <td style="background-color:#1f2937;padding:24px 32px;">
+                <table role="presentation" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="vertical-align:middle;padding-right:12px;">
+                      <img src="https://uzalteknikservis.info/teklif/assets/lib/assest/logo/uzal.png" alt="UZAL TEKNİK" width="40" height="40" style="display:block;border-radius:8px;">
+                    </td>
+                    <td style="vertical-align:middle;">
+                      <div style="font-size:20px;font-weight:800;letter-spacing:0.5px;color:#ffffff;">UZAL TEKNİK</div>
+                      <div style="font-size:12px;color:#9ca3af;margin-top:2px;">Otomasyon &amp; Mühendislik Çözümleri</div>
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
             <tr>
@@ -166,18 +184,23 @@ function buildQuoteEmailHtml(params: {
                 </div>
                 <p style="margin:0 0 14px 0;font-size:15px;color:#111827;">${greeting}</p>
                 ${
-    introText.trim()
-      ? paragraphsHtml(introText.trim())
+    cleanedIntroText
+      ? paragraphsHtml(cleanedIntroText)
       : `<p style="margin:0 0 14px 0;font-size:15px;color:#111827;">${
         escapeHtml(quoteCode)
       } kodlu teklifimizi ekte bilgilerinize sunuyoruz.</p>`
   }
                 ${
     hasAttachment
-      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:8px;background-color:#f6f8fa;border:1px solid #d7dee6;border-radius:10px;">
+      ? `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:8px;background-color:#eef7f2;border:1px solid #bfe3cf;border-radius:10px;">
                   <tr>
-                    <td style="padding:12px 16px;font-size:13px;color:#17304c;font-weight:700;">
-                      📎 Teklif dosyası PDF olarak bu e-postaya eklenmiştir.
+                    <td style="padding:16px 18px;">
+                      <div style="font-size:14px;font-weight:800;color:#166a45;">
+                        📎 PDF Teklif Dosyası E-postaya Eklenmiştir
+                      </div>
+                      <div style="font-size:12.5px;color:#3f6b56;margin-top:4px;">
+                        Teklif dosyasını bu e-postanın ekler bölümünden açabilir veya indirebilirsiniz.
+                      </div>
                     </td>
                   </tr>
                 </table>`

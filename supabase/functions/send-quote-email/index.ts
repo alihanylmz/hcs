@@ -15,7 +15,7 @@
 //   "attachmentFilename": "UZ-....pdf"
 // }
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { SmtpClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -100,12 +100,17 @@ Deno.serve(async (req) => {
       );
     }
 
-    const client = new SmtpClient();
-    await client.connect({
-      hostname: mailHost,
-      port: mailPort,
-      auth: { username: mailUser, password: mailPassword },
-      tls: true,
+    // denomailer 1.6 API: baglanti bilgisi constructor'a verilir, `.send()`
+    // ilk cagrida kendisi baglanir - eski surumdeki `.connect()` metodu
+    // artik yok (bu, edge fonksiyonunun BOOT_ERROR ile hic ayaga kalkamama
+    // sebebiydi: `SmtpClient` diye bir export de yoktu, dogrusu `SMTPClient`).
+    const client = new SMTPClient({
+      connection: {
+        hostname: mailHost,
+        port: mailPort,
+        tls: true,
+        auth: { username: mailUser, password: mailPassword },
+      },
     });
 
     try {
@@ -119,6 +124,7 @@ Deno.serve(async (req) => {
           ? [
               {
                 filename: attachmentFilename,
+                contentType: "application/pdf",
                 content: base64ToUint8Array(attachmentBase64),
                 encoding: "binary",
               },

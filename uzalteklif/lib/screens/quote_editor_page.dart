@@ -3724,6 +3724,17 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
               _applyCariToForm(cari);
               setState(() => _selectedCariId = cari.id);
             },
+            selectedCari: _selectedCariId.isNotEmpty
+                ? _findCariById(_selectedCariId)
+                : null,
+            onContactSelected: (contact) {
+              setState(() {
+                _customerNameController.text = contact.name;
+                _customerTitleController.text = contact.title;
+                _customerPhoneController.text = contact.phone;
+                _customerEmailController.text = contact.email;
+              });
+            },
           ),
         ],
       ),

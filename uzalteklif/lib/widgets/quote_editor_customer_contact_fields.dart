@@ -24,6 +24,8 @@ class QuoteEditorCustomerContactFields extends StatelessWidget {
     required this.onCompanyChanged,
     required this.cariler,
     required this.onCariSelected,
+    this.selectedCari,
+    this.onContactSelected,
   });
 
   final TextEditingController companyController;
@@ -40,6 +42,14 @@ class QuoteEditorCustomerContactFields extends StatelessWidget {
 
   /// Listeden bir cari secildiginde cagrilir.
   final ValueChanged<CariAccount> onCariSelected;
+
+  /// Su an formda secili olan cari (varsa). Birden fazla kayitli yetkilisi
+  /// varsa altta bir secim listesi gosterilir - aksi halde form sadece ana
+  /// yetkiliyi doldurur ve digerlerine erisim olmazdi.
+  final CariAccount? selectedCari;
+
+  /// Yetkili secim listesinden bir kisi secildiginde cagrilir.
+  final ValueChanged<CariContact>? onContactSelected;
 
   static const int _maxOptions = 12;
 
@@ -109,6 +119,33 @@ class QuoteEditorCustomerContactFields extends StatelessWidget {
             );
           },
         ),
+        if ((selectedCari?.contacts.length ?? 0) > 1) ...[
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Kayıtlı Yetkililer (${selectedCari!.contacts.length})',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: selectedCari!.contacts.map((contact) {
+              final isSelected = contact.name.trim() == nameController.text.trim();
+              return ChoiceChip(
+                label: Text(
+                  contact.isPrimary ? '${contact.name} (Ana)' : contact.name,
+                ),
+                selected: isSelected,
+                onSelected: (_) => onContactSelected?.call(contact),
+              );
+            }).toList(),
+          ),
+        ],
         const SizedBox(height: 12),
         TextFormField(
           controller: nameController,

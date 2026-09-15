@@ -125,9 +125,14 @@ class _CariDetailPageState extends State<CariDetailPage> {
       preparedByEmail = authUserEmail;
     }
 
-    String selectedSenderAccount = preparedByEmail.isNotEmpty
-        ? 'preparedBy'
-        : 'default';
+    // Varsayilan gonderim her zaman kurumsal/ortak kutu (teklif@uzalteknik.com)
+    // olmali - "Gonder" dendiginde teklif bu adresten gitmeli, giris yapan
+    // kullanici otomatik CC'ye eklenmeli. Diger secenekler (hazirlayan
+    // personel, ozel adres) hala tercih olarak sunuluyor, sadece varsayilan
+    // degil.
+    String selectedSenderAccount = companyEmail.isNotEmpty
+        ? 'company'
+        : (preparedByEmail.isNotEmpty ? 'preparedBy' : 'default');
     final customSenderCtrl = TextEditingController();
 
     final contactNameStr = _cari.contactName.trim().isNotEmpty
@@ -233,25 +238,27 @@ class _CariDetailPageState extends State<CariDetailPage> {
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: const Color(0xFFB8D0ED)),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.copy_rounded,
                         size: 16,
                         color: Color(0xFF2B82C9),
                       ),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'teklif@uzalteknik.com (Otomatik kopyalanır)',
-                          style: TextStyle(
+                          authUserEmail.isNotEmpty
+                              ? 'teklif@uzalteknik.com ve $authUserEmail (Otomatik kopyalanır)'
+                              : 'teklif@uzalteknik.com (Otomatik kopyalanır)',
+                          style: const TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w800,
                             color: Color(0xFF17304C),
                           ),
                         ),
                       ),
-                      Icon(
+                      const Icon(
                         Icons.check_rounded,
                         size: 16,
                         color: Color(0xFF29956F),
@@ -578,8 +585,13 @@ class _CariDetailPageState extends State<CariDetailPage> {
       customSubject,
     ).replaceAll('+', '%20');
     final encodedBody = Uri.encodeComponent(customBody).replaceAll('+', '%20');
-    final encodedCc = Uri.encodeComponent(
+    final ccSet = <String>{
       'teklif@uzalteknik.com',
+      if (authUserEmail.isNotEmpty && authUserEmail != selectedSender)
+        authUserEmail,
+    };
+    final encodedCc = Uri.encodeComponent(
+      ccSet.join(','),
     ).replaceAll('+', '%20');
 
     if (_outlookEmailService.isSupported) {
@@ -587,6 +599,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
         quote: q,
         toEmail: finalToEmail,
         selectedSender: selectedSender,
+        ccEmail: ccSet.join(','),
         subject: customSubject,
         body: customBody,
       );
@@ -641,6 +654,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
     required String selectedSender,
     required String subject,
     required String body,
+    String ccEmail = 'teklif@uzalteknik.com',
   }) async {
     try {
       final pdfBytes = await _pdfService.buildQuotePdfBytes(quote);
@@ -655,7 +669,7 @@ class _CariDetailPageState extends State<CariDetailPage> {
 
       final openResult = await _outlookEmailService.openDraftWithAttachment(
         to: toEmail,
-        cc: 'teklif@uzalteknik.com',
+        cc: ccEmail,
         subject: subject,
         body: body,
         attachmentPath: pdfPath,

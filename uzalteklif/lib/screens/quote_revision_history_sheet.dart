@@ -13,12 +13,15 @@ import '../services/quote_repository.dart';
 /// tamamen kopuyor" hissine cozum: artik "Rev N" rozetine dokununca o ana
 /// kadarki tum onceki halleri (tarih, revizyon no, tutar, durum) gorebiliyor
 /// ve birine dokununca salt okunur ozetini acabiliyor.
-Future<void> showQuoteRevisionHistorySheet(
+/// "Bu sürüme dön" ile bir revizyon geri yüklenirse, o yeni (geri
+/// yüklenmiş) [Quote] döner - çağıran taraf kendi `_quote` durumunu
+/// güncelleyebilsin diye. Geri yükleme yapılmadan kapatılırsa `null` döner.
+Future<Quote?> showQuoteRevisionHistorySheet(
   BuildContext context, {
   required QuoteRepository quoteRepository,
   required Quote currentQuote,
-}) async {
-  await showModalBottomSheet<void>(
+}) {
+  return showModalBottomSheet<Quote?>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -270,8 +273,66 @@ class _RevisionHistorySheetState extends State<_RevisionHistorySheet> {
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Kapat'),
           ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _restoreRevision(revision);
+            },
+            icon: const Icon(Icons.settings_backup_restore_rounded, size: 18),
+            label: const Text('Bu sürüme dön'),
+          ),
         ],
       ),
     );
+  }
+
+  /// Secilen gecmis surumu tekrar aktif teklife yukler ve alt sayfayi
+  /// (bottom sheet) geri yuklenmis teklifle kapatir - cagiran taraf
+  /// (`showQuoteRevisionHistorySheet`in donen degeri) kendi `_quote`
+  /// durumunu bununla guncelleyebilsin diye.
+  Future<void> _restoreRevision(QuoteRevision revision) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Rev ${revision.revisionNo} sürümüne dönülsün mü?'),
+        content: Text(
+          'Bu, teklifi Rev ${revision.revisionNo} tarihindeki '
+          '(${_friendly(revision.createdAt)}) kalemlere ve koşullara geri '
+          'döndürür; teklif tekrar taslak durumuna alınır. Mevcut hali de '
+          'ayrı bir revizyon olarak geçmişte saklı kalır.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Geri yükle'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final restored = revision.resolvedQuote.copyWith(
+        status: QuoteStatus.draft,
+        revisionCount: widget.currentQuote.revisionCount + 1,
+        updatedAt: widget.currentQuote.updatedAt,
+        approvalNote:
+            'Rev ${revision.revisionNo} sürümünden geri yüklendi '
+            '(${_friendly(DateTime.now())}).',
+      );
+      final saved = await widget.quoteRepository.saveQuote(restored);
+      if (!mounted) return;
+      Navigator.of(context).pop(saved);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Geri yükleme başarısız: $error')),
+        );
+      }
+    }
   }
 }

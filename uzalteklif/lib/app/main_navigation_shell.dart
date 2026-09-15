@@ -88,7 +88,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 840;
-        final page = _pageForIndex(_index);
+        final page = _buildTabNavigator(_pageForIndex(_index));
         if (compact) {
           return Scaffold(
             body: page,
@@ -173,6 +173,27 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           ),
         );
       },
+    );
+  }
+
+  /// Her sekmenin kendi ic navigasyon yigini (nested Navigator).
+  ///
+  /// Eskiden QuotesPage/CarilerPage vb. icinden yapilan `Navigator.push`
+  /// cagrilari en yakin Navigator'i (kok MaterialApp'inki) buluyordu -
+  /// bu da tum kabugu (sidebar + ust cubuk) ekrandan silip "baska bir
+  /// siteye gecmis gibi" bir tam ekran sayfa aciyordu. Burada her sekme
+  /// icin ayri, kucuk bir Navigator kuruyoruz; `Navigator.of(context)`
+  /// aga​ç icinde en yakinini bulacagi icin, sekme icindeki mevcut
+  /// `Navigator.push` cagrilari HICBIR DEGISIKLIK GEREKMEDEN artik sadece
+  /// bu ic navigatoru (yani sadece icerik kutusunu) degistiriyor -
+  /// sidebar ve ust cubuk yerinde kalıyor. Sekme degisince (`_index`
+  /// degisince) `key` de degistigi icin bu ic yigin sifirlanip yeni
+  /// sekmenin kok sayfasina donuyor - eski davranisla ayni.
+  Widget _buildTabNavigator(Widget page) {
+    return Navigator(
+      key: ValueKey('shell-nav-$_index'),
+      onGenerateRoute: (settings) =>
+          MaterialPageRoute(builder: (_) => page, settings: settings),
     );
   }
 

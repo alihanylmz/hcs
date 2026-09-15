@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/market_rate.dart';
 import '../models/product.dart';
 import '../models/quote.dart';
+import '../models/quote_revision.dart';
 import '../services/cari_repository.dart';
 import '../services/outlook_attachment_email_service.dart';
 import '../services/pdf_export_service.dart';
@@ -17,6 +18,7 @@ import '../services/product_repository.dart';
 import '../services/quote_repository.dart';
 import '../services/user_profile_repository.dart';
 import '../widgets/workspace_background.dart';
+import '../app/nav_shell_colors.dart';
 import 'quote_editor_page.dart';
 import 'quote_revision_history_sheet.dart';
 
@@ -61,7 +63,6 @@ class QuoteReviewPage extends StatefulWidget {
 class _QuoteReviewPageState extends State<QuoteReviewPage> {
   static const _ink = Color(0xFF17304C);
   static const _slate = Color(0xFF5B6F7F);
-  static const _accent = Color(0xFFB8843C);
 
   final _pdfService = const PdfExportService();
   final _outlookEmailService = const OutlookAttachmentEmailService();
@@ -1405,30 +1406,156 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
   @override
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 700;
+    final wide = MediaQuery.sizeOf(context).width >= 1000;
+    final palette = NavShellColors.of(context);
+
+    final mainColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSummaryCard(palette),
+        const SizedBox(height: 12),
+        _buildItemsCard(palette),
+        if (_quote.approvalNote.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _buildNoteCard(palette),
+        ],
+      ],
+    );
+
+    final sideColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildWorkflowCard(palette),
+        if (_quote.status == QuoteStatus.approved) ...[
+          const SizedBox(height: 12),
+          _buildEmailSendRow(),
+        ],
+        if (_quote.revisionCount > 0) ...[
+          const SizedBox(height: 12),
+          _buildRevisionHistoryCard(palette),
+        ],
+      ],
+    );
+
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Teklif incelemesi',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: Colors.white.withValues(alpha: 0.85),
-                fontWeight: FontWeight.w700,
+      body: WorkspaceBackground(
+        child: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              compact ? 8 : 20,
+              compact ? 8 : 16,
+              compact ? 8 : 20,
+              compact ? 10 : 16,
+            ),
+            child: Column(
+              children: [
+                _buildTopBar(palette, compact),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: wide
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(flex: 2, child: mainColumn),
+                              const SizedBox(width: 12),
+                              Expanded(child: sideColumn),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              mainColumn,
+                              const SizedBox(height: 12),
+                              sideColumn,
+                            ],
+                          ),
+                  ),
+                ),
+                if (_quote.status == QuoteStatus.pending &&
+                    widget.isManager) ...[
+                  const SizedBox(height: 12),
+                  _buildActionBar(palette),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Paylaşılan navigasyon kabuğunun (Sidebar + üst çubuk) üst çubuğuyla
+  /// aynı görsel dili kullanan başlık şeridi - bu sayfa kendi
+  /// `Navigator.push` rotasında tam ekran açılsa da, koyu lacivert bir
+  /// `AppBar` yerine aynı beyaz/mavi/kenarlıklı görünümü sürdürerek "ayrı
+  /// bir siteye geçmiş gibi" hissettirmesin diye.
+  Widget _buildTopBar(NavShellPalette palette, bool compact) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 16),
+      height: 64,
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: palette.border),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Geri',
+            onPressed: () => Navigator.of(context).pop(),
+            icon: Icon(Icons.arrow_back_rounded, color: palette.textPrimary),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _quote.customerCompany.trim().isNotEmpty
+                      ? _quote.customerCompany.trim()
+                      : (_quote.customerName.trim().isNotEmpty
+                            ? _quote.customerName.trim()
+                            : 'Müşteri bilgisi girilmedi'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 15,
+                    color: palette.textPrimary,
+                  ),
+                ),
+                Text(
+                  _quote.code,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: palette.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!compact) ...[
+            IconButton(
+              tooltip: 'Mesai Arkadaşıyla Paylaş',
+              onPressed: _isBusy ? null : _shareWithColleague,
+              icon: Icon(Icons.group_add_rounded, color: palette.textSecondary),
+            ),
+            IconButton(
+              tooltip: 'PDF oluştur',
+              onPressed: _isBusy ? null : _exportPdf,
+              icon: Icon(
+                Icons.picture_as_pdf_rounded,
+                color: palette.textSecondary,
               ),
             ),
-            Text(
-              _quote.code,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-            ),
+            const SizedBox(width: 4),
           ],
-        ),
-        actions: [
           PopupMenuButton<String>(
             enabled: !_isBusy,
+            icon: Icon(Icons.more_vert_rounded, color: palette.textSecondary),
             onSelected: (v) {
               if (v.startsWith('status:')) {
                 final status = QuoteStatusX.fromStorageKey(v.substring(7));
@@ -1436,6 +1563,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 return;
               }
               if (v == 'share') _shareWithColleague();
+              if (v == 'pdf') _exportPdf();
               if (v == 'cancel') _cancelQuote();
               if (v == 'accepted') _markAccepted();
               if (v == 'arch') _toggleArchive(true);
@@ -1443,18 +1571,29 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
               if (v == 'copy') _copyQuote();
             },
             itemBuilder: (ctx) => [
-              const PopupMenuItem(
-                value: 'share',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    Icons.group_add_rounded,
-                    color: Color(0xFF2B82C9),
+              if (compact) ...[
+                const PopupMenuItem(
+                  value: 'share',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.group_add_rounded,
+                      color: Color(0xFF2B82C9),
+                    ),
+                    title: Text('Mesai arkadaşıyla paylaş'),
                   ),
-                  title: Text('Mesai arkadaşıyla paylaş'),
                 ),
-              ),
+                const PopupMenuItem(
+                  value: 'pdf',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.picture_as_pdf_rounded),
+                    title: Text('PDF oluştur'),
+                  ),
+                ),
+              ],
               const PopupMenuItem(
                 value: 'copy',
                 child: ListTile(
@@ -1484,88 +1623,33 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 ),
             ],
           ),
-          IconButton(
-            tooltip: 'Mesai Arkadaşıyla Paylaş',
-            onPressed: _isBusy ? null : _shareWithColleague,
-            icon: const Icon(Icons.group_add_rounded, color: Colors.white),
-          ),
-          IconButton(
-            tooltip: 'PDF oluştur',
-            onPressed: _isBusy ? null : _exportPdf,
-            icon: const Icon(Icons.picture_as_pdf_rounded),
-          ),
-          const SizedBox(width: 6),
-          if (compact)
-            IconButton(
-              tooltip:
-                  _quote.status == QuoteStatus.draft ||
-                      _quote.status == QuoteStatus.rejected
-                  ? 'Düzenle'
-                  : 'Yeni Revizyon',
-              onPressed: _isBusy ? null : _editQuote,
-              icon: const Icon(Icons.edit_rounded, size: 19),
-            )
-          else
-            TextButton.icon(
-              onPressed: _isBusy ? null : _editQuote,
-              icon: const Icon(Icons.edit_rounded, size: 18),
-              label: Text(
-                _quote.status == QuoteStatus.draft ||
-                        _quote.status == QuoteStatus.rejected
-                    ? 'Düzenle'
-                    : 'Yeni Revizyon',
-              ),
+          const SizedBox(width: 4),
+          FilledButton.icon(
+            onPressed: _isBusy ? null : _editQuote,
+            icon: const Icon(Icons.edit_rounded, size: 17),
+            label: Text(
+              compact
+                  ? ''
+                  : (_quote.status == QuoteStatus.draft ||
+                            _quote.status == QuoteStatus.rejected
+                        ? 'Düzenle'
+                        : 'Yeni Revizyon'),
             ),
-          const SizedBox(width: 8),
+            style: FilledButton.styleFrom(
+              backgroundColor: palette.accent,
+              foregroundColor: palette.accentOn,
+            ),
+          ),
         ],
-      ),
-      body: WorkspaceBackground(
-        child: SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              compact ? 8 : 20,
-              compact ? 8 : 16,
-              compact ? 8 : 20,
-              compact ? 10 : 16,
-            ),
-            child: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildWorkflowCard(),
-                        const SizedBox(height: 12),
-                        _buildStatusCard(),
-                        const SizedBox(height: 12),
-                        _buildSummaryCard(),
-                        const SizedBox(height: 12),
-                        _buildItemsCard(),
-                        if (_quote.approvalNote.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          _buildNoteCard(),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                if (_quote.status == QuoteStatus.pending &&
-                    widget.isManager) ...[
-                  const SizedBox(height: 12),
-                  _buildActionBar(),
-                ],
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
 
-  Widget _buildStatusCard() {
-    final status = _quote.status;
-    final (label, color, bg, iconData) = switch (status) {
+  /// Durum etiketi/renk/ikon uclusu - hem ozet kartindaki kompakt rozet,
+  /// hem de (gerekirse) baska yerlerde ayni gorseli tekrar kullanmak icin
+  /// tek bir yerden turetiliyor.
+  (String, Color, Color, IconData) _statusVisuals(QuoteStatus status) {
+    return switch (status) {
       QuoteStatus.draft => (
         'TASLAK',
         _slate,
@@ -1609,112 +1693,6 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
         Icons.info_outline_rounded,
       ),
     };
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(iconData, color: color, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _statusDescription(status),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: _slate,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (_quote.sharedWith.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.group_rounded,
-                          size: 14,
-                          color: Color(0xFF2B82C9),
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            'Paylaşılan Arkadaş(lar): ${_quote.sharedWith.join(', ')}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF2B82C9),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (_quote.revisionCount > 0)
-              InkWell(
-                borderRadius: BorderRadius.circular(999),
-                onTap: () => showQuoteRevisionHistorySheet(
-                  context,
-                  quoteRepository: widget.quoteRepository,
-                  currentQuote: _quote,
-                ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF4E0),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: const Color(0xFFE3B86C)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Rev ${_quote.revisionCount}',
-                        style: const TextStyle(
-                          color: Color(0xFF9D5C1D),
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(
-                        Icons.history_rounded,
-                        size: 14,
-                        color: Color(0xFF9D5C1D),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
   }
 
   String _statusDescription(QuoteStatus status) {
@@ -1744,15 +1722,15 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
   String _friendly(DateTime dt) =>
       DateFormat('dd.MM.yyyy HH:mm', 'tr_TR').format(dt);
 
-  Widget _buildWorkflowCard() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
+  Widget _buildWorkflowCard(NavShellPalette palette) {
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.surface,
         borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: Color(0xFFD7DEE6)),
+        border: Border.all(color: palette.border),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1760,20 +1738,11 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
               'Satış süreci',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w900,
-                color: _ink,
+                color: palette.textPrimary,
                 letterSpacing: 0.15,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Aşağıdaki adımlar kayıt tarihlerine göre sıralanır.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: _slate,
-                fontWeight: FontWeight.w600,
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             _workflowStep(
               title: 'Teklif oluşturuldu',
               subtitle: _friendly(_quote.createdAt),
@@ -1974,65 +1943,243 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     );
   }
 
-  Widget _buildSummaryCard() {
-    return Card(
+  Widget _buildSummaryCard(NavShellPalette palette) {
+    final (statusLabel, statusColor, statusBg, statusIcon) = _statusVisuals(
+      _quote.status,
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.border),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Ticari özet',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w900,
-                color: _slate,
-                letterSpacing: 0.4,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _quote.title.isEmpty ? 'Başlıksız teklif' : _quote.title,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w900,
-                color: _ink,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${_quote.customerCompany.isEmpty ? "Firma bilgisi girilmedi" : _quote.customerCompany} — ${_quote.customerName}',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: _slate,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
+            // Musteri/firma adi asil baslik - konu altina, kucuk puntoda.
+            // Eskiden bunun tam tersiydi ("Yeni Teklif" gibi jenerik bir
+            // baslik buyuk, musteri adi kucuk kaliyordu).
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildMiniChip('Teklif No', _quote.code),
-                _buildMiniChip('Tarih', _quote.formattedDate),
-                _buildMiniChip('Durum', _quote.status.displayLabel),
-                _buildMiniChip('Toplam', _formatTotal(_quote)),
-                if (_quote.acceptedTotalTl != null)
-                  _buildMiniChip(
-                    'Anlaşılan Toplam',
-                    _formatAcceptedTotal(_quote),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _quote.customerCompany.trim().isNotEmpty
+                            ? _quote.customerCompany.trim()
+                            : (_quote.customerName.trim().isNotEmpty
+                                  ? _quote.customerName.trim()
+                                  : 'Firma bilgisi girilmedi'),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          color: palette.textPrimary,
+                        ),
+                      ),
+                      if (_quote.customerName.trim().isNotEmpty &&
+                          _quote.customerCompany.trim().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          _quote.customerName.trim(),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: palette.textSecondary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ],
+                      const SizedBox(height: 2),
+                      Text(
+                        _quote.title.isEmpty
+                            ? 'Başlıksız teklif'
+                            : _quote.title,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: palette.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                if (_quote.createdByName.trim().isNotEmpty)
-                  _buildMiniChip('Teklif Sorumlusu', _quote.createdByName),
-                // E-posta takip chip'leri
-                if (_quote.emailSentAt != null)
-                  _buildMiniChip(
-                    'E-posta Gönderildi',
-                    '${_friendly(_quote.emailSentAt!)} — ${_quote.emailSentTo}',
-                  ),
-                if (_quote.emailSentAt != null)
-                  _buildMiniChip(
-                    'Müşteri Kararı',
-                    _quote.customerResponse.displayLabel,
-                  ),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Tooltip(
+                      message: _statusDescription(_quote.status),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: statusBg,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(statusIcon, size: 13, color: statusColor),
+                            const SizedBox(width: 5),
+                            Text(
+                              statusLabel,
+                              style: TextStyle(
+                                color: statusColor,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 10.5,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (_quote.revisionCount > 0) ...[
+                      const SizedBox(height: 6),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(999),
+                        onTap: () async {
+                          final restored = await showQuoteRevisionHistorySheet(
+                            context,
+                            quoteRepository: widget.quoteRepository,
+                            currentQuote: _quote,
+                          );
+                          if (restored != null && mounted) {
+                            setState(() => _quote = restored);
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: palette.accentSoft,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: palette.accent.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Rev ${_quote.revisionCount}',
+                                style: TextStyle(
+                                  color: palette.accent,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.history_rounded,
+                                size: 13,
+                                color: palette.accent,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ],
+            ),
+            if (_quote.sharedWith.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.group_rounded,
+                    size: 14,
+                    color: Color(0xFF2B82C9),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Paylaşılan Arkadaş(lar): ${_quote.sharedWith.join(', ')}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2B82C9),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 14),
+            // Yogun istatistik seridi - eskiden ayni agirlikta duz beyaz
+            // ciplerdi, artik onemli degerler (Toplam, Durum) daha belirgin.
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final tileWidth = constraints.maxWidth < 420
+                    ? (constraints.maxWidth - 10) / 2
+                    : (constraints.maxWidth - 30) / 4;
+                final tiles = <Widget>[
+                  _buildStatTile(
+                    palette,
+                    width: tileWidth,
+                    icon: Icons.payments_rounded,
+                    label: 'Toplam',
+                    value: _formatTotal(_quote),
+                    emphasize: true,
+                  ),
+                  _buildStatTile(
+                    palette,
+                    width: tileWidth,
+                    icon: Icons.event_rounded,
+                    label: 'Tarih',
+                    value: _quote.formattedDate,
+                  ),
+                  _buildStatTile(
+                    palette,
+                    width: tileWidth,
+                    icon: Icons.badge_rounded,
+                    label: 'Teklif No',
+                    value: _quote.code,
+                  ),
+                  _buildStatTile(
+                    palette,
+                    width: tileWidth,
+                    icon: Icons.person_rounded,
+                    label: 'Sorumlu',
+                    value: _quote.createdByName.trim().isNotEmpty
+                        ? _quote.createdByName.trim()
+                        : '—',
+                  ),
+                  if (_quote.acceptedTotalTl != null)
+                    _buildStatTile(
+                      palette,
+                      width: tileWidth,
+                      icon: Icons.handshake_rounded,
+                      label: 'Anlaşılan Toplam',
+                      value: _formatAcceptedTotal(_quote),
+                    ),
+                  if (_quote.emailSentAt != null)
+                    _buildStatTile(
+                      palette,
+                      width: tileWidth,
+                      icon: Icons.mark_email_read_rounded,
+                      label: 'E-posta Gönderildi',
+                      value: _friendly(_quote.emailSentAt!),
+                    ),
+                  if (_quote.emailSentAt != null)
+                    _buildStatTile(
+                      palette,
+                      width: tileWidth,
+                      icon: Icons.fact_check_rounded,
+                      label: 'Müşteri Kararı',
+                      value: _quote.customerResponse.displayLabel,
+                    ),
+                ];
+                return Wrap(spacing: 10, runSpacing: 10, children: tiles);
+              },
             ),
             // E-posta gonderim butonu (status approved ise)
             if (_quote.status == QuoteStatus.approved) ...[
@@ -2043,6 +2190,349 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
         ),
       ),
     );
+  }
+
+  Widget _buildStatTile(
+    NavShellPalette palette, {
+    required double width,
+    required IconData icon,
+    required String label,
+    required String value,
+    bool emphasize = false,
+  }) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: emphasize ? palette.accentSoft : palette.pageBackground,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: emphasize
+              ? palette.accent.withValues(alpha: 0.3)
+              : palette.border,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 16,
+            color: emphasize ? palette.accent : palette.textSecondary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: palette.textSecondary,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: emphasize ? palette.accent : palette.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Yan panelde, ayri bir sayfaya/sheet'e gitmeden dogrudan gorunen
+  /// revizyon gecmisi listesi. Kullanici "Rev N" rozetine dokununca acilan
+  /// alt sayfayla (bkz. `showQuoteRevisionHistorySheet`) ayni veriyi
+  /// gosterir, ama tikma gerektirmeden 2. sutunda kalici olarak durur.
+  Widget _buildRevisionHistoryCard(NavShellPalette palette) {
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.history_rounded, size: 18, color: palette.accent),
+                const SizedBox(width: 8),
+                Text(
+                  'Revizyon Geçmişi',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: palette.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            FutureBuilder<List<QuoteRevision>>(
+              future: widget.quoteRepository.fetchRevisions(_quote.id),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  );
+                }
+                final revisions = snapshot.data ?? const <QuoteRevision>[];
+                if (revisions.isEmpty) {
+                  return Text(
+                    'Henüz kayıtlı bir geçmiş yok.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: palette.textSecondary,
+                    ),
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final revision in revisions) ...[
+                      _buildRevisionRow(palette, revision),
+                      if (revision != revisions.last) const SizedBox(height: 6),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRevisionRow(NavShellPalette palette, QuoteRevision revision) {
+    final snapshotQuote = revision.resolvedQuote;
+    final (statusLabel, statusColor, _, _) = _statusVisuals(
+      snapshotQuote.status,
+    );
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => _openRevisionSnapshot(palette, revision),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: palette.pageBackground,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: palette.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: palette.accentSoft,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'R${revision.revisionNo}',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w900,
+                  color: palette.accent,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    snapshotQuote.formattedTotal(snapshotQuote.displayUnit),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12.5,
+                      color: palette.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    '${_friendly(revision.createdAt)} · $statusLabel',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: statusColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: palette.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openRevisionSnapshot(NavShellPalette palette, QuoteRevision revision) {
+    final snapshotQuote = revision.resolvedQuote;
+    final (statusLabel, _, _, _) = _statusVisuals(snapshotQuote.status);
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Rev ${revision.revisionNo} — ${_friendly(revision.createdAt)}',
+        ),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Durum: $statusLabel',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Toplam: ${snapshotQuote.formattedTotal(snapshotQuote.displayUnit)}',
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Kalemler',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                if (snapshotQuote.items.isEmpty)
+                  const Text('Kalem yok.')
+                else
+                  ...snapshotQuote.items.map(
+                    (item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.documentDescription.isEmpty
+                                  ? item.resolvedProductCode
+                                  : item.documentDescription,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${item.quantity} ${item.unit}',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Kapat'),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _restoreRevision(revision);
+            },
+            icon: const Icon(Icons.settings_backup_restore_rounded, size: 18),
+            label: const Text('Bu sürüme dön'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Secilen gecmis surumu (kalemler, ticari kosullar, notlar) tekrar
+  /// aktif teklife yukler - kullanicinin "revizyonlara da donus
+  /// yapilabilsin, gecmisten teklif getir gibi" istegi. Ayni kayit
+  /// (ayni id/kod) uzerine yaziliyor, durum tekrar taslaga cekiliyor ki
+  /// satis surecinden gecirilebilsin; bu geri yukleme de kendisi bir
+  /// revizyon olarak (quotes_capture_revision tetikleyicisiyle)
+  /// otomatik kaydediliyor - yani "geri alma"nin kendisi de kaybolmuyor.
+  Future<void> _restoreRevision(QuoteRevision revision) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Rev ${revision.revisionNo} sürümüne dönülsün mü?'),
+        content: Text(
+          'Bu, teklifi Rev ${revision.revisionNo} tarihindeki '
+          '(${_friendly(revision.createdAt)}) kalemlere ve koşullara geri '
+          'döndürür; teklif tekrar taslak durumuna alınır. Mevcut hali de '
+          'ayrı bir revizyon olarak geçmişte saklı kalır.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Geri yükle'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _isBusy = true);
+    try {
+      final restored = revision.resolvedQuote.copyWith(
+        status: QuoteStatus.draft,
+        revisionCount: _quote.revisionCount + 1,
+        updatedAt: _quote.updatedAt,
+        approvalNote:
+            'Rev ${revision.revisionNo} sürümünden geri yüklendi '
+            '(${_friendly(DateTime.now())}).',
+      );
+      final saved = await widget.quoteRepository.saveQuote(restored);
+      if (!mounted) return;
+      setState(() => _quote = saved);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Rev ${revision.revisionNo} sürümüne geri dönüldü.'),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Geri yükleme başarısız: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
   }
 
   /// Onayli tekliflerde e-posta gonderim ve musteri cevap satiri.
@@ -2332,40 +2822,6 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     }
   }
 
-  Widget _buildMiniChip(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F4F8),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD7DEE6)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              color: _slate,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.6,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: const TextStyle(
-              color: _ink,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   String _formatTotal(Quote quote) {
     final formatter = NumberFormat.currency(
       locale: 'tr_TR',
@@ -2407,10 +2863,15 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     return '${agreedFormatter.format(agreed)} ($commercial)';
   }
 
-  Widget _buildItemsCard() {
-    return Card(
+  Widget _buildItemsCard(NavShellPalette palette) {
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.border),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2418,18 +2879,18 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
               'Kalem detayı (${_quote.items.length})',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w900,
-                color: _ink,
+                color: palette.textPrimary,
               ),
             ),
-            const SizedBox(height: 12),
-            ..._quote.items.map((item) => _buildItemRow(item)),
+            const SizedBox(height: 10),
+            ..._quote.items.map((item) => _buildItemRow(item, palette)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildItemRow(QuoteLineItem item) {
+  Widget _buildItemRow(QuoteLineItem item, NavShellPalette palette) {
     final unitPrice = item.unitPriceTl;
     final total = item.totalTl;
     final moneyFmt = NumberFormat.currency(
@@ -2439,13 +2900,13 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: const Color(0xFFF7F9FC),
+          color: palette.pageBackground,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFE4E8EC)),
+          border: Border.all(color: palette.border),
         ),
         child: Row(
           children: [
@@ -2455,8 +2916,8 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 item.description,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: _ink,
+                style: TextStyle(
+                  color: palette.textPrimary,
                   fontWeight: FontWeight.w800,
                   fontSize: 13,
                   height: 1.25,
@@ -2469,8 +2930,8 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
               child: Text(
                 '${item.quantity.toStringAsFixed(item.quantity.truncateToDouble() == item.quantity ? 0 : 2)} ${item.unit}',
                 textAlign: TextAlign.end,
-                style: const TextStyle(
-                  color: _slate,
+                style: TextStyle(
+                  color: palette.textSecondary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -2481,8 +2942,8 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
               child: Text(
                 moneyFmt.format(unitPrice),
                 textAlign: TextAlign.end,
-                style: const TextStyle(
-                  color: _slate,
+                style: TextStyle(
+                  color: palette.textSecondary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -2493,8 +2954,8 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
               child: Text(
                 moneyFmt.format(total),
                 textAlign: TextAlign.end,
-                style: const TextStyle(
-                  color: _ink,
+                style: TextStyle(
+                  color: palette.textPrimary,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -2505,11 +2966,16 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     );
   }
 
-  Widget _buildNoteCard() {
+  Widget _buildNoteCard(NavShellPalette palette) {
     final isRejected = _quote.status == QuoteStatus.rejected;
-    return Card(
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.border),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2527,7 +2993,7 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                   isRejected ? 'Red gerekçesi' : 'Kurumsal not',
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w900,
-                    color: _ink,
+                    color: palette.textPrimary,
                   ),
                 ),
               ],
@@ -2535,8 +3001,8 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
             const SizedBox(height: 8),
             Text(
               _quote.approvalNote,
-              style: const TextStyle(
-                color: _ink,
+              style: TextStyle(
+                color: palette.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
                 height: 1.35,
@@ -2548,12 +3014,12 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     );
   }
 
-  Widget _buildActionBar() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
+  Widget _buildActionBar(NavShellPalette palette) {
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.surface,
         borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: Color(0xFFD7DEE6)),
+        border: Border.all(color: palette.border),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
@@ -2564,14 +3030,14 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
               'Satış Aksiyonları',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w900,
-                color: _ink,
+                color: palette.textPrimary,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               'Teklifi müşteriye gönderildi, revizyonda veya kaybedildi olarak güncelleyin.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: _slate,
+                color: palette.textSecondary,
                 fontWeight: FontWeight.w600,
                 height: 1.35,
               ),
@@ -2616,8 +3082,8 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                         : const Icon(Icons.verified_rounded),
                     label: const Text('Müşteriye gönderildi'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: _accent,
-                      foregroundColor: Colors.white,
+                      backgroundColor: palette.accent,
+                      foregroundColor: palette.accentOn,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),

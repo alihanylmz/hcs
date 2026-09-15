@@ -24,7 +24,12 @@ void main() {
 
     expect(find.text('Teklifi Tamamla'), findsOneWidget);
     expect(find.text('Taslak Olarak Kaydet'), findsOneWidget);
-    expect(find.text('PDF Cikart'), findsOneWidget);
-    expect(find.text('Istek Excel'), findsOneWidget);
+    // Musteri teklifi ve dahili malzeme istegi ciktilari artik iki ayri,
+    // etiketli bolumde gosteriliyor - "PDF"/"Excel" her iki bolumde de
+    // birer kez geciyor.
+    expect(find.text('MÜŞTERİ TEKLİFİ'), findsOneWidget);
+    expect(find.text('MALZEME İSTEĞİ (DAHİLİ)'), findsOneWidget);
+    expect(find.text('PDF'), findsNWidgets(2));
+    expect(find.text('Excel'), findsNWidgets(2));
   });
 }

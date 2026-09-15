@@ -216,8 +216,10 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
   String _selectedDisplayUnit = 'EURTRY';
   String _productCategoryFilter = 'Tum Kategoriler';
   bool _isSubmitting = false;
-  int _currentStep = 0; // 0=Müşteri ve konu, 1=Kalemler ve fiyat, 2=Koşullar/ön izleme/kayıt
-  bool _showAdvancedOptions = false; // global "Gelişmiş seçenekleri göster" toggle
+  int _currentStep =
+      0; // 0=Müşteri ve konu, 1=Kalemler ve fiyat, 2=Koşullar/ön izleme/kayıt
+  bool _showAdvancedOptions =
+      false; // global "Gelişmiş seçenekleri göster" toggle
   QuotePaymentMethod _paymentMethod = QuotePaymentMethod.cash;
   bool _hidePrices = false;
   String? _draftQuoteId;
@@ -1371,16 +1373,53 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
       final previousRevision = widget.quoteToRevise?.revisionCount ?? 0;
       final isRevision = widget.quoteToRevise != null;
-      final quote = built.copyWith(
-        status: QuoteStatus.pending,
-        submittedAt: DateTime.now(),
-        approvedAt: null,
-        approvedByName: '',
-        approvalNote: '',
+      // Veritabanindaki mevcut (henuz bu ekranda degistirilmemis) durum -
+      // duruma dogrudan `update` ile dokunan her kayit, "quotes_status_
+      // transition_guard" veritabani tetikleyicisine takilir; durum
+      // degisiklikleri SADECE `transition_quote_status` RPC'si uzerinden
+      // yapilabilir. Icerik (kalem/fiyat) kaydi ise durumu DEGISTIRMEDEN
+      // yapilmali ki bu korumaya takilmasin.
+      final currentDbStatus = widget.quoteToRevise?.status;
+
+      // Not: yonetici onay adimi kaldirildi (bkz.
+      // migration_remove_quote_manager_approval_gate.sql) - "Tamamla"
+      // artik dogrudan teklifi onaylanmis sayiyor, ayri bir "pending"
+      // (onay bekliyor) araya girisi yok. Onaylayan bilgisi
+      // (approved_at/approved_by/approved_by_name) veritabani
+      // tetikleyicisiyle otomatik doluyor, burada elle yazmiyoruz.
+      // `built.updatedAt`, editor acildigindaki (eski) degeri tasiyor.
+      // Asagidaki RPC cagrisi satirin `updated_at`'ini degistirirse,
+      // `saveQuote`'un iyimser eszamanlilik kontrolu (guncel `updated_at`
+      // ile eslesme) icin bu degeri guncel tutmamiz gerekiyor.
+      var latestUpdatedAt = built.updatedAt;
+      if (isRevision &&
+          currentDbStatus != null &&
+          currentDbStatus != QuoteStatus.draft) {
+        // 1) Onceki durum taslak degilse (ör. onaylanmis bir teklifi
+        //    revize ediyoruz), once RPC ile taslaga geri al - boylece
+        //    icerik kaydi (adim 2) durumu degistirmemis olur.
+        final draftQuote = await widget.quoteRepository.transitionQuoteStatus(
+          built.id,
+          QuoteStatus.draft,
+        );
+        latestUpdatedAt = draftQuote.updatedAt;
+      }
+
+      // 2) Icerigi (kalemler, fiyatlar, kosullar) kaydet - durum built'te
+      //    zaten 'draft' (bkz. _buildQuote), yani bu adim durum
+      //    degistirmiyor, guard'a takilmiyor.
+      final contentQuote = built.copyWith(
         revisionCount: isRevision ? previousRevision + 1 : 0,
+        updatedAt: latestUpdatedAt,
+      );
+      await widget.quoteRepository.saveQuote(contentQuote);
+
+      // 3) Durumu RPC ile 'approved'a tasi.
+      final approvedQuote = await widget.quoteRepository.transitionQuoteStatus(
+        contentQuote.id,
+        QuoteStatus.approved,
       );
 
-      await widget.quoteRepository.saveQuote(quote);
       // Kayit kalici hale geldi; yerel kurtarma kopyasini temizle.
       await _autosaveService?.discardRecoveryDraft(_recoveryDraftKey());
       if (!mounted) return;
@@ -1389,19 +1428,31 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
         SnackBar(
           content: Text(
             isRevision
-                ? 'Revizyon tamamlandı (Rev ${quote.revisionCount})'
-                : 'Teklif gönderime hazırlandı',
+                ? 'Revizyon tamamlandı (Rev ${approvedQuote.revisionCount})'
+                : 'Teklif tamamlandı ve onaylandı',
           ),
         ),
       );
-      Navigator.of(context).pop(quote);
+      Navigator.of(context).pop(approvedQuote);
     } catch (error, stackTrace) {
       debugPrint('Submit for approval failed: $error');
       debugPrintStack(stackTrace: stackTrace);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Teklif tamamlanamadı: $error')));
+        // Not: 3 adim (taslaga al -> icerigi kaydet -> onayla) ayri ayri
+        // istekler oldugu icin biri yarida kesilirse teklif GECICI olarak
+        // "Taslak" durumunda kalabilir - ama kayit (id/kod) asla
+        // silinmiyor/kaybolmuyor, teklif listesinde her zaman goruyor
+        // olacak. "Tamamla"ya tekrar basmak guvenli: ayni durumdaysa RPC
+        // hicbir sey yapmadan basariyla donuyor, kaldigi yerden devam eder.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Teklif tamamlanamadı ama içerik kaybolmadı: $error. '
+              '"Tamamla" butonuna tekrar basmayı deneyin.',
+            ),
+            duration: const Duration(seconds: 6),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -1918,16 +1969,16 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
             quantity: _formatQuantityForInput(row.quantity),
             unitPriceTl: row.unitPrice.toStringAsFixed(2),
             discount: sectionDiscount ?? _formatQuantityForInput(row.discount),
-          sectionId: targetSectionId,
+            sectionId: targetSectionId,
           ),
         );
       }
     });
     _markDirty();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${rows.length} satir eklendi.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('${rows.length} satir eklendi.')));
   }
 
   void _addCustomLine() {
@@ -2260,8 +2311,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
               child: Center(
                 child: ListenableBuilder(
                   listenable: _autosaveService!,
-                  builder: (context, _) =>
-                      QuoteEditorAutosaveStatus(status: _autosaveService!.status),
+                  builder: (context, _) => QuoteEditorAutosaveStatus(
+                    status: _autosaveService!.status,
+                  ),
                 ),
               ),
             ),
@@ -2335,7 +2387,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                                 const SizedBox(width: 16),
                                 SizedBox(
                                   width: 300,
-                                  child: _buildSummaryPanel(expandActions: true),
+                                  child: _buildSummaryPanel(
+                                    expandActions: true,
+                                  ),
                                 ),
                               ],
                             )
@@ -2527,9 +2581,12 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
               child: SwitchListTile.adaptive(
                 key: const ValueKey('quote-advanced-toggle'),
                 value: _showAdvancedOptions,
-                onChanged: (value) => setState(() => _showAdvancedOptions = value),
+                onChanged: (value) =>
+                    setState(() => _showAdvancedOptions = value),
                 title: const Text('Gelişmiş seçenekleri göster'),
-                subtitle: const Text('Hazır veriler varsa değiştirmek için açın'),
+                subtitle: const Text(
+                  'Hazır veriler varsa değiştirmek için açın',
+                ),
               ),
             ),
           ],
@@ -2660,9 +2717,9 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
           children: [
             Text(
               stepTitles[_currentStep],
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
             Text(
@@ -3729,8 +3786,18 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
 
     final isRevision = widget.quoteToRevise != null;
     final st = widget.quoteToRevise?.status;
+    // Not: "canCompleteQuote" eskiden sadece taslak/reddedilmis durumlarda
+    // true oluyordu. Ama revizyon akisi (quote_review_page.dart ->
+    // _editQuote) onaylanmis/gonderilmis bir teklifi de "Yeni Revizyon"
+    // olarak acabiliyor - o zaman st == approved/sent gibi bir sey oluyor
+    // ve bu kosul false kalip "Revizyonu Tamamla" butonunu tamamen
+    // gizliyordu (kullanicinin "gonder tusu yok" sikayeti tam buydu).
+    // Revizyon modundaysak (isRevision) tamamlama her zaman mumkun olmali.
     final canCompleteQuote =
-        st == null || st == QuoteStatus.draft || st == QuoteStatus.rejected;
+        st == null ||
+        isRevision ||
+        st == QuoteStatus.draft ||
+        st == QuoteStatus.rejected;
 
     // Action buttons only shown on step 2
     final actionButtons = _currentStep == 2
@@ -3823,7 +3890,10 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                     ),
                   ),
                   const SizedBox(height: 18),
-                  if (actionButtons != null) actionButtons else const SizedBox.shrink(),
+                  if (actionButtons != null)
+                    actionButtons
+                  else
+                    const SizedBox.shrink(),
                 ],
               )
             : Column(
@@ -3832,7 +3902,10 @@ class _QuoteEditorPageState extends State<QuoteEditorPage> {
                 children: [
                   scrollableContent,
                   const SizedBox(height: 18),
-                  if (actionButtons != null) actionButtons else const SizedBox.shrink(),
+                  if (actionButtons != null)
+                    actionButtons
+                  else
+                    const SizedBox.shrink(),
                 ],
               ),
       ),
@@ -4706,7 +4779,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                       child: QuoteEditorLineDescriptionField(
                         controller: draft.descriptionController,
                         focusNode: draft.descriptionFocus,
-                        onSubmitted: () => onSubmitColumn?.call(_LineColumn.description),
+                        onSubmitted: () =>
+                            onSubmitColumn?.call(_LineColumn.description),
                         validator: requiredTextValidator,
                         onChanged: (_) => onChanged(),
                       ),
@@ -4725,7 +4799,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                       child: QuoteEditorLineQuantityField(
                         controller: draft.quantityController,
                         focusNode: draft.quantityFocus,
-                        onSubmitted: () => onSubmitColumn?.call(_LineColumn.quantity),
+                        onSubmitted: () =>
+                            onSubmitColumn?.call(_LineColumn.quantity),
                         validator: numberValidator,
                         onChanged: (_) => onChanged(),
                       ),
@@ -4735,7 +4810,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                       child: QuoteEditorLineUnitField(
                         controller: draft.unitController,
                         focusNode: draft.unitFocus,
-                        onSubmitted: () => onSubmitColumn?.call(_LineColumn.unit),
+                        onSubmitted: () =>
+                            onSubmitColumn?.call(_LineColumn.unit),
                         validator: requiredTextValidator,
                         onChanged: (_) => onChanged(),
                       ),
@@ -4745,7 +4821,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                       child: QuoteEditorLineUnitPriceField(
                         controller: draft.unitPriceController,
                         focusNode: draft.unitPriceFocus,
-                        onSubmitted: () => onSubmitColumn?.call(_LineColumn.unitPrice),
+                        onSubmitted: () =>
+                            onSubmitColumn?.call(_LineColumn.unitPrice),
                         validator: numberValidator,
                         onChanged: (_) => onChanged(),
                         currencyLabel: _priceCurrencyLabel,
@@ -4756,7 +4833,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                       child: QuoteEditorLineDiscountField(
                         controller: draft.discountController,
                         focusNode: draft.discountFocus,
-                        onSubmitted: () => onSubmitColumn?.call(_LineColumn.discount),
+                        onSubmitted: () =>
+                            onSubmitColumn?.call(_LineColumn.discount),
                         validator: discountValidator,
                         onChanged: (_) => onChanged(),
                         locked: discountLocked,
@@ -4871,7 +4949,8 @@ class _QuoteLineEditorRow extends StatelessWidget {
                 child: QuoteEditorLineUnitPriceField(
                   controller: draft.unitPriceController,
                   focusNode: draft.unitPriceFocus,
-                  onSubmitted: () => onSubmitColumn?.call(_LineColumn.unitPrice),
+                  onSubmitted: () =>
+                      onSubmitColumn?.call(_LineColumn.unitPrice),
                   validator: numberValidator,
                   onChanged: (_) => onChanged(),
                   currencyLabel: _priceCurrencyLabel,
@@ -5526,5 +5605,4 @@ class _ParameterFieldEditor extends StatelessWidget {
       ),
     );
   }
-
 }

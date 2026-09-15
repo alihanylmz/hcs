@@ -119,18 +119,28 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
           : (_quote.approvedByName.trim().isNotEmpty
                 ? _quote.approvedByName.trim()
                 : 'Yetkili');
-      final updated = _quote.copyWith(
-        status: QuoteStatus.accepted,
-        acceptedTotalTl: agreed.totalTl,
-        acceptedAmount: agreed.amount,
-        acceptedCurrencyCode: agreed.currencyCode,
-        acceptedFxRate: agreed.fxRate,
-        acceptedNote: agreed.note,
-        acceptedAt: DateTime.now(),
-        acceptedByName: actorName,
-        archivedAt: DateTime.now().toUtc(),
+      // 1) Anlasma detaylarini kaydet - "accepted_total_tl" ilk kez
+      //    doldurulunca "accepted_at" veritabani trigger'i tarafindan
+      //    otomatik dolduruluyor (transition RPC'nin "won" hedefi icin
+      //    bunu sart kosuyor).
+      final withDeal = await widget.quoteRepository.saveQuote(
+        _quote.copyWith(
+          acceptedTotalTl: agreed.totalTl,
+          acceptedAmount: agreed.amount,
+          acceptedCurrencyCode: agreed.currencyCode,
+          acceptedFxRate: agreed.fxRate,
+          acceptedNote: agreed.note,
+          acceptedByName: actorName,
+        ),
       );
-      await widget.quoteRepository.saveQuote(updated);
+      // 2) Durumu RPC uzerinden "won"a cevir - "status" alanini dogrudan
+      //    yazmak veritabanindaki quotes_status_transition_guard
+      //    trigger'i tarafindan reddediliyor.
+      final updated = await widget.quoteRepository.transitionQuoteStatus(
+        withDeal.id,
+        QuoteStatus.won,
+        archive: true,
+      );
       if (!mounted) return;
       setState(() => _quote = updated);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -154,29 +164,24 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     }
 
     await _runBusy(() async {
-      final now = DateTime.now();
-      final profile = await widget.userProfileRepository.fetchMine();
-      final actorName = profile?.preparedByName.trim().isNotEmpty == true
-          ? profile!.preparedByName.trim()
-          : (_quote.approvedByName.trim().isNotEmpty
-                ? _quote.approvedByName.trim()
-                : 'Yetkili');
-      final updated = _quote.copyWith(
-        status: status,
-        submittedAt: status == QuoteStatus.pending
-            ? (_quote.submittedAt ?? now)
-            : _quote.submittedAt,
-        approvedAt: status == QuoteStatus.approved ? now : _quote.approvedAt,
-        approvedByName: status == QuoteStatus.approved
-            ? actorName
-            : _quote.approvedByName,
-        archivedAt: status == QuoteStatus.approved
-            ? now.toUtc()
-            : _quote.archivedAt,
-        clearArchivedAt:
-            status == QuoteStatus.draft || status == QuoteStatus.pending,
+      // "approved_at/approved_by(_name)" veritabani trigger'i tarafindan
+      // otomatik dolduruluyor; burada sadece "submitted_at" gibi RPC'nin
+      // bilmedigi alanlari, status'u degistirmeden ayrica kaydediyoruz.
+      if (status == QuoteStatus.pending && _quote.submittedAt == null) {
+        await widget.quoteRepository.saveQuote(
+          _quote.copyWith(submittedAt: DateTime.now()),
+        );
+      }
+      var updated = await widget.quoteRepository.transitionQuoteStatus(
+        _quote.id,
+        status,
       );
-      await widget.quoteRepository.saveQuote(updated);
+      if ((status == QuoteStatus.draft || status == QuoteStatus.pending) &&
+          updated.archivedAt != null) {
+        updated = await widget.quoteRepository.saveQuote(
+          updated.copyWith(clearArchivedAt: true),
+        );
+      }
       if (!mounted) return;
       setState(() => _quote = updated);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -202,11 +207,15 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     if (note == null) return;
 
     await _runBusy(() async {
-      final updated = _quote.copyWith(
-        status: QuoteStatus.draft,
-        approvalNote: note,
+      // "draft" hedefi icin RPC verilen reason'i approval_note'a yazmiyor
+      // (sadece lost/cancelled icin yaziyor) - notu once ayri kaydediyoruz.
+      final withNote = await widget.quoteRepository.saveQuote(
+        _quote.copyWith(approvalNote: note),
       );
-      await widget.quoteRepository.saveQuote(updated);
+      final updated = await widget.quoteRepository.transitionQuoteStatus(
+        withNote.id,
+        QuoteStatus.draft,
+      );
       if (!mounted) return;
       setState(() => _quote = updated);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -230,12 +239,13 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     if (note == null) return;
 
     await _runBusy(() async {
-      final updated = _quote.copyWith(
-        status: QuoteStatus.rejected,
-        approvalNote: note,
-        approvedAt: DateTime.now(),
+      // "lost" hedefi icin RPC, verdigimiz "reason"i kendisi
+      // approval_note/loss_reason_code alanlarina yaziyor.
+      final updated = await widget.quoteRepository.transitionQuoteStatus(
+        _quote.id,
+        QuoteStatus.rejected,
+        reason: note,
       );
-      await widget.quoteRepository.saveQuote(updated);
       if (!mounted) return;
       setState(() => _quote = updated);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -255,12 +265,11 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
     if (note == null) return;
 
     await _runBusy(() async {
-      final updated = _quote.copyWith(
-        status: QuoteStatus.cancelled,
-        approvalNote: note,
-        approvedAt: DateTime.now(),
+      final updated = await widget.quoteRepository.transitionQuoteStatus(
+        _quote.id,
+        QuoteStatus.cancelled,
+        reason: note,
       );
-      await widget.quoteRepository.saveQuote(updated);
       if (!mounted) return;
       setState(() => _quote = updated);
       ScaffoldMessenger.of(
@@ -2532,15 +2541,23 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
 
     setState(() => _isBusy = true);
     try {
+      // Icerik alanlarini durumu degistirmeden kaydediyoruz - "status"u
+      // dogrudan yazmak veritabanindaki quotes_status_transition_guard
+      // trigger'i tarafindan reddediliyor. Durumu asagida RPC ile
+      // "draft"a ceviriyoruz.
       final restored = revision.resolvedQuote.copyWith(
-        status: QuoteStatus.draft,
+        status: _quote.status,
         revisionCount: _quote.revisionCount + 1,
         updatedAt: _quote.updatedAt,
         approvalNote:
             'Rev ${revision.revisionNo} sürümünden geri yüklendi '
             '(${_friendly(DateTime.now())}).',
       );
-      final saved = await widget.quoteRepository.saveQuote(restored);
+      final withContent = await widget.quoteRepository.saveQuote(restored);
+      final saved = await widget.quoteRepository.transitionQuoteStatus(
+        withContent.id,
+        QuoteStatus.draft,
+      );
       if (!mounted) return;
       setState(() => _quote = saved);
       ScaffoldMessenger.of(context).showSnackBar(

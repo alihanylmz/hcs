@@ -700,6 +700,124 @@ Uzal Teknik Servis
     }
   }
 
+  /// Aksiyon merkezindeki bir teklifi hizlica "Kabul Edildi" olarak
+  /// isaretler; sadece kazanilan tutari sorar (detayli doviz/kur secimi
+  /// gerekiyorsa kullanici teklif sayfasindan tam formu kullanabilir).
+  Future<void> _quickAccept(Quote q) async {
+    final controller = TextEditingController(
+      text: q.commercialTotalTl > 0 ? q.commercialTotalTl.toStringAsFixed(2) : '',
+    );
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Kabul Edildi — ${q.code}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'Kazanılan tutar (TL)'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = double.tryParse(
+                controller.text.trim().replaceAll(',', '.'),
+              );
+              Navigator.of(ctx).pop(value ?? 0);
+            },
+            child: const Text('Kabul Edildi Olarak Kaydet'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (amount == null) return;
+
+    try {
+      final withDeal = await widget.quoteRepository.saveQuote(
+        q.copyWith(
+          acceptedTotalTl: amount,
+          acceptedAmount: amount,
+          acceptedCurrencyCode: 'TL',
+          acceptedFxRate: 1.0,
+        ),
+      );
+      await widget.quoteRepository.transitionQuoteStatus(
+        withDeal.id,
+        QuoteStatus.won,
+        archive: true,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${q.code} kabul edildi olarak kaydedildi.')),
+      );
+      _loadData();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Kaydedilemedi: $error')),
+      );
+    }
+  }
+
+  /// Aksiyon merkezindeki bir teklifi hizlica iptal eder (kisa bir gerekce
+  /// ile) - boylece "cevapsiz" listede sonsuza dek kirmizi kalmaz.
+  Future<void> _quickCancel(Quote q) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Teklifi İptal Et — ${q.code}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'İptal sebebi'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF9D2C2C),
+            ),
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isEmpty) return;
+              Navigator.of(ctx).pop(text);
+            },
+            child: const Text('İptal Et'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (reason == null || reason.isEmpty) return;
+
+    try {
+      await widget.quoteRepository.transitionQuoteStatus(
+        q.id,
+        QuoteStatus.cancelled,
+        reason: reason,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${q.code} iptal edildi.')),
+      );
+      _loadData();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('İptal edilemedi: $error')),
+      );
+    }
+  }
+
   Widget _buildActionCenter(
     List<Quote> overdueQuotes,
     List<Quote> needsEmail,
@@ -775,6 +893,8 @@ Uzal Teknik Servis
                         isOverdue: true,
                         onTap: () => _sendWhatsAppReminder(q),
                         onMailTap: () => _openQuoteReview(q),
+                        onAcceptTap: () => _quickAccept(q),
+                        onCancelTap: () => _quickCancel(q),
                       ),
                       if (q != overdueQuotes.last) const SizedBox(height: 6),
                     ],
@@ -824,6 +944,8 @@ Uzal Teknik Servis
                   icon: Icons.edit_note_rounded,
                   btnColor: const Color(0xFF29956F),
                   onTap: () => _openQuoteReview(q),
+                  onAcceptTap: () => _quickAccept(q),
+                  onCancelTap: () => _quickCancel(q),
                 ),
                 if (q != normalAwaiting.last) const SizedBox(height: 6),
               ],
@@ -1104,6 +1226,8 @@ class _ActionQuoteTile extends StatelessWidget {
     required this.onTap,
     this.isOverdue = false,
     this.onMailTap,
+    this.onAcceptTap,
+    this.onCancelTap,
   });
 
   final Quote quote;
@@ -1113,6 +1237,12 @@ class _ActionQuoteTile extends StatelessWidget {
   final VoidCallback onTap;
   final bool isOverdue;
   final VoidCallback? onMailTap;
+
+  /// Doldurulursa satirin sonunda "Kabul Edildi" hizli aksiyonu gosterilir.
+  final VoidCallback? onAcceptTap;
+
+  /// Doldurulursa satirin sonunda "İptal" hizli aksiyonu gosterilir.
+  final VoidCallback? onCancelTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1181,6 +1311,38 @@ class _ActionQuoteTile extends StatelessWidget {
               ],
             ),
           ),
+          if (onAcceptTap != null) ...[
+            Tooltip(
+              message: 'Kabul Edildi olarak işaretle',
+              child: IconButton.filledTonal(
+                onPressed: onAcceptTap,
+                icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFE5F5EE),
+                  foregroundColor: const Color(0xFF29956F),
+                  minimumSize: const Size(32, 32),
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
+          if (onCancelTap != null) ...[
+            Tooltip(
+              message: 'Teklifi iptal et',
+              child: IconButton.filledTonal(
+                onPressed: onCancelTap,
+                icon: const Icon(Icons.cancel_outlined, size: 18),
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFFBE8E8),
+                  foregroundColor: const Color(0xFF9D2C2C),
+                  minimumSize: const Size(32, 32),
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
           if (isOverdue && onMailTap != null) ...[
             OutlinedButton.icon(
               onPressed: onMailTap,

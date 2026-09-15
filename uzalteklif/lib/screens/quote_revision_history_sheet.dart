@@ -316,15 +316,23 @@ class _RevisionHistorySheetState extends State<_RevisionHistorySheet> {
     if (confirmed != true || !mounted) return;
 
     try {
+      // Icerik alanlarini durumu degistirmeden kaydediyoruz - "status"u
+      // dogrudan yazmak veritabanindaki quotes_status_transition_guard
+      // trigger'i tarafindan reddediliyor. Durumu asagida RPC ile
+      // "draft"a ceviriyoruz.
       final restored = revision.resolvedQuote.copyWith(
-        status: QuoteStatus.draft,
+        status: widget.currentQuote.status,
         revisionCount: widget.currentQuote.revisionCount + 1,
         updatedAt: widget.currentQuote.updatedAt,
         approvalNote:
             'Rev ${revision.revisionNo} sürümünden geri yüklendi '
             '(${_friendly(DateTime.now())}).',
       );
-      final saved = await widget.quoteRepository.saveQuote(restored);
+      final withContent = await widget.quoteRepository.saveQuote(restored);
+      final saved = await widget.quoteRepository.transitionQuoteStatus(
+        withContent.id,
+        QuoteStatus.draft,
+      );
       if (!mounted) return;
       Navigator.of(context).pop(saved);
     } catch (error) {

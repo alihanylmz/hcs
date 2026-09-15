@@ -1267,14 +1267,13 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
   }) async {
     try {
       final pdfBytes = await _pdfService.buildQuotePdfBytes(_quote);
-      final authUserEmail =
-          Supabase.instance.client.auth.currentUser?.email?.trim() ?? '';
       final userId = Supabase.instance.client.auth.currentUser?.id;
       final profile = await widget.userProfileRepository.fetchMine();
       final name = profile?.preparedByName.trim() ?? '';
-      final senderEmail = (profile?.preparedByEmail.trim().isNotEmpty ?? false)
-          ? profile!.preparedByEmail.trim()
-          : authUserEmail;
+      // Reply-To/CC/imza icin her zaman profildeki kayitli is e-postasi
+      // kullanilir - giris yapilan (auth) e-posta kisisel olabilir (ornek:
+      // Gmail) ve musteriye asla gorunmemeli.
+      final senderEmail = profile?.preparedByEmail.trim() ?? '';
       await _quoteEmailSendService.send(
         to: toEmail,
         cc: senderEmail,

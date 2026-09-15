@@ -275,16 +275,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    const html = buildQuoteEmailHtml({
-      quoteCode,
-      customerName,
-      introText,
-      senderName,
-      senderTitle,
-      senderEmail,
-      senderPhone,
-      hasAttachment: Boolean(attachmentBase64),
-    });
+    // buildQuoteEmailHtml, coklu satirli bir JS template literal dondurur -
+    // bu satirlar duz "\n" (CR'siz) icerir. Ayni "naked LF" sorunu HTML
+    // govdesi icin de gecerli, o yuzden burada da CRLF'ye ceviriyoruz.
+    const html = toCrlf(
+      buildQuoteEmailHtml({
+        quoteCode,
+        customerName,
+        introText,
+        senderName,
+        senderTitle,
+        senderEmail,
+        senderPhone,
+        hasAttachment: Boolean(attachmentBase64),
+      }),
+    );
     const plainTextFallback = toCrlf(
       `${customerName ? `Sayın ${customerName},` : "Sayın Yetkili,"}\n\n${
         introText.trim() || `${quoteCode} kodlu teklifimizi ekte bilgilerinize sunuyoruz.`

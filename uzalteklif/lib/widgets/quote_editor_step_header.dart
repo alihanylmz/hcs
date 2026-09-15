@@ -50,8 +50,10 @@ class QuoteEditorStepHeader extends StatelessWidget {
                                   ? theme.colorScheme.primary
                                   : (isCompleted
                                       ? theme.colorScheme.primary
-                                          .withOpacity(0.3)
-                                      : theme.colorScheme.surfaceVariant),
+                                          .withValues(alpha: 0.3)
+                                      : theme
+                                            .colorScheme
+                                            .surfaceContainerHighest),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             padding: const EdgeInsets.symmetric(
@@ -104,7 +106,7 @@ class QuoteEditorStepHeader extends StatelessWidget {
           LinearProgressIndicator(
             value: (currentStep + 1) / steps.length,
             minHeight: 4,
-            backgroundColor: theme.colorScheme.surfaceVariant,
+            backgroundColor: theme.colorScheme.surfaceContainerHighest,
             valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary),
           ),
         ],

@@ -705,17 +705,20 @@ class Quote {
     final email = currentUserEmail?.trim().toLowerCase();
     if (email != null && email.isNotEmpty) {
       if (emailSentTo.trim().toLowerCase() == email) return true;
-      if (sharedWith.map((e) => e.trim().toLowerCase()).contains(email))
+      if (sharedWith.map((e) => e.trim().toLowerCase()).contains(email)) {
         return true;
+      }
     }
 
     final name = currentUserName?.trim().toLowerCase();
     if (name != null && name.isNotEmpty) {
       if (createdByName.trim().toLowerCase() == name) return true;
-      if (documentProfile.preparedByName.trim().toLowerCase() == name)
+      if (documentProfile.preparedByName.trim().toLowerCase() == name) {
         return true;
-      if (sharedWith.map((e) => e.trim().toLowerCase()).contains(name))
+      }
+      if (sharedWith.map((e) => e.trim().toLowerCase()).contains(name)) {
         return true;
+      }
     }
 
     return false;

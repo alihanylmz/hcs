@@ -549,12 +549,15 @@ class _CariDetailPageState extends State<CariDetailPage> {
                 if (target.isEmpty) return;
 
                 String senderAddr = '';
-                if (selectedSenderAccount == 'preparedBy')
+                if (selectedSenderAccount == 'preparedBy') {
                   senderAddr = preparedByEmail;
-                if (selectedSenderAccount == 'company')
+                }
+                if (selectedSenderAccount == 'company') {
                   senderAddr = companyEmail;
-                if (selectedSenderAccount == 'custom')
+                }
+                if (selectedSenderAccount == 'custom') {
                   senderAddr = customSenderCtrl.text.trim();
+                }
 
                 Navigator.pop(ctx, {
                   'toEmail': target,

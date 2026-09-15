@@ -396,8 +396,9 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                                 p.preparedByName.trim().isNotEmpty
                                 ? p.preparedByName.trim()
                                 : p.preparedByEmail.trim();
-                            if (identifier.isEmpty)
+                            if (identifier.isEmpty) {
                               return const SizedBox.shrink();
+                            }
 
                             final isChecked =
                                 tempSelection.contains(identifier) ||
@@ -1129,12 +1130,15 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
                 if (target.isEmpty) return;
 
                 String senderAddr = '';
-                if (selectedSenderAccount == 'preparedBy')
+                if (selectedSenderAccount == 'preparedBy') {
                   senderAddr = preparedByEmail;
-                if (selectedSenderAccount == 'company')
+                }
+                if (selectedSenderAccount == 'company') {
                   senderAddr = companyEmail;
-                if (selectedSenderAccount == 'custom')
+                }
+                if (selectedSenderAccount == 'custom') {
                   senderAddr = customSenderCtrl.text.trim();
+                }
 
                 Navigator.pop(ctx, {
                   'toEmail': target,
@@ -2823,13 +2827,14 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
         const SnackBar(content: Text('Gönderim manuel olarak kaydedildi.')),
       );
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Gönderim kaydedilemedi.'),
             backgroundColor: Colors.red,
           ),
         );
+      }
     } finally {
       toController.dispose();
       noteController.dispose();

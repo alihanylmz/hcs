@@ -1255,9 +1255,11 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
   /// dogrudan `emailSent` olarak isaretlenir; Outlook/mailto akislarinda
   /// kullanicinin ayrica "Gonderildi olarak isaretle" demesi gerekiyordu.
   ///
-  /// Gonderen her zaman tek/kurumsal kutu (teklif@uzalteknik.com); butun
-  /// teklifler boylece tek yerde toplanir. Gonderiyi tetikleyen personelin
-  /// kendi kutusunda da kaydi kalsin diye o da cc'ye eklenir.
+  /// Gonderen her zaman tek/kurumsal kutu (teklif@uzalteknik.com) - boylece
+  /// SPF/DKIM/DMARC tek domain uzerinden yonetilir. Gonderiyi tetikleyen
+  /// personelin kendi adresi Reply-To olarak eklenir (musteri "Yanitla"
+  /// dediginde dogrudan o personele gider) ve imzada gorunur; ayrica kendi
+  /// kutusunda da kaydi kalsin diye cc'ye eklenir.
   Future<void> _sendViaServer({
     required String toEmail,
     required String subject,
@@ -1265,24 +1267,29 @@ class _QuoteReviewPageState extends State<QuoteReviewPage> {
   }) async {
     try {
       final pdfBytes = await _pdfService.buildQuotePdfBytes(_quote);
-      final senderEmail =
+      final authUserEmail =
           Supabase.instance.client.auth.currentUser?.email?.trim() ?? '';
-      final ccList = <String>{
-        'teklif@uzalteknik.com',
-        if (senderEmail.isNotEmpty) senderEmail,
-      };
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final profile = await widget.userProfileRepository.fetchMine();
+      final name = profile?.preparedByName.trim() ?? '';
+      final senderEmail = (profile?.preparedByEmail.trim().isNotEmpty ?? false)
+          ? profile!.preparedByEmail.trim()
+          : authUserEmail;
       await _quoteEmailSendService.send(
         to: toEmail,
-        cc: ccList.join(','),
+        cc: senderEmail,
         subject: subject,
         body: body,
+        quoteCode: _quote.code,
+        customerName: _quote.customerName,
+        senderName: name,
+        senderTitle: profile?.preparedByTitle.trim() ?? '',
+        senderPhone: profile?.preparedByPhone.trim() ?? '',
+        senderEmail: senderEmail,
         attachmentBytes: pdfBytes,
         attachmentFilename: '${_quote.code}.pdf',
       );
 
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      final profile = await widget.userProfileRepository.fetchMine();
-      final name = profile?.preparedByName.trim() ?? '';
       await widget.quoteRepository.markEmailSent(
         _quote.id,
         toEmail,

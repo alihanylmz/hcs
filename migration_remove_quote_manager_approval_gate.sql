@@ -23,7 +23,13 @@ begin
   if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
   select q.* into v_quote from public.quotes q where q.id = p_quote_id for update;
   if not found then raise exception 'QUOTE_NOT_FOUND'; end if;
-  select role into v_role from public.user_profiles where user_id = auth.uid();
+  -- Not: "public.user_profiles" bos/kullanilmayan eski bir tablo -
+  -- gercek rol verisi "quote_user_profiles"ta duruyor (UserProfileRepository
+  -- da zaten oradan okuyor). Bu satir yanlis tabloya bakiyordu; bu yuzden
+  -- transition_quote_status daha once hic gercek bir oturumdan
+  -- cagrilmamis olsaydi bile PROFILE_REQUIRED ile patlardi - ki tam olarak
+  -- oldu (bu RPC bu degisiklige kadar hicbir yerden cagrilmiyordu).
+  select role into v_role from public.quote_user_profiles where user_id = auth.uid();
   if v_role is null then raise exception 'PROFILE_REQUIRED'; end if;
 
   if v_target not in ('draft','approval_pending','approved','sent','viewed','negotiating','won','lost','expired','cancelled')

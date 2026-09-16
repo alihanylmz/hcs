@@ -93,7 +93,8 @@ void main() {
 
 class _FakeQuoteRepository extends QuoteRepository {
   @override
-  Future<List<Quote>> fetchQuotes() async => const [];
+  Future<List<Quote>> fetchQuotes({bool includeHidden = false}) async =>
+      const [];
 }
 
 class _FakeProductRepository extends ProductRepository {

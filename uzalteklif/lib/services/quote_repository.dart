@@ -76,20 +76,40 @@ class QuoteRepository {
     ),
   ];
 
-  Future<List<Quote>> fetchQuotes() async {
+  /// [includeHidden] false ise (varsayilan) kullanicinin "sildigi" (aslinda
+  /// sadece hidden_at doldurulmus) teklifler sonuca dahil edilmez - frontend
+  /// "silinmis" gibi davranir ama veri kalir. Yonetim panelindeki "Gizli
+  /// Teklifler" listesi gibi geri getirme ekranlari icin true verilir.
+  Future<List<Quote>> fetchQuotes({bool includeHidden = false}) async {
     if (_client == null) {
-      return _sortedMemoryQuotes();
+      final quotes = _sortedMemoryQuotes();
+      return includeHidden
+          ? quotes
+          : quotes.where((q) => !q.isHidden).toList(growable: false);
     }
 
-    final rows = await _client
-        .from('quotes')
-        .select()
-        .order('created_at', ascending: false);
+    var query = _client.from('quotes').select();
+    if (!includeHidden) {
+      query = query.isFilter('hidden_at', null);
+    }
+    final rows = await query.order('created_at', ascending: false);
 
     return rows
         .cast<Map<String, dynamic>>()
         .map(Quote.fromJson)
         .toList(growable: false);
+  }
+
+  /// Teklifi frontend'de "siler" - veritabanindan gercekten silmez, sadece
+  /// hidden_at alanini doldurur. Boylece deneme/test teklifleri listelerden
+  /// kaybolur ama gerektiginde geri getirilebilir.
+  Future<Quote> hideQuote(Quote quote) {
+    return saveQuote(quote.copyWith(hiddenAt: DateTime.now().toUtc()));
+  }
+
+  /// Gizlenmis bir teklifi yeniden gorunur yapar.
+  Future<Quote> unhideQuote(Quote quote) {
+    return saveQuote(quote.copyWith(clearHiddenAt: true));
   }
 
   /// Bir teklifin gecmis (uzerine yazilmadan once otomatik olarak

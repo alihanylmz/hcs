@@ -528,6 +528,7 @@ class Quote {
     this.createdBy,
     this.createdByName = '',
     this.archivedAt,
+    this.hiddenAt,
     this.emailSentAt,
     this.emailSentTo = '',
     this.emailSentBy,
@@ -659,6 +660,12 @@ class Quote {
 
   /// Dolu ise teklif arsivlenmistir; aktif listelerde gosterilmez.
   final DateTime? archivedAt;
+
+  /// Dolu ise teklif kullanici tarafindan "silinmis" sayilir - veritabanindan
+  /// gercekten silinmez (deneme/test teklifleri icin), sadece tum
+  /// listelerden gizlenir. Yonetim panelinden geri getirilebilir.
+  final DateTime? hiddenAt;
+  bool get isHidden => hiddenAt != null;
 
   /// Teklifin musteri e-postasina gonderildigi tarih (UTC). Null ise henuz gonderilmemistir.
   final DateTime? emailSentAt;
@@ -891,6 +898,8 @@ class Quote {
     DateTime? archivedAt,
     DateTime? updatedAt,
     bool clearArchivedAt = false,
+    DateTime? hiddenAt,
+    bool clearHiddenAt = false,
     DateTime? emailSentAt,
     bool clearEmailSentAt = false,
     String? emailSentTo,
@@ -948,6 +957,7 @@ class Quote {
       createdBy: createdBy ?? this.createdBy,
       createdByName: createdByName ?? this.createdByName,
       archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
+      hiddenAt: clearHiddenAt ? null : (hiddenAt ?? this.hiddenAt),
       emailSentAt: clearEmailSentAt ? null : (emailSentAt ?? this.emailSentAt),
       emailSentTo: emailSentTo ?? this.emailSentTo,
       emailSentBy: emailSentBy ?? this.emailSentBy,
@@ -1008,6 +1018,7 @@ class Quote {
     'created_by': createdBy,
     'created_by_name': createdByName,
     'archived_at': archivedAt?.toIso8601String(),
+    'hidden_at': hiddenAt?.toIso8601String(),
     'email_sent_at': emailSentAt?.toIso8601String(),
     'email_sent_to': emailSentTo,
     'email_sent_by': emailSentBy,
@@ -1085,6 +1096,7 @@ class Quote {
       createdBy: _parseOptionalUuid(json['created_by']),
       createdByName: (json['created_by_name'] as String?)?.trim() ?? '',
       archivedAt: _parseDateTime(json['archived_at']),
+      hiddenAt: _parseDateTime(json['hidden_at']),
       emailSentAt: _parseDateTime(json['email_sent_at']),
       emailSentTo: (json['email_sent_to'] as String?)?.trim() ?? '',
       emailSentBy: _parseOptionalUuid(json['email_sent_by']),

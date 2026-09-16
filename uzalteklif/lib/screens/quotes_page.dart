@@ -346,6 +346,51 @@ class _QuotesPageState extends State<QuotesPage> {
     await _reload();
   }
 
+  /// "Sil" - veritabanindan gercekten silmez, sadece hidden_at doldurur.
+  /// Deneme/test tekliflerini listelerden kaldirmak icin kullanilir; veri
+  /// kaybolmaz, gerektiginde Yonetim panelinden geri getirilebilir.
+  Future<void> _hideQuote(Quote quote) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Teklifi sil'),
+        content: Text(
+          '${quote.code} silinecek. Teklif listelerden kaldırılır, '
+          'veritabanından tamamen silinmez; Yönetim panelinden geri '
+          'getirilebilir.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF9D2C2C),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await widget.quoteRepository.hideQuote(quote);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${quote.code} silindi.')),
+      );
+      await _reload();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Silinemedi: $error')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 700;
@@ -913,6 +958,7 @@ class _QuotesPageState extends State<QuotesPage> {
             quotes: quotes,
             onOpen: _openQuote,
             onCopy: _copyQuote,
+            onDelete: _hideQuote,
             showArchiveDate: showArchiveDate,
             showCustomer: _showQuoteCustomer,
             showTitle: _showQuoteTitle,
@@ -1180,6 +1226,7 @@ class _QuoteTable extends StatelessWidget {
     required this.quotes,
     required this.onOpen,
     required this.onCopy,
+    required this.onDelete,
     this.showArchiveDate = false,
     this.showCustomer = true,
     this.showTitle = true,
@@ -1193,6 +1240,7 @@ class _QuoteTable extends StatelessWidget {
   final List<Quote> quotes;
   final ValueChanged<Quote> onOpen;
   final ValueChanged<Quote> onCopy;
+  final ValueChanged<Quote> onDelete;
   final bool showArchiveDate;
   final bool showCustomer;
   final bool showTitle;
@@ -1215,6 +1263,7 @@ class _QuoteTable extends StatelessWidget {
             quote: quote,
             onOpen: () => onOpen(quote),
             onCopy: () => onCopy(quote),
+            onDelete: () => onDelete(quote),
           );
         },
       );
@@ -1277,6 +1326,7 @@ class _QuoteTable extends StatelessWidget {
                     showActivity: showActivity,
                     onTap: () => onOpen(quote),
                     onCopy: () => onCopy(quote),
+                    onDelete: () => onDelete(quote),
                   );
                 },
               ),
@@ -1293,11 +1343,13 @@ class _QuoteMobileCard extends StatelessWidget {
     required this.quote,
     required this.onOpen,
     required this.onCopy,
+    required this.onDelete,
   });
 
   final Quote quote;
   final VoidCallback onOpen;
   final VoidCallback onCopy;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1359,12 +1411,20 @@ class _QuoteMobileCard extends StatelessWidget {
                     onSelected: (value) {
                       if (value == 'open') onOpen();
                       if (value == 'copy') onCopy();
+                      if (value == 'delete') onDelete();
                     },
                     itemBuilder: (context) => const [
                       PopupMenuItem(value: 'open', child: Text('Teklifi aç')),
                       PopupMenuItem(
                         value: 'copy',
                         child: Text('Teklifi kopyala'),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text(
+                          'Sil',
+                          style: TextStyle(color: Color(0xFF9D2C2C)),
+                        ),
                       ),
                     ],
                   ),
@@ -1429,6 +1489,7 @@ class _QuoteTableRow extends StatelessWidget {
     required this.quote,
     required this.onTap,
     required this.onCopy,
+    required this.onDelete,
     required this.showArchiveDate,
     required this.showCustomer,
     required this.showTitle,
@@ -1442,6 +1503,7 @@ class _QuoteTableRow extends StatelessWidget {
   final Quote quote;
   final VoidCallback onTap;
   final VoidCallback onCopy;
+  final VoidCallback onDelete;
   final bool showArchiveDate;
   final bool showCustomer;
   final bool showTitle;
@@ -1704,6 +1766,7 @@ class _QuoteTableRow extends StatelessWidget {
                   onSelected: (value) {
                     if (value == 'open') onTap();
                     if (value == 'copy') onCopy();
+                    if (value == 'delete') onDelete();
                   },
                   itemBuilder: (context) => const [
                     PopupMenuItem(
@@ -1722,6 +1785,21 @@ class _QuoteTableRow extends StatelessWidget {
                         contentPadding: EdgeInsets.zero,
                         leading: Icon(Icons.copy_all_rounded),
                         title: Text('Teklifi kopyala'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          Icons.delete_outline_rounded,
+                          color: Color(0xFF9D2C2C),
+                        ),
+                        title: Text(
+                          'Sil',
+                          style: TextStyle(color: Color(0xFF9D2C2C)),
+                        ),
                       ),
                     ),
                   ],
